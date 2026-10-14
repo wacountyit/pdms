@@ -1,0 +1,105 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.name, p.description, p.retain_years, p.basis AS \"basis: RetentionBasis\",\n                  p.legal_citation,\n                  (SELECT count(*) FROM document_types t WHERE t.retention_policy_id = p.id) AS \"used_by_types!\"\n             FROM retention_policies p ORDER BY p.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "retain_years",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "retain_years"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "basis: RetentionBasis",
+        "type_info": {
+          "Custom": {
+            "name": "retention_basis",
+            "kind": {
+              "Enum": [
+                "created_at",
+                "effective_date",
+                "expiration_date",
+                "archived_at"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "basis"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "legal_citation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "legal_citation"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "used_by_types!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1863e776ee45cac4240f4754ab3ca7c36fd7df916cd77a97121c66b6ac3262e4"
+}

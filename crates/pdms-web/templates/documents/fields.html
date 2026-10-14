@@ -1,0 +1,34 @@
+{% for f in fields %}
+<div class="field">
+  {% if f.kind == "boolean" %}
+    <input type="hidden" name="{{ f.name }}" value="false">
+    <label class="check"><input type="checkbox" name="{{ f.name }}" value="true" {% if f.checked %}checked{% endif %}> {{ f.label }}</label>
+  {% else if f.kind == "multi_select" %}
+    <fieldset>
+      <legend>{{ f.label }}{% if f.required %} <span class="req" aria-hidden="true">*</span>{% endif %}</legend>
+      {% for c in f.choices %}
+      <label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ c.value }}" {% if c.selected %}checked{% endif %}> {{ c.label }}</label>
+      {% endfor %}
+    </fieldset>
+  {% else %}
+    <label for="{{ f.name }}">{{ f.label }}{% if f.required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+    {% if f.kind == "long_text" %}
+      <textarea id="{{ f.name }}" name="{{ f.name }}" rows="4" {% if f.required %}required{% endif %}>{{ f.value }}</textarea>
+    {% else if f.kind == "single_select" || f.kind == "user" || f.kind == "department" %}
+      <select id="{{ f.name }}" name="{{ f.name }}" {% if f.required %}required{% endif %}>
+        <option value="">—</option>
+        {% for c in f.choices %}<option value="{{ c.value }}" {% if c.selected %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+      </select>
+    {% else if f.kind == "date" %}
+      <input id="{{ f.name }}" name="{{ f.name }}" type="date" value="{{ f.value }}" {% if f.required %}required{% endif %}>
+    {% else if f.kind == "number" %}
+      <input id="{{ f.name }}" name="{{ f.name }}" inputmode="decimal" value="{{ f.value }}" {% if f.required %}required{% endif %}>
+    {% else if f.kind == "url" %}
+      <input id="{{ f.name }}" name="{{ f.name }}" type="url" value="{{ f.value }}" {% if f.required %}required{% endif %}>
+    {% else %}
+      <input id="{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}" {% if f.required %}required{% endif %}>
+    {% endif %}
+  {% endif %}
+  {% if !f.help.is_empty() %}<p class="help">{{ f.help }}</p>{% endif %}
+</div>
+{% endfor %}

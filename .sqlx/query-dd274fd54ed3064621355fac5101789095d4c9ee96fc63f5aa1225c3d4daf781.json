@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO appointment_requirement_status (appointment_id, requirement_id, satisfied, satisfied_by,\n                                                     satisfied_at, note)\n         VALUES ($1, $2, $3, CASE WHEN $3 THEN $4::uuid END, CASE WHEN $3 THEN now() END, $5)\n         ON CONFLICT (appointment_id, requirement_id) DO UPDATE\n            SET satisfied = EXCLUDED.satisfied,\n                satisfied_by = CASE WHEN EXCLUDED.satisfied = appointment_requirement_status.satisfied\n                                    THEN appointment_requirement_status.satisfied_by ELSE EXCLUDED.satisfied_by END,\n                satisfied_at = CASE WHEN EXCLUDED.satisfied = appointment_requirement_status.satisfied\n                                    THEN appointment_requirement_status.satisfied_at ELSE EXCLUDED.satisfied_at END,\n                note = EXCLUDED.note",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd274fd54ed3064621355fac5101789095d4c9ee96fc63f5aa1225c3d4daf781"
+}

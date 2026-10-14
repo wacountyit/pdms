@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 96769bfeb08f56f1bf8881442004ac45732f11dec9bd56abff37bc51a0dae21a # shrinks to p = Principal { user_id: 00000000-0000-0000-0000-000000001001, active: true, departments: {}, groups: {00000000-0000-0000-0000-000000003001}, roles: [] }, d = DocumentAttrs { id: 00000000-0000-0000-0000-000000005001, department_id: 00000000-0000-0000-0000-000000002001, owner_id: 00000000-0000-0000-0000-000000001001, inherit_acl: true, is_confidential: false }, gs = [Grant { id: 616bd938-702d-4e73-ba13-63f4ca7bd0ec, subject: Group(00000000-0000-0000-0000-000000003001), scope: Global, permission: Create, expires_at: None }]
+cc 52692a9d654ee1adb4473492bcc88c7efc64d08237263541728324086215eff0 # shrinks to p = Principal { user_id: 00000000-0000-0000-0000-000000001002, active: true, departments: {00000000-0000-0000-0000-000000002001}, groups: {}, roles: [] }, perm = Create, d = DocumentAttrs { id: 00000000-0000-0000-0000-000000005001, department_id: 00000000-0000-0000-0000-000000002001, owner_id: 00000000-0000-0000-0000-000000001001, inherit_acl: true, is_confidential: false }, gs = [Grant { id: 63d2a0be-8f2b-4b64-9570-2d34f72d7d89, subject: Department(00000000-0000-0000-0000-000000002001), scope: Global, permission: Create, expires_at: None }]

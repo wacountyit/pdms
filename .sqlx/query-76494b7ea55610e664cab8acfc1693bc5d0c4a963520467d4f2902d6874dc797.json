@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.department_id, d.name AS department_name, m.is_primary,\n                  m.source AS \"source: MembershipSource\"\n             FROM department_members m JOIN departments d ON d.id = m.department_id\n            WHERE m.user_id = $1 ORDER BY m.is_primary DESC, d.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "department_members",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "department_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "is_primary",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "department_members",
+            "name": "is_primary"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "source: MembershipSource",
+        "type_info": {
+          "Custom": {
+            "name": "membership_source",
+            "kind": {
+              "Enum": [
+                "manual",
+                "idp"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "department_members",
+            "name": "source"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "76494b7ea55610e664cab8acfc1693bc5d0c4a963520467d4f2902d6874dc797"
+}

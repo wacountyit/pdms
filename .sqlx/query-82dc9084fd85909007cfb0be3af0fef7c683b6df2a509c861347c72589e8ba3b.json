@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE signatories SET status = 'declined', recorded_by = $2, recorded_at = now(), note = $3,\n                updated_at = now()\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "82dc9084fd85909007cfb0be3af0fef7c683b6df2a509c861347c72589e8ba3b"
+}

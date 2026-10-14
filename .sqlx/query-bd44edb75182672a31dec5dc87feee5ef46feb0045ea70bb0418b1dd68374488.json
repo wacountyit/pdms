@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET status = $2, updated_at = now(),\n                deactivated_at = CASE WHEN $2 = 'active'::user_status THEN NULL ELSE now() END\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "user_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "disabled",
+                "departed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bd44edb75182672a31dec5dc87feee5ef46feb0045ea70bb0418b1dd68374488"
+}

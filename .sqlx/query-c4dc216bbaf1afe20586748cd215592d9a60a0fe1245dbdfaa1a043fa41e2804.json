@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.legal_hold, d.created_at, d.effective_date, d.expiration_date, d.archived_at,\n                  p.name AS \"policy_name?\", p.retain_years, p.basis AS \"basis?: retention::RetentionBasis\"\n             FROM documents d\n             JOIN document_types t ON t.id = d.document_type_id\n             LEFT JOIN retention_policies p ON p.id = coalesce(d.retention_policy_id, t.retention_policy_id)\n            WHERE d.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "legal_hold",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "legal_hold"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "effective_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "effective_date"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expiration_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "expiration_date"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "policy_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "retain_years",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "retain_years"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "basis?: retention::RetentionBasis",
+        "type_info": {
+          "Custom": {
+            "name": "retention_basis",
+            "kind": {
+              "Enum": [
+                "created_at",
+                "effective_date",
+                "expiration_date",
+                "archived_at"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "basis"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c4dc216bbaf1afe20586748cd215592d9a60a0fe1245dbdfaa1a043fa41e2804"
+}

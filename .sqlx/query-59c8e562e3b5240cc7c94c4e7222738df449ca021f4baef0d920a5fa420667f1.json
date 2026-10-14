@@ -1,0 +1,260 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT seq, id, occurred_at, category::text AS \"category!\", action, outcome::text AS \"outcome!\",\n                  actor_user_id, actor_display, actor_auth_method::text AS \"auth_method!\", host(actor_ip) AS ip,\n                  actor_user_agent, api_token_id, request_id, object_type, object_id, object_label,\n                  document_id, department_id, changes, context, prev_hash, entry_hash\n             FROM audit_log WHERE seq > $1 ORDER BY seq LIMIT 1000",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "category!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "outcome!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "actor_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "actor_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actor_display",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "actor_display"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "auth_method!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "ip",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "actor_user_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "actor_user_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "api_token_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "api_token_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "object_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "object_type"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "object_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "object_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "object_label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "object_label"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "changes",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "changes"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "context",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "context"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "prev_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "prev_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "entry_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "entry_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      null,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "59c8e562e3b5240cc7c94c4e7222738df449ca021f4baef0d920a5fa420667f1"
+}

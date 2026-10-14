@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" action="/calendar" class="filters" aria-label="Calendar filters">
+  <input type="hidden" name="view" value="{% if agenda %}agenda{% else %}month{% endif %}">
+  {% if !agenda %}<input type="hidden" name="month" value="{{ q.month }}">{% endif %}
+  <div><label for="c-dept">Department</label>
+    <select id="c-dept" name="department"><option value="">All</option>{% for d in departments %}<option value="{{ d.id }}" {% if q.department == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+  <div><label for="c-type">Type</label>
+    <select id="c-type" name="type"><option value="">All</option>{% for t in types %}<option value="{{ t.id }}" {% if q.doc_type == t.id.to_string() %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div><label for="c-status">Status</label>
+    <select id="c-status" name="status"><option value="">Any</option>{% for s in statuses %}<option value="{{ s.0 }}" {% if q.status == s.0 %}selected{% endif %}>{{ s.1 }}</option>{% endfor %}</select></div>
+  {% if !tags.is_empty() %}<div><label for="c-tag">Tag</label>
+    <select id="c-tag" name="tag" multiple size="3">{% for t in tags %}<option value="{{ t.id }}" {% if q.tag.contains(&t.id.to_string()) %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>{% endif %}
+  <div class="checks"><label class="check"><input type="checkbox" name="mine" value="1" {% if q.mine == "1" %}checked{% endif %}> Owned by me</label></div>
+  <div class="actions"><button type="submit">Apply</button> <a href="/calendar">Clear</a></div>
+</form>
+
+<div class="toolbar">
+  <nav class="tabs" aria-label="View">
+    <a href="/calendar?view=month&amp;{{ filters }}" {% if !agenda %}aria-current="page"{% endif %}>Month</a>
+    <a href="/calendar?view=agenda&amp;{{ filters }}" {% if agenda %}aria-current="page"{% endif %}>Agenda</a>
+  </nav>
+  <a class="button" href="/calendar/feeds">Subscribe in Outlook…</a>
+  <span class="legend"><span class="badge ev-review">Review</span> <span class="badge ev-renewal">Renewal</span> <span class="badge ev-expiration">Expires</span> <span class="badge ev-term_end">Term ends</span> <span class="badge ev-reappointment">Reappointment due</span> <span class="muted small">Dashed = projected future review</span></span>
+</div>
+
+{% if agenda %}
+<p><a href="/calendar?view=agenda&amp;days=30&amp;{{ filters }}">30</a> · <a href="/calendar?view=agenda&amp;days=90&amp;{{ filters }}">90</a> · <a href="/calendar?view=agenda&amp;days=365&amp;{{ filters }}">365</a> days ahead (showing {{ agenda_days }})</p>
+{% for g in agenda_groups %}
+<section class="agenda-day" aria-label="{{ g.0 }}">
+  <h2 class="agenda-date">{{ g.0 }}</h2>
+  <ul class="events">{% for e in g.1 %}<li class="{% if e.projected %}projected{% endif %}"><span class="badge ev-{{ e.kind }}">{{ e.label }}</span> <a href="{{ e.href }}">{{ e.title }}</a> <span class="muted small">{{ e.external_id }} · {{ e.department }}{% if e.projected %} · projected{% endif %}</span></li>{% endfor %}</ul>
+</section>
+{% else %}<p class="muted">Nothing scheduled in this period.</p>{% endfor %}
+{% else %}
+<div class="month-nav">
+  <a href="/calendar?view=month&amp;month={{ prev_month }}&amp;{{ filters }}" aria-label="Previous month">←</a>
+  <h2>{{ month_label }}</h2>
+  <a href="/calendar?view=month&amp;month={{ next_month }}&amp;{{ filters }}" aria-label="Next month">→</a>
+</div>
+<table class="month">
+  <caption class="visually-hidden">{{ month_label }}</caption>
+  <thead><tr>{% for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] %}<th scope="col">{{ d }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for w in weeks %}<tr>
+    {% for c in w %}<td class="{% if !c.in_month %}other-month{% endif %}{% if c.today %} today{% endif %}">
+      <time datetime="{{ c.iso }}" class="daynum">{{ c.day }}</time>
+      {% for e in c.events %}<a class="cal-ev ev-{{ e.kind }}{% if e.projected %} projected{% endif %}{% if e.overdue %} overdue{% endif %}" href="{{ e.href }}" title="{{ e.label }}: {{ e.external_id }} {{ e.title }}">{% if e.overdue %}Overdue {{ e.label|lower }}{% else %}{{ e.label }}{% endif %}: {{ e.title }}</a>{% endfor %}
+    </td>{% endfor %}
+  </tr>{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

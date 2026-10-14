@@ -1,0 +1,232 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT dl.id, n.kind AS \"kind: NotificationKind\", n.document_id, n.appointment_id,\n                  d.external_id AS \"external_id?\", d.title AS \"doc_title?\",\n                  a.person_name AS \"person_name?\", p.id AS \"position_id?\", p.name AS \"position_name?\",\n                  p.body_name AS \"body_name?\",\n                  n.event AS \"event: DueEvent\", n.due_date, n.subject, n.link, dl.created_at, dl.acknowledged_at\n             FROM notification_deliveries dl\n             JOIN notifications n ON n.id = dl.notification_id\n             LEFT JOIN documents d ON d.id = n.document_id\n             LEFT JOIN appointments a ON a.id = n.appointment_id\n             LEFT JOIN positions p ON p.id = a.position_id\n            WHERE dl.user_id = $1 AND dl.channel = 'in_app' AND dl.status = 'sent'\n              AND (d.id IS NULL OR d.deleted_at IS NULL)\n              AND ($2 OR dl.acknowledged_at IS NULL)\n            ORDER BY dl.created_at DESC LIMIT 500",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind: NotificationKind",
+        "type_info": {
+          "Custom": {
+            "name": "notification_kind",
+            "kind": {
+              "Enum": [
+                "reminder",
+                "action"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "appointment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "appointment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "external_id?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "doc_title?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "person_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "person_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "position_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "position_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "body_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "body_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "event: DueEvent",
+        "type_info": {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "due_date"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "link",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "link"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "acknowledged_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "acknowledged_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "b7642c9bbf9899f9adfee99a2f1987d9b5210edacf87499b8815538a98e768d0"
+}

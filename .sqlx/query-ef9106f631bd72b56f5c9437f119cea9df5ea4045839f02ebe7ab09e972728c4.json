@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE department_members SET is_primary = false WHERE user_id = $1 AND is_primary",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ef9106f631bd72b56f5c9437f119cea9df5ea4045839f02ebe7ab09e972728c4"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE webhook_deliveries SET status = 'pending', updated_at = now() WHERE id = $1\n         RETURNING event, audit_seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "webhook_deliveries",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "audit_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "webhook_deliveries",
+            "name": "audit_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b60177368b7c807697eddbb06c146ff442d813a3cc20569226ca48f1ac01e0f1"
+}

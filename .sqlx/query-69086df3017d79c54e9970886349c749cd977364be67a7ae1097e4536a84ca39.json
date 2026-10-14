@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO appointment_requirement_status (appointment_id, requirement_id)\n         SELECT $1, id FROM position_requirements WHERE position_id = $2 AND is_active",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69086df3017d79c54e9970886349c749cd977364be67a7ae1097e4536a84ca39"
+}

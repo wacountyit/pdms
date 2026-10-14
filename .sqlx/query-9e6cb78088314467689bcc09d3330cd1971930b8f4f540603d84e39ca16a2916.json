@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id_prefix FROM document_types WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id_prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "id_prefix"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9e6cb78088314467689bcc09d3330cd1971930b8f4f540603d84e39ca16a2916"
+}

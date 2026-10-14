@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/admin/document-types">← All document types</a></p>
+<p>Key <code>{{ t.key }}</code> · {{ t.document_count }} document(s). Changing the ID prefix affects new documents only; existing IDs never change.</p>
+<form method="post" action="/admin/document-types/{{ t.id }}" class="grid-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  {% include "admin/type_form.html" %}
+  <span></span><button type="submit" class="primary">Save</button>
+</form>
+<p><a href="/admin/fields">Manage custom fields for this type</a></p>
+{% endblock %}

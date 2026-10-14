@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="muted">Seats on boards, committees, and commissions, and other appointed roles. Term ends and reappointment decisions appear on the calendar and dashboard, and reminders go to each position's manager and the appointments clerks.</p>
+{% if rows.is_empty() %}
+<p class="muted">{% if can_manage %}No positions yet. Add the first one below.{% else %}There are no positions you can see. Positions are visible to their department, their manager, and the appointments clerks.{% endif %}</p>
+{% else %}
+<table>
+  <caption class="visually-hidden">Positions</caption>
+  <thead><tr><th scope="col">Board or body</th><th scope="col">Position</th><th scope="col">Held by</th><th scope="col">Seats filled</th><th scope="col">Term</th><th scope="col">Next term end</th><th scope="col">Needs attention</th><th scope="col">Department</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.body_name }}</td>
+      <td><a href="/positions/{{ r.id }}">{{ r.name }}</a>{% if !r.is_active %} <span class="badge">Inactive</span>{% endif %}</td>
+      <td>{% if r.holders.is_empty() %}<span class="muted">Vacant</span>{% else %}{{ r.holders }}{% endif %}</td>
+      <td>{{ r.seats }}</td><td>{{ r.term }}</td><td>{{ r.next_date }}</td>
+      <td>{% if !r.attention.is_empty() %}<span class="badge ap-warn">{{ r.attention }}</span>{% endif %}</td>
+      <td>{{ r.department }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if can_manage %}
+<details {% if rows.is_empty() %}open{% endif %}>
+  <summary>Add a position</summary>
+  <form method="post" action="/positions" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="p-body">Board or body</label><input id="p-body" name="body_name" maxlength="200" required placeholder="e.g. Advisory Committee">
+    <label for="p-name">Position</label><input id="p-name" name="name" maxlength="200" required placeholder="e.g. Seat 3, or Safety Coordinator">
+    <label for="p-auth">Appointing authority</label><input id="p-auth" name="appointing_authority" maxlength="200" placeholder="e.g. Board of Directors">
+    <label for="p-term">Term (months)</label><input id="p-term" name="term_months" type="number" min="1" max="600" aria-describedby="p-term-help">
+    <span></span><span id="p-term-help" class="help">Leave blank for positions with no fixed term. 24 = two years.</span>
+    <label for="p-seats">Seats</label><input id="p-seats" name="seats" type="number" min="1" max="500" value="1">
+    <label for="p-lead">Reappointment lead time (days)</label><input id="p-lead" name="reappointment_lead_days" type="number" min="0" max="3650" value="90" aria-describedby="p-lead-help">
+    <span></span><span id="p-lead-help" class="help">The reappointment decision is due this many days before a term ends.</span>
+    <label for="p-dept">Department</label>
+    <select id="p-dept" name="department_id"><option value="">—</option>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
+    <label for="p-mgr">Manager (staff responsible)</label>
+    <select id="p-mgr" name="manager_user_id"><option value="">—</option>{% for u in users %}<option value="{{ u.0 }}">{{ u.1 }}</option>{% endfor %}</select>
+    <label for="p-desc">Description</label><textarea id="p-desc" name="description" rows="2" maxlength="4000"></textarea>
+    <span></span><button type="submit" class="primary">Add position</button>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

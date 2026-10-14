@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<p>System roles have fixed keys used by the application. You can change how they are displayed, for example renaming “Legal Counsel” to your organization’s own name for its legal office.</p>
+{% for r in roles %}
+<section class="card" aria-labelledby="role-{{ r.id }}">
+  <h2 id="role-{{ r.id }}">{{ r.name }} <code class="muted">{{ r.key }}</code></h2>
+  <p class="muted">{{ r.holder_count }} holder(s)</p>
+  <form method="post" action="/admin/roles/{{ r.id }}" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="n-{{ r.id }}">Display name</label><input id="n-{{ r.id }}" name="name" value="{{ r.name }}" required maxlength="200">
+    <label for="d-{{ r.id }}">Description</label><input id="d-{{ r.id }}" name="description" value="{{ r.description }}" maxlength="2000">
+    <span></span><button type="submit">Save</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

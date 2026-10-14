@@ -1,0 +1,174 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.version_no, v.kind AS \"kind: VersionKind\", v.file_changed, v.blob_sha256, v.file_name,\n                  b.media_type AS \"media_type?\", b.size_bytes AS \"size_bytes?\", v.note, v.milestone_date,\n                  u.display_name AS \"created_by_name?\", v.created_at, v.metadata\n             FROM document_versions v\n             LEFT JOIN blobs b ON b.sha256 = v.blob_sha256\n             LEFT JOIN users u ON u.id = v.created_by\n            WHERE v.document_id = $1 ORDER BY v.version_no DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind: VersionKind",
+        "type_info": {
+          "Custom": {
+            "name": "version_kind",
+            "kind": {
+              "Enum": [
+                "initial",
+                "revision",
+                "amendment",
+                "signed_copy",
+                "metadata",
+                "restore"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "file_changed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "file_changed"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "blob_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "blob_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "file_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "file_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "media_type?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "size_bytes?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "milestone_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "milestone_date"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "created_by_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "metadata",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "metadata"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dce9c0636f78b168cc2df71c963cb684e0cb86efd1a3f9bb1ab0a1cc3e1aabb8"
+}

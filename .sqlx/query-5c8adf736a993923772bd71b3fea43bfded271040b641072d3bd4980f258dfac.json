@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE retention_policies SET name = $2, description = $3, retain_years = $4, basis = $5,\n                legal_citation = $6, updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        {
+          "Custom": {
+            "name": "retention_basis",
+            "kind": {
+              "Enum": [
+                "created_at",
+                "effective_date",
+                "expiration_date",
+                "archived_at"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5c8adf736a993923772bd71b3fea43bfded271040b641072d3bd4980f258dfac"
+}

@@ -1,0 +1,144 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.document_id, s.version_no, s.field, s.suggested_date, s.suggested_months, s.snippet,\n                  s.confidence, s.status::text AS \"status!\", u.display_name AS \"decided_by?\", s.decided_at\n             FROM date_suggestions s LEFT JOIN users u ON u.id = s.decided_by\n            WHERE ($1::uuid IS NULL OR s.document_id = $1) AND ($2::uuid IS NULL OR s.id = $2)\n            ORDER BY (s.status = 'pending') DESC, s.field, s.confidence DESC, s.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "field",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "field"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "suggested_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "suggested_date"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "suggested_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "suggested_months"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "snippet",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "snippet"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "confidence",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "confidence"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "decided_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "decided_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "date_suggestions",
+            "name": "decided_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "5503de04a3bd892c40eadafae254e115059de95fafaabcddac396737e4500b7f"
+}

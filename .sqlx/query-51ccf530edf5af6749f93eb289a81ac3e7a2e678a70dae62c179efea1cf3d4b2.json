@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_deliveries SET status = 'sent', sent_at = now(), last_error = NULL, updated_at = now()\n                  WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "51ccf530edf5af6749f93eb289a81ac3e7a2e678a70dae62c179efea1cf3d4b2"
+}

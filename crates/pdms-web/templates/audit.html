@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" action="/audit" class="filters" role="search" aria-label="Filter audit log">
+  <div><label for="f-action">Action starts with</label><input id="f-action" name="action" value="{{ f.action }}" placeholder="e.g. auth. or acl.granted"></div>
+  <div><label for="f-cat">Category</label>
+    <select id="f-cat" name="category"><option value="">Any</option>{% for c in categories %}<option value="{{ c }}" {% if *c == f.category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+  <div><label for="f-out">Outcome</label>
+    <select id="f-out" name="outcome"><option value="">Any</option>{% for o in ["success", "denied", "failure"] %}<option value="{{ o }}" {% if *o == f.outcome %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label for="f-actor">Actor user ID</label><input id="f-actor" name="actor" value="{{ f.actor }}"></div>
+  <div><label for="f-obj">Object ID</label><input id="f-obj" name="object_id" value="{{ f.object_id }}"></div>
+  <div><label for="f-from">From</label><input id="f-from" name="from" type="date" value="{{ f.from }}"></div>
+  <div><label for="f-to">To</label><input id="f-to" name="to" type="date" value="{{ f.to }}"></div>
+  <div class="actions"><button type="submit">Filter</button> <a href="/audit">Clear</a></div>
+</form>
+<div class="toolbar">
+  {% if can_export %}<a class="button" href="/audit/export.csv?{{ query }}">Export CSV</a> <a class="button" href="/audit/export.json?{{ query }}">Export JSON</a>{% endif %}
+  {% if can_verify %}
+  <form method="post" action="/audit/verify" class="inline"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit">Verify integrity</button></form>
+  {% endif %}
+</div>
+<table class="audit">
+  <caption>Audit entries, newest first (times in {{ tz }})</caption>
+  <thead><tr><th scope="col">#</th><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Object</th><th scope="col">Details</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr class="cat-{{ e.category }}">
+      <td>{{ e.seq }}</td>
+      <td><time datetime="{{ e.iso }}">{{ e.when }}</time></td>
+      <td>{{ e.actor }}<br><span class="muted small">{{ e.via }}</span></td>
+      <td><span class="badge cat">{{ e.category }}</span> <code>{{ e.action }}</code>{% if e.outcome != "success" %} <span class="badge outcome-{{ e.outcome }}">{{ e.outcome }}</span>{% endif %}</td>
+      <td>{{ e.object }}</td>
+      <td>
+        {% if !e.changes.is_empty() %}
+        <table class="diff"><thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>
+        {% for c in e.changes %}<tr><td>{{ c.0 }}</td><td class="before">{{ c.1 }}</td><td class="after">{{ c.2 }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% endif %}
+        {% if !e.context.is_empty() %}<details><summary>Context</summary><pre>{{ e.context }}</pre></details>{% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="6">No matching entries.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% if let Some(seq) = older %}<p><a href="/audit?{{ query }}&amp;before={{ seq }}">Older entries →</a></p>{% endif %}
+{% endblock %}

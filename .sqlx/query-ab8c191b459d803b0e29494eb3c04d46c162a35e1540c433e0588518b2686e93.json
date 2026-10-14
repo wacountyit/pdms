@@ -1,0 +1,123 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.id, f.name, f.user_id, f.department_id, f.only_owned, f.last_audited_at,\n                  u.display_name, u.status AS \"status: UserStatus\"\n             FROM calendar_feeds f JOIN users u ON u.id = f.user_id\n            WHERE f.token_hash = $1 AND f.revoked_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "only_owned",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "only_owned"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_audited_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "calendar_feeds",
+            "name": "last_audited_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status: UserStatus",
+        "type_info": {
+          "Custom": {
+            "name": "user_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "disabled",
+                "departed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ab8c191b459d803b0e29494eb3c04d46c162a35e1540c433e0588518b2686e93"
+}

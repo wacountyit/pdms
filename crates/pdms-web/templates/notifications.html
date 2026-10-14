@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="toolbar">
+  {% if show_all %}<a href="/notifications">Show unacknowledged only</a>{% else %}<a href="/notifications?all=1">Show all, including acknowledged</a>{% endif %}
+  {% if !items.is_empty() && !show_all %}
+  <form method="post" action="/notifications/ack-all" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge all</button></form>
+  {% endif %}
+</div>
+<table>
+  <caption class="visually-hidden">Notifications</caption>
+  <thead><tr><th scope="col">Notice</th><th scope="col">About</th><th scope="col">Due</th><th scope="col">Received</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>
+  {% for i in items %}
+    <tr {% if i.0.acknowledged_at.is_none() %}class="unread"{% endif %}>
+      <td>{{ i.0.headline }}</td>
+      <td>{% if !i.0.code.is_empty() %}<code>{{ i.0.code }}</code> {% endif %}<a href="{{ i.0.href }}">{% if i.0.title.is_empty() %}Open{% else %}{{ i.0.title }}{% endif %}</a></td>
+      <td>{{ i.2 }}</td><td>{{ i.1 }}</td>
+      <td>{% if i.0.acknowledged_at.is_none() %}<form method="post" action="/notifications/{{ i.0.delivery_id }}/ack"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge</button></form>{% else %}<span class="muted small">Acknowledged</span>{% endif %}</td>
+    </tr>
+  {% else %}<tr><td colspan="5">No notifications.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,57 @@
+<section aria-labelledby="suggest-h" id="suggestions">
+  <h2 id="suggest-h">Dates found in the file{% if collab.pending > 0 %} <span class="badge wf-in_progress">{{ collab.pending }} to confirm</span>{% endif %}</h2>
+  {% if let Some(t) = collab.text %}
+    <p class="muted small">Version {{ t.version_no }} read {{ collab.text_when }} ({% if t.method == "ocr" %}OCR{% else if t.method == "pdf_text" %}text in the PDF{% else if t.method == "docx" %}Word document{% else %}{{ t.method }}{% endif %}, {{ t.char_count }} characters{% if t.status != "done" %}: {{ t.status }}{% endif %}{% if let Some(e) = t.error %} — {{ e }}{% endif %}). The text is included in search.</p>
+    {% if !t.preview.is_empty() %}<details><summary class="small">Show the beginning of the text</summary><pre class="text-preview">{{ t.preview }}</pre></details>{% endif %}
+  {% else %}<p class="muted small">No text has been read from this document's file{% if collab.can_decide %} yet{% endif %}.</p>{% endif %}
+  {% if collab.suggestions.is_empty() %}<p class="muted">No dates to confirm.</p>{% else %}
+  <p class="small">These were found in the file. <strong>Nothing changes until you confirm it.</strong> Check each against the document before accepting.</p>
+  <table>
+    <caption class="visually-hidden">Date suggestions</caption>
+    <thead><tr><th scope="col">Field</th><th scope="col">Found</th><th scope="col">In context</th><th scope="col">Confidence</th><th scope="col"><span class="visually-hidden">Decision</span></th></tr></thead>
+    <tbody>
+    {% for s in collab.suggestions %}
+      <tr {% if !s.pending %}class="muted"{% endif %}><td>{{ s.field }}</td><td><strong>{{ s.value }}</strong></td><td class="small"><q>{{ s.snippet }}</q></td><td>{{ s.confidence }}%</td>
+      <td>{% if s.pending && collab.can_decide %}
+        <form method="post" action="/documents/{{ d.id }}/suggestions/{{ s.id }}/accept" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small primary">Use this date</button></form>
+        <form method="post" action="/documents/{{ d.id }}/suggestions/{{ s.id }}/dismiss" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Dismiss</button></form>
+      {% else if s.pending %}<span class="small muted">Waiting for an editor</span>{% else %}<span class="small">{{ s.decided }}</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if collab.can_decide && d.current_version > 0 %}
+  <form method="post" action="/documents/{{ d.id }}/text/reprocess" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Read the file again</button></form>
+  {% endif %}
+</section>
+
+<section aria-labelledby="comments-h" id="comments">
+  <h2 id="comments-h">Comments {% if collab.count > 0 %}<span class="muted small">({{ collab.count }})</span>{% endif %}</h2>
+  {% for t in collab.threads %}
+  <article class="comment" id="comment-{{ t.c.id }}">
+    {% let c = t.c %}{% include "documents/comment.html" %}
+    <div class="replies">
+      {% for c in t.replies %}<article class="comment reply" id="comment-{{ c.id }}">{% include "documents/comment.html" %}</article>{% endfor %}
+      {% if collab.can_comment && t.c.deleted.is_empty() %}
+      <details><summary class="small">Reply</summary>
+        <form method="post" action="/documents/{{ d.id }}/comments" class="stack">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="parent" value="{{ t.c.id }}">
+          <label for="r-{{ t.c.id }}" class="visually-hidden">Reply</label>
+          <textarea id="r-{{ t.c.id }}" name="body" rows="2" maxlength="10000" required></textarea>
+          <div><button type="submit" class="small">Reply</button></div>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+  </article>
+  {% else %}<p class="muted">No comments yet.</p>{% endfor %}
+  {% if collab.can_comment %}
+  <form method="post" action="/documents/{{ d.id }}/comments" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="new-comment">Add a comment</label>
+    <textarea id="new-comment" name="body" rows="3" maxlength="10000" required aria-describedby="new-comment-help"></textarea>
+    <span id="new-comment-help" class="help">Mention someone with @ and their email address (or the part before the @). They are notified if they can see this document. Comments are kept in the record: edits keep the earlier text.</span>
+    <div><button type="submit">Post comment</button></div>
+  </form>
+  {% endif %}
+</section>

@@ -1,0 +1,72 @@
+[workspace]
+resolver = "3"
+members = ["crates/pdms-authz", "crates/pdms-audit", "crates/pdms-testkit", "crates/pdms-core", "crates/pdms-web", "crates/pdms", "crates/pdms-storage"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+
+[workspace.dependencies]
+pdms-authz = { path = "crates/pdms-authz" }
+pdms-audit = { path = "crates/pdms-audit" }
+pdms-core = { path = "crates/pdms-core" }
+pdms-web = { path = "crates/pdms-web" }
+pdms-testkit = { path = "crates/pdms-testkit" }
+pdms-storage = { path = "crates/pdms-storage" }
+
+aes-gcm = "0.10"
+anyhow = "1"
+argon2 = { version = "0.5", features = ["std"] }
+askama = "0.16"
+axum = { version = "0.8", features = ["macros", "multipart"] }
+axum-extra = { version = "0.12", features = ["cookie", "cookie-private", "query", "form"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+chrono-tz = "0.10"
+clap = { version = "4", features = ["derive", "env"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+governor = "0.10"
+hex = "0.4"
+hkdf = "0.12"
+ipnet = { version = "2", features = ["serde"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+openidconnect = "4"
+proptest = "1"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "cookies"] }
+pdf-extract = "0.9"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+utoipa = { version = "5", features = ["uuid", "chrono"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_urlencoded = "0.7"
+sha2 = "0.10"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "json", "uuid", "chrono", "ipnet"] }
+subtle = "2"
+testcontainers = "0.28"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "sync"] }
+totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "limit", "set-header", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v7", "v4", "serde"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

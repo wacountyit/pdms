@@ -1,0 +1,13 @@
+<label for="{{ prefix }}-u-{{ aid }}">User here (optional)</label>
+<select id="{{ prefix }}-u-{{ aid }}" name="user_id"><option value="">— Not a user of this system —</option>{% for u in users %}<option value="{{ u.0 }}">{{ u.1 }}</option>{% endfor %}</select>
+<label for="{{ prefix }}-n-{{ aid }}">Name</label><input id="{{ prefix }}-n-{{ aid }}" name="person_name" maxlength="200" aria-describedby="{{ prefix }}-n-help-{{ aid }}">
+<span></span><span id="{{ prefix }}-n-help-{{ aid }}" class="help">Leave blank to use the chosen user's name.</span>
+<label for="{{ prefix }}-e-{{ aid }}">Email</label><input id="{{ prefix }}-e-{{ aid }}" name="contact_email" type="email" maxlength="320">
+<label for="{{ prefix }}-b-{{ aid }}">Appointed by</label><input id="{{ prefix }}-b-{{ aid }}" name="appointed_by" maxlength="200" placeholder="{{ p.appointing_authority }}">
+<label for="{{ prefix }}-r-{{ aid }}">Reference</label><input id="{{ prefix }}-r-{{ aid }}" name="appointment_reference" maxlength="200" placeholder="e.g. Resolution 2026-14">
+<label for="{{ prefix }}-s-{{ aid }}">Term starts</label><input id="{{ prefix }}-s-{{ aid }}" name="start_date" type="date" required value="{{ today }}">
+<label for="{{ prefix }}-t-{{ aid }}">Term ends</label><input id="{{ prefix }}-t-{{ aid }}" name="end_date" type="date" aria-describedby="{{ prefix }}-t-help-{{ aid }}">
+<span></span><span id="{{ prefix }}-t-help-{{ aid }}" class="help">Leave blank to use the position's term ({{ term }}).</span>
+<label for="{{ prefix }}-d-{{ aid }}">Reappointment decision due</label><input id="{{ prefix }}-d-{{ aid }}" name="reappointment_due_date" type="date" aria-describedby="{{ prefix }}-d-help-{{ aid }}">
+<span></span><span id="{{ prefix }}-d-help-{{ aid }}" class="help">Leave blank for {{ p.reappointment_lead_days }} days before the term ends.</span>
+<label for="{{ prefix }}-o-{{ aid }}">Notes</label><input id="{{ prefix }}-o-{{ aid }}" name="notes" maxlength="4000">

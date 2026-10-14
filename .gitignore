@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Keep secrets, site configuration, data, and build output out of the repository.
+
+# --- Rust build output ---------------------------------------------------------
+/target/
+**/*.rs.bk
+*.pdb
+# Coverage and profiling
+*.profraw
+*.profdata
+lcov.info
+/coverage/
+tarpaulin-report.*
+cobertura.xml
+# Do NOT ignore .sqlx/ (offline query metadata, needed by CI and Docker builds)
+# or Cargo.lock (this is an application).
+
+# --- Secrets and per-site settings (written by install.sh) ----------------------
+/secrets/
+.env
+.env.*
+!.env.example
+/config/pdms.toml
+/config/Caddyfile
+/docker-compose.override.yml
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+!deploy/**/*.example.crt
+
+# --- Runtime data, backups, and exports --------------------------------------------
+/data/
+/backups/
+*.dump
+*.sql.gz
+pdmsdata.tar
+config-secrets.tar
+audit-forward.jsonl
+records-request-*.zip
+*.eml
+*.log
+
+# --- Local development and tests -----------------------------------------------------
+/scratch/
+/tmp/
+/node_modules/
+/playwright-report/
+/test-results/
+.claude/settings.local.json
+
+# --- Editors and operating systems -----------------------------------------------------
+.idea/
+.vscode/
+*.code-workspace
+*.iml
+*.swp
+*.swo
+*~
+\#*\#
+.#*
+.DS_Store
+._*
+Thumbs.db
+desktop.ini

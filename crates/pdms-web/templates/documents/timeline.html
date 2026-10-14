@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/documents/{{ id }}">← Back to the document</a></p>
+<table class="audit">
+  <caption>Every recorded action on this document, oldest first (times in {{ tz }})</caption>
+  <thead><tr><th scope="col">#</th><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Details</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td>{{ e.seq }}</td>
+      <td><time datetime="{{ e.iso }}">{{ e.when }}</time></td>
+      <td>{{ e.actor }}<br><span class="muted small">{{ e.via }}</span></td>
+      <td><span class="badge cat">{{ e.category }}</span> <code>{{ e.action }}</code>{% if e.outcome != "success" %} <span class="badge outcome-{{ e.outcome }}">{{ e.outcome }}</span>{% endif %}</td>
+      <td>
+        {% if !e.changes.is_empty() %}
+        <table class="diff"><thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>
+        {% for c in e.changes %}<tr><td>{{ c.0 }}</td><td class="before">{{ c.1 }}</td><td class="after">{{ c.2 }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% endif %}
+        {% if !e.context.is_empty() %}<details><summary>Context</summary><pre>{{ e.context }}</pre></details>{% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="5">No entries.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

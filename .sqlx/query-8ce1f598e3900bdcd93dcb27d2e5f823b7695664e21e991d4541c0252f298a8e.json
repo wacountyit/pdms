@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acl_entries (id, subject_department_id, scope, scope_department_id, permission, granted_by, reason)\n         VALUES ($1, $2, 'department', $2, 'view', $3, 'default: department members may view')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ce1f598e3900bdcd93dcb27d2e5f823b7695664e21e991d4541c0252f298a8e"
+}

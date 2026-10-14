@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE appointments SET status = 'ended', ended_on = $2, end_reason = $3, updated_at = now()\n          WHERE id = $1 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "461ca367aef0e94de61a3af157f984c73f881756d01f0f4cff401928e3627c48"
+}

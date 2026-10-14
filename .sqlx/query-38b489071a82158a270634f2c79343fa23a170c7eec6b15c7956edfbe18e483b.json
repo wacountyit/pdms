@@ -1,0 +1,180 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.workflow_id, s.stage, s.kind AS \"kind: StepKind\", s.assignee_user_id, s.assignee_role_id,\n                  coalesce(au.display_name, ro.name, '') AS \"assignee_label!\",\n                  s.status AS \"status: StepStatus\", s.acted_by, ub.display_name AS \"acted_by_name?\", s.acted_at,\n                  s.comment\n             FROM workflow_steps s\n             LEFT JOIN users au ON au.id = s.assignee_user_id\n             LEFT JOIN roles ro ON ro.id = s.assignee_role_id\n             LEFT JOIN users ub ON ub.id = s.acted_by\n            WHERE s.workflow_id = ANY($1)\n            ORDER BY s.stage, s.kind, coalesce(au.display_name, ro.name, '')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workflow_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "stage",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "stage"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind: StepKind",
+        "type_info": {
+          "Custom": {
+            "name": "step_kind",
+            "kind": {
+              "Enum": [
+                "review",
+                "approval",
+                "legal_review"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "assignee_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "assignee_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "assignee_role_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "assignee_role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "assignee_label!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "status: StepStatus",
+        "type_info": {
+          "Custom": {
+            "name": "step_status",
+            "kind": {
+              "Enum": [
+                "waiting",
+                "pending",
+                "approved",
+                "rejected",
+                "changes_requested",
+                "skipped"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "acted_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "acted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "acted_by_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "acted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "acted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "comment",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "comment"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "38b489071a82158a270634f2c79343fa23a170c7eec6b15c7956edfbe18e483b"
+}

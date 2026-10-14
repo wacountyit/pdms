@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tags SET name = $2, slug = $3, color = $4, description = $5, is_curated = $6 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5a407675a96d2014d51fbf58ebc885c3ca13f702791a2a70bd596b6d8953ed09"
+}

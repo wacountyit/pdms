@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.last_review_date, d.next_review_date, d.renewal_date, d.expiration_date,\n                  coalesce(d.review_interval_months, t.review_interval_months) AS interval\n             FROM documents d JOIN document_types t ON t.id = d.document_type_id WHERE d.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_review_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "last_review_date"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "next_review_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "next_review_date"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "renewal_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "renewal_date"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expiration_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "expiration_date"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "interval",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "848dcf23ea41f003bb79c92ed197ea22bc2d2490c2e4f055a759f043731f1cb2"
+}

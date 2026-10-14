@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, request_reference, package_sha256, size_bytes FROM export_packages",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "request_reference",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "request_reference"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "package_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "package_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "size_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "736743bb1561ad1c5e021f9de32726a6e275bce2dda57f6f562181c4963a1d66"
+}

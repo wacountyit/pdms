@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO date_suggestions (id, document_id, version_no, field, suggested_date, suggested_months,\n                                           snippet, confidence)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Text",
+        "Date",
+        "Int4",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "113fac7f205fadc7f619c52b82176ff119e92b030959e6b0e16b01962255d785"
+}

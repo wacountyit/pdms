@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE calendar_feeds SET last_used_at = now(),\n                last_audited_at = CASE WHEN $2 THEN now() ELSE last_audited_at END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cb20d6f22c25d07240a0e66fd18fe4491fcd1301884a04cccbf28b1eee1b8874"
+}

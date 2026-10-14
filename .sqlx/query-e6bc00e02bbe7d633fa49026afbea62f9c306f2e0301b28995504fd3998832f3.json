@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM role_assignments\n              WHERE user_id = $1 AND role_id = $2 AND department_id IS NOT DISTINCT FROM $3 AND source = 'idp'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6bc00e02bbe7d633fa49026afbea62f9c306f2e0301b28995504fd3998832f3"
+}

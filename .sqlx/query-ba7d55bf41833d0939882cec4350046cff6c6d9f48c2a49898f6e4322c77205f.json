@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE workflows SET status = 'cancelled', completed_at = now()\n            WHERE id = $1 AND status = 'in_progress' RETURNING previous_status AS \"s: DocumentStatus\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "s: DocumentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "active",
+                "renewal_due",
+                "overdue",
+                "expired",
+                "superseded",
+                "archived"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "previous_status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ba7d55bf41833d0939882cec4350046cff6c6d9f48c2a49898f6e4322c77205f"
+}

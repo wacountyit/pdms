@@ -1,0 +1,12 @@
+  <label for="t-name">Name</label><input id="t-name" name="name" value="{{ tf.name }}" required maxlength="200">
+  <label for="t-prefix">ID prefix</label><input id="t-prefix" name="id_prefix" value="{{ tf.prefix }}" required pattern="[A-Za-z]{2,8}" aria-describedby="t-prefix-help">
+  <span></span><span id="t-prefix-help" class="help">2–8 letters used in document IDs, e.g. PAG → PAG-2026-000123.</span>
+  <label for="t-desc">Description</label><input id="t-desc" name="description" value="{{ tf.desc }}" maxlength="2000">
+  <label for="t-interval">Default review every (months)</label><input id="t-interval" name="review_interval_months" inputmode="numeric" value="{{ tf.interval }}" aria-describedby="t-interval-help">
+  <span></span><span id="t-interval-help" class="help">Empty means no recurring review (for example, contracts tracked by renewal date).</span>
+  <label for="t-legal">Requires legal review</label><input id="t-legal" type="checkbox" name="requires_legal_review" value="true" {% if tf.legal %}checked{% endif %}>
+  <label for="t-sign">Requires signatures</label><input id="t-sign" type="checkbox" name="requires_signatures" value="true" {% if tf.sign %}checked{% endif %}>
+  <label for="t-ret">Retention policy</label>
+  <select id="t-ret" name="retention_policy_id"><option value="">None</option>{% for p in policies %}<option value="{{ p.id }}" {% if tf.policy_selected(p.id) %}selected{% endif %}>{{ p.name }} ({{ p.summary() }})</option>{% endfor %}</select>
+  <label for="t-sort">Sort order</label><input id="t-sort" name="sort_order" inputmode="numeric" value="{{ tf.sort }}">
+  <label for="t-active">Active</label><input id="t-active" type="checkbox" name="is_active" value="true" {% if tf.active %}checked{% endif %}>

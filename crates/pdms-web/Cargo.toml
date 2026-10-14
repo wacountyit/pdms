@@ -1,0 +1,48 @@
+[package]
+name = "pdms-web"
+description = "PDMS HTTP layer: Axum routes, middleware, and server-rendered pages."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+askama.workspace = true
+axum.workspace = true
+axum-extra.workspace = true
+base64.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+governor.workspace = true
+http-body-util = "0.1"
+ipnet.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+pdms-audit.workspace = true
+pdms-authz.workspace = true
+pdms-core.workspace = true
+pdms-storage.workspace = true
+regex = "1"
+futures-util = { version = "0.3", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+serde_urlencoded.workspace = true
+subtle.workspace = true
+time = "0.3"
+sqlx.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+url.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+pdms-testkit.workspace = true
+reqwest.workspace = true
+testcontainers.workspace = true
+
+[lints]
+workspace = true

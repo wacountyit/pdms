@@ -1,0 +1,9 @@
+<div class="table-scroll"><table class="report-table">
+  <thead><tr><th scope="col">Created</th><th scope="col">Target</th><th scope="col">Event</th><th scope="col">Audit seq</th><th scope="col">Status</th><th scope="col">Attempts</th><th scope="col">Last result</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>
+  {% for d in deliveries %}
+    <tr><td>{{ d.when }}</td><td>{{ d.target }}</td><td><code>{{ d.event }}</code></td><td>{{ d.audit_seq }}</td><td><span class="badge status-{{ d.status }}">{{ d.status }}</span></td><td>{{ d.attempts }}</td><td class="small">{{ d.detail }}</td>
+    <td>{% if d.status != "delivered" %}<form method="post" action="/admin/webhooks/deliveries/{{ d.id }}/redeliver" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="{{ back_to }}"><button type="submit" class="small">Redeliver</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="8">No deliveries yet.</td></tr>{% endfor %}
+  </tbody>
+</table></div>

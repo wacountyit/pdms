@@ -1,0 +1,111 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id,\n                  CASE WHEN a.subject_user_id IS NOT NULL THEN 'user'\n                       WHEN a.subject_group_id IS NOT NULL THEN 'group'\n                       WHEN a.subject_department_id IS NOT NULL THEN 'department'\n                       ELSE 'role' END AS \"subject_kind!\",\n                  coalesce(su.display_name, sg.name, sd.name, sr.name, '?') AS \"subject_label!\",\n                  a.scope::text AS \"scope_kind!\",\n                  CASE a.scope WHEN 'global' THEN 'All documents'\n                               WHEN 'department' THEN coalesce(scd.name, '?')\n                               ELSE 'Document' END AS \"scope_label!\",\n                  a.permission::text AS \"permission!\",\n                  a.expires_at, gb.display_name AS \"granted_by?\", a.granted_at, a.reason\n             FROM acl_entries a\n             LEFT JOIN users su ON su.id = a.subject_user_id\n             LEFT JOIN groups sg ON sg.id = a.subject_group_id\n             LEFT JOIN departments sd ON sd.id = a.subject_department_id\n             LEFT JOIN roles sr ON sr.id = a.subject_role_id\n             LEFT JOIN departments scd ON scd.id = a.scope_department_id\n             LEFT JOIN users gb ON gb.id = a.granted_by\n            WHERE a.scope <> 'document'\n              AND ($1::uuid IS NULL OR a.scope_department_id = $1)\n            ORDER BY a.scope, scd.name NULLS FIRST, a.permission, 3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_label!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "scope_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "scope_label!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "permission!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "granted_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "granted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "granted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "26ec908a4e2f57e45e151e205aee82ee8b4ece385e36829557b8789a863fce12"
+}

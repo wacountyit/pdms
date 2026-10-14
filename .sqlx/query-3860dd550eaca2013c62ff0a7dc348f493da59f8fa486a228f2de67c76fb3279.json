@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM department_members WHERE department_id = $1 AND user_id = $2\n           RETURNING source AS \"source: MembershipSource\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source: MembershipSource",
+        "type_info": {
+          "Custom": {
+            "name": "membership_source",
+            "kind": {
+              "Enum": [
+                "manual",
+                "idp"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "department_members",
+            "name": "source"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3860dd550eaca2013c62ff0a7dc348f493da59f8fa486a228f2de67c76fb3279"
+}

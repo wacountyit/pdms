@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE date_suggestions SET status = CASE WHEN id = $1 THEN 'accepted'::suggestion_status\n                                                   ELSE 'dismissed'::suggestion_status END,\n                decided_by = $3, decided_at = now()\n          WHERE document_id = $2 AND field = $4 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ae652d9f939269ab59bf4b683ec4451d3867dc6121639bcf2dba85c002e24ba4"
+}

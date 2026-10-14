@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO retention_policies (id, name, description, retain_years, basis, legal_citation)\n         VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        {
+          "Custom": {
+            "name": "retention_basis",
+            "kind": {
+              "Enum": [
+                "created_at",
+                "effective_date",
+                "expiration_date",
+                "archived_at"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "91c63d739a184bbe0585abcf802b280d9ce5855db33806a3f7e199655b23816d"
+}

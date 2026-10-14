@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO appointments (id, position_id, person_name, user_id, contact_email, appointed_by,\n                                   appointment_reference, start_date, end_date, reappointment_due_date,\n                                   predecessor_id, notes, created_by)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Date",
+        "Date",
+        "Date",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db15f615b0a1f1ab1ebd754c57d46756714c6abe5c0540402f3ec941ed79c873"
+}

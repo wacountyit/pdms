@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.person_name, a.end_date, a.reappointment_due_date, p.id AS position_id, p.name,\n                      p.body_name, dep.code AS \"code?\"\n                 FROM appointments a\n                 JOIN positions p ON p.id = a.position_id\n                 LEFT JOIN departments dep ON dep.id = p.department_id\n                WHERE a.status = 'active' AND p.is_active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "person_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "person_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "end_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "end_date"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reappointment_due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "reappointment_due_date"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "position_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "body_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "body_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "code?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "code"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "90bd9755ee667ef7b9578b4d97dee4349758a04b95f000d014b2f1872a32e816"
+}

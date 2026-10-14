@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/documents/{{ id }}">← Back to {{ external_id }}</a></p>
+{% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
+<form method="post" action="/documents/{{ id }}/edit" class="doc-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <input type="hidden" name="row_version" value="{{ form.v("row_version") }}">
+  {% let fields_doc_param = ", [name='document']" %}
+  <input type="hidden" name="document" value="{{ id }}">
+  {% include "documents/metadata_fields.html" %}
+  <div class="field">
+    <label for="department_id">Department</label>
+    <select id="department_id" name="department_id" required aria-describedby="dept-help">
+      {% for d in departments %}<option value="{{ d.id }}" {% if form.v("department_id") == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+    </select>
+    <p id="dept-help" class="help">Moving a document to another department requires permission to create documents there.</p>
+  </div>
+  <p><button type="submit" class="primary">Save changes</button> <a href="/documents/{{ id }}">Cancel</a></p>
+</form>
+{% endblock %}

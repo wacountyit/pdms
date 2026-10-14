@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.scope::text AS \"scope!\", a.permission::text AS \"permission!\", a.granted_at, a.expires_at,\n                          a.reason,\n                          CASE WHEN a.subject_user_id IS NOT NULL THEN 'User'\n                               WHEN a.subject_group_id IS NOT NULL THEN 'Group'\n                               WHEN a.subject_department_id IS NOT NULL THEN 'Department'\n                               ELSE 'Role' END AS \"subject_kind!\",\n                          coalesce(su.display_name, sg.name, sd.name, sr.name, '?') AS \"subject!\",\n                          su.status::text AS subject_status,\n                          coalesce(td.name, doc.external_id || ' ' || doc.title, 'Everything (organization-wide)') AS \"target!\",\n                          doc.deleted_at IS NOT NULL AS \"doc_deleted!\",\n                          gb.display_name AS \"granted_by?\"\n                     FROM acl_entries a\n                     LEFT JOIN users su ON su.id = a.subject_user_id\n                     LEFT JOIN groups sg ON sg.id = a.subject_group_id\n                     LEFT JOIN departments sd ON sd.id = a.subject_department_id\n                     LEFT JOIN roles sr ON sr.id = a.subject_role_id\n                     LEFT JOIN departments td ON td.id = a.scope_department_id\n                     LEFT JOIN documents doc ON doc.id = a.scope_document_id\n                     LEFT JOIN users gb ON gb.id = a.granted_by\n                    WHERE ($1::uuid IS NULL OR a.scope_department_id = $1 OR doc.department_id = $1)\n                    ORDER BY a.granted_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scope!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "permission!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "granted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "granted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "subject_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "subject!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "subject_status",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "target!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "doc_deleted!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "granted_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      true,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "711fa7ca7eeed288266b9b6ce834737935c8ddb8c68349fb2a37d3a02bab1df6"
+}

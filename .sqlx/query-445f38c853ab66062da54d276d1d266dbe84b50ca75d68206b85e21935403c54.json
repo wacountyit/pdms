@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO export_packages (id, request_reference, requested_by, created_at, document_ids, include_versions,\n                                      include_audit, fields, note, file_count, size_bytes, package_sha256,\n                                      manifest_sha256, storage_backend)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Timestamptz",
+        "UuidArray",
+        "Text",
+        "Bool",
+        "TextArray",
+        "Text",
+        "Int4",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "445f38c853ab66062da54d276d1d266dbe84b50ca75d68206b85e21935403c54"
+}

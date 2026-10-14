@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.version_no, v.blob_sha256 AS \"blob_sha256!\", v.file_name AS \"file_name!\",\n                  b.media_type, b.size_bytes\n             FROM document_versions v JOIN blobs b ON b.sha256 = v.blob_sha256\n            WHERE v.document_id = $1 AND ($2::int IS NULL OR v.version_no = $2)\n            ORDER BY v.version_no DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blob_sha256!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "blob_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "file_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "file_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "size_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "760c92f4041f305fb737163d00af0e787e89442a9b523a7528509737fce62ec0"
+}

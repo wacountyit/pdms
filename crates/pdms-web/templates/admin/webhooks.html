@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Webhooks send events (document changes, workflow decisions, appointments) to another system as they happen. Each webhook acts as a <em>service user</em>: it receives only events about what that user may see. Requests are signed; failures are retried with backoff and logged below.
+{% if !enabled %}<strong>Webhook delivery is turned off</strong> (<code>[integrations] webhooks_enabled</code>).{% endif %}
+{% if !providers.is_empty() %}Integration providers enabled: <code>{{ providers }}</code>.{% endif %}</p>
+<table>
+  <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Acts as</th><th scope="col">State</th></tr></thead>
+  <tbody>
+  {% for w in hooks %}
+    <tr><td><a href="/admin/webhooks/{{ w.id }}">{{ w.name }}</a></td><td><code>{{ w.url }}</code></td><td class="small">{{ w.events.join(", ") }}</td><td>{{ w.acts_as }}</td><td>{% if w.is_active %}Active{% else %}Paused{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5">No webhooks.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<details {% if hooks.is_empty() %}open{% endif %}><summary>Add a webhook</summary>
+<form method="post" action="/admin/webhooks" class="grid-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <label for="w-name">Name</label><input id="w-name" name="name" maxlength="200" required>
+  <label for="w-url">URL</label><input id="w-url" name="url" type="url" required placeholder="https://records.example.org/pdms-events">
+  <label for="w-events">Events</label><textarea id="w-events" name="events" rows="3" required aria-describedby="w-ev-help">document.*
+workflow.*</textarea>
+  <span></span><span id="w-ev-help" class="help">One per line: an exact event (<code>workflow.approved</code>), a prefix (<code>document.*</code>), or <code>*</code>. Families: document, workflow, signature, signatory, review_task, appointment, position.</span>
+  <label for="w-user">Service user</label>
+  <select id="w-user" name="acts_as_user_id" required aria-describedby="w-user-help"><option value="">Choose…</option>{% for u in users %}<option value="{{ u.0 }}">{{ u.1 }}</option>{% endfor %}</select>
+  <span></span><span id="w-user-help" class="help">Events are sent only for documents and positions this user can see. Create a dedicated account with only the access the receiving system needs.</span>
+  <span></span><button type="submit" class="primary">Add webhook</button>
+</form>
+</details>
+<h2>Recent deliveries</h2>
+{% include "admin/deliveries_table.html" %}
+{% endblock %}

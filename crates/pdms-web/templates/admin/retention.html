@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<p>A retention policy blocks deletion until the period has passed. Assign policies to document types; records officers can override a single document’s policy or place it on legal hold. Confirm periods against your records retention schedule.</p>
+{% for p in policies %}
+<section class="card" aria-labelledby="p-{{ p.id }}">
+  <h2 id="p-{{ p.id }}">{{ p.name }} <span class="muted small">{{ p.summary() }} · used by {{ p.used_by_types }} type(s)</span></h2>
+  <form method="post" action="/admin/retention/{{ p.id }}" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="n-{{ p.id }}">Name</label><input id="n-{{ p.id }}" name="name" value="{{ p.name }}" required maxlength="200">
+    <label for="y-{{ p.id }}">Keep for (years)</label><input id="y-{{ p.id }}" name="retain_years" inputmode="numeric" value="{% if let Some(y) = p.retain_years %}{{ y }}{% endif %}" placeholder="Empty = permanent">
+    <label for="b-{{ p.id }}">Measured from</label>
+    <select id="b-{{ p.id }}" name="basis">{% for b in bases %}<option value="{{ b.0 }}" {% if p.basis.as_str() == b.0 %}selected{% endif %}>{{ b.1 }}</option>{% endfor %}</select>
+    <label for="c-{{ p.id }}">Schedule citation</label><input id="c-{{ p.id }}" name="legal_citation" value="{{ p.legal_citation }}" maxlength="500">
+    <label for="d-{{ p.id }}">Description</label><input id="d-{{ p.id }}" name="description" value="{{ p.description }}" maxlength="2000">
+    <span></span><button type="submit">Save</button>
+  </form>
+</section>
+{% endfor %}
+<section aria-labelledby="new-pol-h">
+  <h2 id="new-pol-h">Add a policy</h2>
+  <form method="post" action="/admin/retention" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="np-name">Name</label><input id="np-name" name="name" required maxlength="200">
+    <label for="np-years">Keep for (years)</label><input id="np-years" name="retain_years" inputmode="numeric" placeholder="Empty = permanent">
+    <label for="np-basis">Measured from</label>
+    <select id="np-basis" name="basis">{% for b in bases %}<option value="{{ b.0 }}">{{ b.1 }}</option>{% endfor %}</select>
+    <label for="np-cite">Schedule citation</label><input id="np-cite" name="legal_citation" maxlength="500">
+    <label for="np-desc">Description</label><input id="np-desc" name="description" maxlength="2000">
+    <span></span><button type="submit" class="primary">Add policy</button>
+  </form>
+</section>
+{% endblock %}

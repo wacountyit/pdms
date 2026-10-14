@@ -1,0 +1,10 @@
+    <label for="f-help">Help text</label><input id="f-help" name="help_text" value="{{ ff.help }}" maxlength="1000">
+    <label for="f-req">Required</label><input id="f-req" type="checkbox" name="required" value="true" {% if ff.required %}checked{% endif %}>
+    <label for="f-options">Options (select types)</label><textarea id="f-options" name="options" rows="4" aria-describedby="f-options-help">{{ ff.options }}</textarea>
+    <span></span><span id="f-options-help" class="help">One per line: <code>value</code> or <code>value | Label</code>. Removing an option keeps existing values, shown as “retired option”.</span>
+    <label for="f-min">Minimum (number/date)</label><input id="f-min" name="min" value="{{ ff.min }}">
+    <label for="f-max">Maximum (number/date)</label><input id="f-max" name="max" value="{{ ff.max }}">
+    <label for="f-maxlen">Maximum length (text)</label><input id="f-maxlen" name="max_length" inputmode="numeric" value="{{ ff.max_length }}">
+    <label for="f-pattern">Pattern (text, regular expression)</label><input id="f-pattern" name="pattern" value="{{ ff.pattern }}">
+    <label for="f-default">Default value</label><input id="f-default" name="default_value" value="{{ ff.default }}">
+    <label for="f-sort">Sort order</label><input id="f-sort" name="sort_order" inputmode="numeric" value="{{ ff.sort }}">

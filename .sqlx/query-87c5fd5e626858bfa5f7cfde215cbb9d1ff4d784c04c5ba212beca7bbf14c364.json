@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO notifications (id, document_id, appointment_id, rule_id, event, due_date, trigger, offset_days,\n                                    scheduled_for)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n         ON CONFLICT ON CONSTRAINT notifications_key DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "Date",
+        {
+          "Custom": {
+            "name": "notification_trigger",
+            "kind": {
+              "Enum": [
+                "advance",
+                "due",
+                "overdue"
+              ]
+            }
+          }
+        },
+        "Int4",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "87c5fd5e626858bfa5f7cfde215cbb9d1ff4d784c04c5ba212beca7bbf14c364"
+}

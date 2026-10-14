@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT blob_sha256 FROM document_versions WHERE document_id = $1 ORDER BY version_no DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "blob_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7313a1143c84e1a25ed7582ad01724c11ad0518842375b1ca1c662318176cdf3"
+}

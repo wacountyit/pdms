@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO signatories (id, document_id, sort_order, name, title, organization, email, user_id)\n         VALUES ($1, $2, (SELECT coalesce(max(sort_order), 0) + 10 FROM signatories WHERE document_id = $2),\n                 $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eaa872f9a4b51a1e4fa3ee5a1445a2c477ebe853648e564b8f5553d25549134f"
+}

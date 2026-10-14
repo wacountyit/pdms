@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE signatories SET status = 'signed', signed_on = $2, recorded_by = $3, recorded_at = now(),\n                signed_version_no = coalesce($4, signed_version_no), note = $5, updated_at = now()\n          WHERE id = $1 AND status <> 'signed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Uuid",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ff3f626cb22f9b12f016551e549f3503fbe42f7f096e43fbc8c201e6ad8150c"
+}

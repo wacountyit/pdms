@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE signatories SET status = 'requested', requested_at = now(), requested_by = $2, provider = $3,\n                provider_ref = $4, updated_at = now()\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ff2ffaae5ddf3f786d4ab2e4a7dfa9a4066f3bc0360f13889c5da2e10914b065"
+}

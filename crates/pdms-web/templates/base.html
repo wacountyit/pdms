@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "selfRequestsOnly": true}'>
+  <title>{{ l.title }} – {{ l.org_name }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/tag-colors.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ l.csrf }}"}'>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="/">{{ l.org_name }}</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="/" {% if l.section == "home" %}aria-current="page"{% endif %}>Dashboard</a></li>
+        <li><a href="/documents" {% if l.section == "documents" %}aria-current="page"{% endif %}>Documents</a></li>
+        <li><a href="/calendar" {% if l.section == "calendar" %}aria-current="page"{% endif %}>Calendar</a></li>
+        <li><a href="/positions" {% if l.section == "positions" %}aria-current="page"{% endif %}>Appointments</a></li>
+        <li><a href="/reports" {% if l.section == "reports" %}aria-current="page"{% endif %}>Reports</a></li>
+        {% if l.can_exports %}<li><a href="/exports" {% if l.section == "exports" %}aria-current="page"{% endif %}>Records requests</a></li>{% endif %}
+        <li><a href="/notifications" {% if l.section == "notifications" %}aria-current="page"{% endif %}>Notifications{% if l.unread > 0 %} <span class="count" aria-label="{{ l.unread }} unread">{{ l.unread }}</span>{% endif %}</a></li>
+        {% if l.can_admin %}<li><a href="{{ l.admin_home() }}" {% if l.section == "admin" %}aria-current="page"{% endif %}>Administration</a></li>{% endif %}
+        {% if l.can_audit %}<li><a href="/audit" {% if l.section == "audit" %}aria-current="page"{% endif %}>Audit log</a></li>{% endif %}
+      </ul>
+    </nav>
+    <form class="signout" method="post" action="/logout">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <span class="who">{{ l.user_name }}</span>
+      <a class="who" href="/account/tokens" {% if l.section == "account" %}aria-current="page"{% endif %}>API tokens</a>
+      <button type="submit" class="link">Sign out</button>
+    </form>
+  </header>
+  {% if l.section == "admin" %}
+  <nav class="subnav" aria-label="Administration">
+    <ul>
+      {% if l.can_directory %}
+      <li><a href="/admin/users">Users</a></li>
+      <li><a href="/admin/departments">Departments</a></li>
+      <li><a href="/admin/groups">Groups</a></li>
+      <li><a href="/admin/roles">Roles</a></li>
+      <li><a href="/admin/grants">Access grants</a></li>
+      <li><a href="/admin/idp">Identity provider mappings</a></li>
+      {% endif %}
+      {% if l.can_schema %}
+      <li><a href="/admin/document-types">Document types</a></li>
+      <li><a href="/admin/fields">Custom fields</a></li>
+      {% endif %}
+      {% if l.can_tags %}<li><a href="/admin/tags">Tags</a></li>{% endif %}
+      {% if l.can_retention %}<li><a href="/admin/retention">Retention</a></li>{% endif %}
+      {% if l.can_restore %}<li><a href="/admin/deleted">Deleted documents</a></li>{% endif %}
+      {% if l.can_schema %}<li><a href="/admin/notification-rules">Notification rules</a></li>{% endif %}
+      {% if l.can_settings %}<li><a href="/admin/notifications">Delivery log</a></li>{% endif %}
+      {% if l.can_integrations %}<li><a href="/admin/webhooks">Webhooks</a></li><li><a href="/admin/api">API</a></li><li><a href="/admin/outlook">Outlook &amp; OCR</a></li>{% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+  <main id="main" tabindex="-1">
+    {% if let Some(f) = l.flash %}
+      <div class="flash {% if f.ok %}flash-ok{% else %}flash-error{% endif %}" role="{% if f.ok %}status{% else %}alert{% endif %}">{{ f.message }}</div>
+    {% endif %}
+    <h1>{{ l.title }}</h1>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">{{ l.org_name }} · <a href="/source">Source code</a> · <a href="/license">License: AGPL-3.0-or-later</a></footer>
+</body>
+</html>

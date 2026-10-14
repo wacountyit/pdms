@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acl_entries (id, subject_user_id, subject_group_id, subject_department_id, subject_role_id,\n                                  scope, scope_department_id, scope_document_id, permission, granted_by, expires_at, reason)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "acl_scope",
+            "kind": {
+              "Enum": [
+                "global",
+                "department",
+                "document"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "permission",
+            "kind": {
+              "Enum": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "approve",
+                "manage_permissions",
+                "export"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "67dd58144f30dbf07be4a29c699007efbbaffcd5e9fae96d777f8cdfd2f247f6"
+}

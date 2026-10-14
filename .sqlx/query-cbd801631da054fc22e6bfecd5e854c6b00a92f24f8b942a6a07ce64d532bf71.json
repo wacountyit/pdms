@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.display_name, u.email, u.status::text AS \"status!\",\n                          (SELECT count(*) FROM documents d WHERE d.owner_id = u.id AND d.deleted_at IS NULL) AS \"owned!\",\n                          (SELECT count(*) FROM acl_entries a WHERE a.subject_user_id = u.id) AS \"grants!\",\n                          (SELECT count(*) FROM role_assignments r WHERE r.user_id = u.id) AS \"roles!\",\n                          (SELECT count(*) FROM api_tokens t WHERE t.user_id = u.id AND t.revoked_at IS NULL\n                              AND t.expires_at > now()) AS \"tokens!\",\n                          (SELECT count(*) FROM positions p WHERE p.manager_user_id = u.id AND p.is_active) AS \"positions!\"\n                     FROM users u\n                    WHERE u.status <> 'active'\n                    ORDER BY u.status, u.display_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "owned!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "grants!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "roles!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "tokens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "positions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cbd801631da054fc22e6bfecd5e854c6b00a92f24f8b942a6a07ce64d532bf71"
+}

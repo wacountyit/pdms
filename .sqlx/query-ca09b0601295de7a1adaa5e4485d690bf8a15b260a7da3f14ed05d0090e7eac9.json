@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE review_tasks SET status = 'cancelled', updated_at = now()\n            WHERE document_id = $1 AND kind = $2 AND status IN ('open', 'initiated', 'overdue')\n              AND ($3::date IS NULL OR due_date <> $3)\n          RETURNING due_date",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "due_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ca09b0601295de7a1adaa5e4485d690bf8a15b260a7da3f14ed05d0090e7eac9"
+}

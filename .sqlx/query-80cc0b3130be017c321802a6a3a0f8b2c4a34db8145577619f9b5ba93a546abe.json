@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.revision_no, r.body, u.display_name AS \"edited_by?\", r.created_at\n             FROM comment_revisions r LEFT JOIN users u ON u.id = r.edited_by\n            WHERE r.comment_id = $1 ORDER BY r.revision_no",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "comment_revisions",
+            "name": "revision_no"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "comment_revisions",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "edited_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "comment_revisions",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "80cc0b3130be017c321802a6a3a0f8b2c4a34db8145577619f9b5ba93a546abe"
+}

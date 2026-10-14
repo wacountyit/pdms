@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/documents/{{ document_id }}#comments">← Back to the document</a></p>
+<p class="muted">Every version of this comment, oldest first. Versions cannot be changed or removed.</p>
+<ol class="activity">
+  {% for r in revisions %}<li><p class="comment-meta"><strong>Version {{ r.0 }}</strong> <span class="muted small">{{ r.1 }}, {{ r.2 }}</span></p><div class="comment-body">{{ r.3|safe }}</div></li>{% endfor %}
+</ol>
+{% endblock %}

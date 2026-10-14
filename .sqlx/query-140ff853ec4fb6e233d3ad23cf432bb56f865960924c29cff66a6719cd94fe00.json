@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.status AS \"status: UserStatus\",\n                  ARRAY(SELECT department_id FROM department_members WHERE user_id = u.id) AS \"departments!\",\n                  ARRAY(SELECT group_id FROM group_members WHERE user_id = u.id) AS \"groups!\",\n                  ARRAY(SELECT ra.role_id FROM role_assignments ra WHERE ra.user_id = u.id ORDER BY ra.id) AS \"role_ids!\",\n                  ARRAY(SELECT r.key FROM role_assignments ra JOIN roles r ON r.id = ra.role_id\n                         WHERE ra.user_id = u.id ORDER BY ra.id) AS \"role_keys!\",\n                  ARRAY(SELECT ra.department_id FROM role_assignments ra WHERE ra.user_id = u.id ORDER BY ra.id)\n                    AS \"role_departments!: Vec<Option<Uuid>>\"\n             FROM users u\n            WHERE u.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: UserStatus",
+        "type_info": {
+          "Custom": {
+            "name": "user_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "disabled",
+                "departed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "departments!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "groups!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "role_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "role_keys!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "role_departments!: Vec<Option<Uuid>>",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "140ff853ec4fb6e233d3ad23cf432bb56f865960924c29cff66a6719cd94fe00"
+}

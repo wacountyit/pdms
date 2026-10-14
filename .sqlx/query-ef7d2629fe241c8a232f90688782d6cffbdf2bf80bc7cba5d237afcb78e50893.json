@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT source_key, mailbox, event_id, content_hash FROM graph_calendar_links",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "graph_calendar_links",
+            "name": "source_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "mailbox",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "graph_calendar_links",
+            "name": "mailbox"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "event_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "graph_calendar_links",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "content_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "graph_calendar_links",
+            "name": "content_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ef7d2629fe241c8a232f90688782d6cffbdf2bf80bc7cba5d237afcb78e50893"
+}

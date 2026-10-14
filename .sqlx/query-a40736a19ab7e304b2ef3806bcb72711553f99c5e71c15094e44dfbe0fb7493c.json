@@ -1,0 +1,245 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.document_id, s.sort_order, s.name, s.title, s.organization, s.email, s.user_id,\n                  s.status AS \"status: SignatureStatus\", s.requested_at, rq.display_name AS \"requested_by?\",\n                  s.signed_on, rc.display_name AS \"recorded_by?\", s.recorded_at, s.signed_version_no,\n                  s.provider, s.provider_ref, s.note\n             FROM signatories s\n             LEFT JOIN users rq ON rq.id = s.requested_by\n             LEFT JOIN users rc ON rc.id = s.recorded_by\n            WHERE ($1::uuid IS NULL OR s.document_id = $1) AND ($2::uuid IS NULL OR s.id = $2)\n            ORDER BY s.sort_order, s.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sort_order",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "organization",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "organization"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "status: SignatureStatus",
+        "type_info": {
+          "Custom": {
+            "name": "signature_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "requested",
+                "signed",
+                "declined"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "requested_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "requested_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "signed_on",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "signed_on"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "recorded_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "recorded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "recorded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "signed_version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "signed_version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "provider_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "provider_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signatories",
+            "name": "note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "a40736a19ab7e304b2ef3806bcb72711553f99c5e71c15094e44dfbe0fb7493c"
+}

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE custom_field_definitions SET current_version = current_version + 1, sort_order = $2,\n                updated_at = now()\n          WHERE id = $1 RETURNING current_version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "current_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "current_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dc79f19b40251c12ea685492e85229989d583b482f9138c3e8618bced04a5bc3"
+}

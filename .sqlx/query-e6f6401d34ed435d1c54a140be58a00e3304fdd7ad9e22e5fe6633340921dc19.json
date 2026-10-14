@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE review_tasks SET status = 'completed', completed_by = $2, completed_at = now(), completed_on = $3,\n                outcome_note = $4, updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6f6401d34ed435d1c54a140be58a00e3304fdd7ad9e22e5fe6633340921dc19"
+}

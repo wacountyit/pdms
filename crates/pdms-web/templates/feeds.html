@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<p>A subscription gives Outlook (or any calendar app) a private web address that shows review, renewal, and expiration dates. It always shows what <em>you</em> can currently see, never includes confidential documents, and stops working the moment you revoke it.</p>
+<p class="help">In Outlook: <strong>Add calendar → Subscribe from web</strong> (or <strong>From internet</strong>), then paste the address. Treat the address like a password.</p>
+<table>
+  <caption>Your subscriptions</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Shows</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>
+  {% for f in feeds %}
+    <tr><td>{{ f.0.name }}</td>
+    <td>{% if let Some(d) = f.0.department_name %}{{ d }}{% else %}Everything you can see{% endif %}{% if f.0.only_owned %} (owned by you){% endif %}</td>
+    <td>{{ f.1 }}</td><td>{{ f.2 }}</td>
+    <td>{% if f.0.revoked_at.is_some() %}Revoked{% else %}Active{% endif %}</td>
+    <td>{% if f.0.revoked_at.is_none() %}<form method="post" action="/calendar/feeds/{{ f.0.id }}/revoke"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Revoke</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6">No subscriptions yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-feed-h">
+  <h2 id="new-feed-h">New subscription</h2>
+  <form method="post" action="/calendar/feeds" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="fd-name">Name</label><input id="fd-name" name="name" required maxlength="200" value="Document dates">
+    <label for="fd-dept">Department</label>
+    <select id="fd-dept" name="department_id"><option value="">All departments</option>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
+    <label for="fd-mine">Only documents I own</label><input id="fd-mine" type="checkbox" name="only_owned" value="true">
+    <span></span><button type="submit" class="primary">Create subscription</button>
+  </form>
+</section>
+{% endblock %}

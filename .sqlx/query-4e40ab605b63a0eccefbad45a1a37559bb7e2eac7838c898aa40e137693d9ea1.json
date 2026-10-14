@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.version, v.label, v.help_text, v.required, v.options, v.validation,\n                  u.display_name AS \"created_by?\", v.created_at\n             FROM custom_field_versions v LEFT JOIN users u ON u.id = v.created_by\n            WHERE v.field_id = $1 ORDER BY v.version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "help_text",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "help_text"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "required"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "options",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "options"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "validation",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "validation"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e40ab605b63a0eccefbad45a1a37559bb7e2eac7838c898aa40e137693d9ea1"
+}

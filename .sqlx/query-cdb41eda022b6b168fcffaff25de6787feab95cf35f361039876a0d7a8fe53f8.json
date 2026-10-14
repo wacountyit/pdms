@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE api_tokens SET last_used_at = now(),\n                last_audited_at = CASE WHEN $2 THEN now() ELSE last_audited_at END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cdb41eda022b6b168fcffaff25de6787feab95cf35f361039876a0d7a8fe53f8"
+}

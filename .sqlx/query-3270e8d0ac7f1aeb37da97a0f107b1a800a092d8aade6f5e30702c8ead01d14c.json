@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.rule_id, r.kind AS \"kind: RecipientKind\", r.user_id, r.group_id, r.department_id, r.role_id,\n                  coalesce(u.display_name, g.name, d.name, ro.name) AS label\n             FROM notification_rule_recipients r\n             LEFT JOIN users u ON u.id = r.user_id\n             LEFT JOIN groups g ON g.id = r.group_id\n             LEFT JOIN departments d ON d.id = r.department_id\n             LEFT JOIN roles ro ON ro.id = r.role_id\n            ORDER BY r.kind, label",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rule_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "rule_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind: RecipientKind",
+        "type_info": {
+          "Custom": {
+            "name": "recipient_kind",
+            "kind": {
+              "Enum": [
+                "owner",
+                "document_department",
+                "user",
+                "group",
+                "department",
+                "role"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rule_recipients",
+            "name": "role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "label",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "3270e8d0ac7f1aeb37da97a0f107b1a800a092d8aade6f5e30702c8ead01d14c"
+}

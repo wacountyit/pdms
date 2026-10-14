@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO position_requirements (id, position_id, label, description, sort_order)\n         VALUES ($1, $2, $3, $4,\n                 (SELECT coalesce(max(sort_order), 0) + 10 FROM position_requirements WHERE position_id = $2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d63d5c8971f8d9a129e889ee76f76c3c5fb5c29c70cdde6b945fc4dd648b38b"
+}

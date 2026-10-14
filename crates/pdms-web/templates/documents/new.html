@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+{% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
+<form method="post" action="/documents" enctype="multipart/form-data" class="doc-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  {% let fields_doc_param = "" %}
+  {% include "documents/metadata_fields.html" %}
+  <div class="field-row">
+    <div class="field">
+      <label for="department_id">Department <span class="req" aria-hidden="true">*</span></label>
+      <select id="department_id" name="department_id" required>
+        {% for d in departments %}<option value="{{ d.0 }}" {% if form.v("department_id") == d.0.to_string() %}selected{% endif %}>{{ d.1 }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="owner_id">Primary record owner <span class="req" aria-hidden="true">*</span></label>
+      <select id="owner_id" name="owner_id" required>
+        {% for u in users %}<option value="{{ u.id }}" {% if form.v("owner_id") == u.id.to_string() %}selected{% endif %}>{{ u.display_name }} ({{ u.email }})</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="status">Start as</label>
+      <select id="status" name="status">
+        <option value="active" {% if form.v("status") == "active" %}selected{% endif %}>Active</option>
+        <option value="draft" {% if form.v("status") == "draft" %}selected{% endif %}>Draft</option>
+      </select>
+    </div>
+  </div>
+  <div class="field">
+    <label for="tags">Tags</label>
+    <input id="tags" name="tags" value="{{ form.v("tags") }}" aria-describedby="tags-help">
+    <p id="tags-help" class="help">Separate tags with commas.</p>
+  </div>
+  <fieldset>
+    <legend>File</legend>
+    <label for="file">Document file (optional now; you can upload it later)</label>
+    <input id="file" name="file" type="file" aria-describedby="file-help">
+    <p id="file-help" class="help">PDF, Word, Excel, PowerPoint, OpenDocument, images, text, or email. Up to {{ max_upload_mb }} MB.</p>
+    <label for="note">Note for this version</label>
+    <input id="note" name="note" maxlength="1000">
+  </fieldset>
+  <p><button type="submit" class="primary">Create document</button> <a href="/documents">Cancel</a></p>
+</form>
+{% endblock %}

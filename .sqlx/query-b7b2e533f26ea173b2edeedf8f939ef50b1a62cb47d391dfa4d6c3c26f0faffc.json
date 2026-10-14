@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE workflows SET status = $2, completed_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "workflow_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "approved",
+                "rejected",
+                "changes_requested",
+                "cancelled"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b7b2e533f26ea173b2edeedf8f939ef50b1a62cb47d391dfa4d6c3c26f0faffc"
+}

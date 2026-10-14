@@ -1,0 +1,32 @@
+<div class="grid-form">
+  <label for="{{ rf.form_id }}-event">Event</label>
+  <select id="{{ rf.form_id }}-event" name="event">
+    {% for e in events %}<option value="{{ e.0 }}" {% if rf.event == e.0 %}selected{% endif %}>{{ e.1 }}</option>{% endfor %}
+  </select>
+  <label for="{{ rf.form_id }}-offsets">Remind (days before)</label>
+  <input id="{{ rf.form_id }}-offsets" name="offsets" value="{{ rf.offsets }}" required aria-describedby="{{ rf.form_id }}-offsets-help">
+  <span></span><span id="{{ rf.form_id }}-offsets-help" class="help">Comma-separated; 0 means on the due date. Example: 90, 30, 7, 0</span>
+  <label for="{{ rf.form_id }}-repeat">Then every (days) while overdue</label>
+  <input id="{{ rf.form_id }}-repeat" name="overdue_repeat_days" inputmode="numeric" value="{{ rf.repeat }}" placeholder="Empty = no repeats">
+  <span class="label">Send by</span>
+  <span>
+    <label class="check"><input type="checkbox" name="channel" value="email" {% if rf.email %}checked{% endif %}> Email</label>
+    <label class="check"><input type="checkbox" name="channel" value="in_app" {% if rf.in_app %}checked{% endif %}> In-app</label>
+  </span>
+</div>
+<fieldset>
+  <legend>Who is notified</legend>
+  <label class="check"><input type="checkbox" name="recipient" value="owner" {% if rf.has("owner") %}checked{% endif %}> The document’s primary owner</label>
+  <label class="check"><input type="checkbox" name="recipient" value="document_department" {% if rf.has("document_department") %}checked{% endif %}> Everyone in the document’s department</label>
+  <div class="field-row">
+    <div class="field"><label for="{{ rf.form_id }}-roles">Roles (for the document’s department)</label>
+      <select id="{{ rf.form_id }}-roles" name="recipient" multiple size="4">{% for o in opts.roles %}<option value="{{ o.0 }}" {% if rf.has(o.0) %}selected{% endif %}>{{ o.1 }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="{{ rf.form_id }}-groups">Groups</label>
+      <select id="{{ rf.form_id }}-groups" name="recipient" multiple size="4">{% for o in opts.groups %}<option value="{{ o.0 }}" {% if rf.has(o.0) %}selected{% endif %}>{{ o.1 }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="{{ rf.form_id }}-depts">Departments</label>
+      <select id="{{ rf.form_id }}-depts" name="recipient" multiple size="4">{% for o in opts.departments %}<option value="{{ o.0 }}" {% if rf.has(o.0) %}selected{% endif %}>{{ o.1 }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="{{ rf.form_id }}-users">People</label>
+      <select id="{{ rf.form_id }}-users" name="recipient" multiple size="4">{% for o in opts.users %}<option value="{{ o.0 }}" {% if rf.has(o.0) %}selected{% endif %}>{{ o.1 }}</option>{% endfor %}</select></div>
+  </div>
+  <p class="help">Hold Ctrl (or ⌘) to choose several. People who cannot view a document are never notified about it.</p>
+</fieldset>

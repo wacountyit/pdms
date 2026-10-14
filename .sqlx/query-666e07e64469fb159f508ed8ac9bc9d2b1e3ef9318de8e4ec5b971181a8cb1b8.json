@@ -1,0 +1,152 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, document_type_id, document_id, position_id, event AS \"event: DueEvent\", offsets_days,\n                  overdue_repeat_days, channels AS \"channels: Vec<Channel>\", is_active\n             FROM notification_rules\n            ORDER BY document_id NULLS FIRST, document_type_id NULLS FIRST, position_id NULLS FIRST, event, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_type_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "document_type_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "position_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "event: DueEvent",
+        "type_info": {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "offsets_days",
+        "type_info": "Int4Array",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "offsets_days"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "overdue_repeat_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "overdue_repeat_days"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "channels: Vec<Channel>",
+        "type_info": {
+          "Custom": {
+            "name": "delivery_channel[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "delivery_channel",
+                  "kind": {
+                    "Enum": [
+                      "email",
+                      "in_app"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "channels"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "is_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notification_rules",
+            "name": "is_active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "666e07e64469fb159f508ed8ac9bc9d2b1e3ef9318de8e4ec5b971181a8cb1b8"
+}

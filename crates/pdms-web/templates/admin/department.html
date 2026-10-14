@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/admin/departments">← All departments</a></p>
+<form method="post" action="/admin/departments/{{ d.id }}" class="grid-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <label>Code</label><code>{{ d.code }}</code>
+  <label for="name">Name</label><input id="name" name="name" value="{{ d.name }}" required maxlength="200">
+  <label for="active">Active</label><input id="active" type="checkbox" name="is_active" value="true" {% if d.is_active %}checked{% endif %}>
+  <span></span><button type="submit">Save</button>
+</form>
+
+<section aria-labelledby="members-h">
+  <h2 id="members-h">Members ({{ members.len() }})</h2>
+  <ul class="columns">{% for m in members %}<li><a href="/admin/users/{{ m.user_id }}">{{ m.display_name }}</a></li>{% else %}<li>No members.</li>{% endfor %}</ul>
+</section>
+
+<section aria-labelledby="grants-h">
+  <h2 id="grants-h">Access to this department’s documents</h2>
+  {% include "admin/grants_table.html" %}
+  {% include "admin/grant_form.html" %}
+</section>
+{% endblock %}

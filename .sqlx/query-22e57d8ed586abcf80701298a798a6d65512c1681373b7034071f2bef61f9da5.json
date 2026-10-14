@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.document_id, v.version_no FROM document_versions v\n            WHERE v.blob_sha256 IS NOT NULL\n              AND NOT EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = v.blob_sha256)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "22e57d8ed586abcf80701298a798a6d65512c1681373b7034071f2bef61f9da5"
+}

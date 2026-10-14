@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Only source goes into the build context: no secrets, site settings, data, or VCS.
+target
+.git
+.github
+secrets
+.env
+.env.*
+config/pdms.toml
+config/Caddyfile
+docker-compose.override.yml
+data
+backups
+scratch
+node_modules
+*.dump
+*.tar
+*.log
+*.eml
+*.pem
+*.key
+.idea
+.vscode
+.DS_Store

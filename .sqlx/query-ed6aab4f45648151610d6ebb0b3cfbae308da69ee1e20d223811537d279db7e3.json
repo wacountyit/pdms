@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO outbound_cursors (name, last_seq)\n         VALUES ($1, (SELECT coalesce(max(seq), 0) FROM audit_log))\n         ON CONFLICT (name) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ed6aab4f45648151610d6ebb0b3cfbae308da69ee1e20d223811537d279db7e3"
+}

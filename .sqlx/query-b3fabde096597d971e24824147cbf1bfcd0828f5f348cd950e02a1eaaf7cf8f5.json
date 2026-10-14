@@ -1,0 +1,200 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.id, f.key, f.field_type AS \"field_type: FieldType\", f.document_type_id,\n                  t.name AS \"document_type_name?\", f.current_version AS version, f.is_deprecated,\n                  f.sort_order, v.label, v.help_text, v.required, v.options, v.validation, v.default_value\n             FROM custom_field_definitions f\n             JOIN custom_field_versions v ON v.field_id = f.id AND v.version = f.current_version\n             LEFT JOIN document_types t ON t.id = f.document_type_id\n            ORDER BY f.document_type_id NULLS FIRST, f.sort_order, v.label",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "field_type: FieldType",
+        "type_info": {
+          "Custom": {
+            "name": "field_type",
+            "kind": {
+              "Enum": [
+                "text",
+                "long_text",
+                "number",
+                "date",
+                "boolean",
+                "single_select",
+                "multi_select",
+                "user",
+                "department",
+                "url"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "field_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "document_type_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "document_type_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "document_type_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "current_version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "is_deprecated",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "is_deprecated"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "sort_order",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "custom_field_definitions",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "help_text",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "help_text"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "required"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "options",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "options"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "validation",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "validation"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "default_value",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "custom_field_versions",
+            "name": "default_value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "b3fabde096597d971e24824147cbf1bfcd0828f5f348cd950e02a1eaaf7cf8f5"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO document_tags (document_id, tag_id, added_by)\n                 SELECT $1, id, $3 FROM tags WHERE slug = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f62346d72f248853b57866026107a63eb9161d9be1fedadc8ecef1f93d3712c7"
+}

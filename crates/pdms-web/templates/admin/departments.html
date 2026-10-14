@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <caption>Departments</caption>
+  <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Members</th><th scope="col">Status</th></tr></thead>
+  <tbody>
+  {% for d in departments %}
+    <tr><td><code>{{ d.code }}</code></td><td><a href="/admin/departments/{{ d.id }}">{{ d.name }}</a></td><td>{{ d.member_count }}</td><td>{% if d.is_active %}Active{% else %}Inactive{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4">No departments yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-dept-h">
+  <h2 id="new-dept-h">Add a department</h2>
+  <p class="help">Members of a new department can view its documents by default. Grant more access on the department page.</p>
+  <form method="post" action="/admin/departments" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="code">Code</label><input id="code" name="code" required maxlength="32" pattern="[A-Za-z0-9_\-]+" aria-describedby="code-help">
+    <span></span><span id="code-help" class="help">Short identifier, e.g. OPS. Cannot be changed later.</span>
+    <label for="name">Name</label><input id="name" name="name" required maxlength="200">
+    <span></span><button type="submit" class="primary">Add department</button>
+  </form>
+</section>
+{% endblock %}

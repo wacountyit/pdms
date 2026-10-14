@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE documents SET title = $3, description = $4, document_type_id = $5, department_id = $6,\n                execution_date = $7, effective_date = $8, last_review_date = $9, next_review_date = $10,\n                renewal_date = $11, expiration_date = $12, review_interval_months = $13,\n                custom_fields = $14, search_extra = $15, row_version = row_version + 1, updated_at = now()\n          WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Date",
+        "Date",
+        "Date",
+        "Date",
+        "Date",
+        "Date",
+        "Int4",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06b3422a2c80d64a3dea2a0018649d2876b62b24f30b266de453029fccda8889"
+}

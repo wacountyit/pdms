@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             ARRAY(SELECT d.code FROM department_members m JOIN departments d ON d.id = m.department_id\n                    WHERE m.user_id = $1 ORDER BY d.code) AS \"departments!\",\n             ARRAY(SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id\n                    WHERE m.user_id = $1 ORDER BY g.name) AS \"groups!\",\n             ARRAY(SELECT r.key || coalesce('@' || d.code, '') FROM role_assignments ra\n                     JOIN roles r ON r.id = ra.role_id LEFT JOIN departments d ON d.id = ra.department_id\n                    WHERE ra.user_id = $1 ORDER BY 1) AS \"roles!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "departments!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "groups!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "54e85328e2f16563ae834a1ecf1cfb0f150a0389fa3027a757a27c47d4c4ae0a"
+}

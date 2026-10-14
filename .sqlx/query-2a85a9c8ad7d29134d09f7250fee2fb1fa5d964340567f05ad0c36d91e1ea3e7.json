@@ -1,0 +1,166 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT dl.created_at, n.document_id, n.appointment_id, a.position_id AS \"position_id?\",\n                  coalesce(d.external_id, a.person_name, '') AS \"external_id!\",\n                  coalesce(n.event::text, 'action') AS \"event!\", n.trigger::text AS \"trigger?\",\n                  n.offset_days, n.subject, u.display_name, u.email, dl.channel::text AS \"channel!\", dl.status::text AS \"status!\",\n                  dl.attempts, coalesce(dl.last_error, dl.skip_reason, '') AS \"detail!\"\n             FROM notification_deliveries dl\n             JOIN notifications n ON n.id = dl.notification_id\n             LEFT JOIN documents d ON d.id = n.document_id\n             LEFT JOIN appointments a ON a.id = n.appointment_id\n             JOIN users u ON u.id = dl.user_id\n            WHERE ($1 = '' OR dl.status::text = $1)\n            ORDER BY dl.created_at DESC LIMIT 500",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "appointment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "appointment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "position_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "external_id!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "event!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "trigger?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "offset_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "offset_days"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "channel!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "detail!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      null,
+      null,
+      null,
+      true,
+      true,
+      false,
+      false,
+      null,
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "2a85a9c8ad7d29134d09f7250fee2fb1fa5d964340567f05ad0c36d91e1ea3e7"
+}

@@ -1,0 +1,30 @@
+[package]
+name = "pdms-storage"
+description = "Content-addressed blob storage (local filesystem, S3-compatible), upload spooling, content sniffing, and virus-scan hook."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
+hex.workspace = true
+infer = "0.19"
+object_store = { version = "0.12", features = ["aws"] }
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+testcontainers.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

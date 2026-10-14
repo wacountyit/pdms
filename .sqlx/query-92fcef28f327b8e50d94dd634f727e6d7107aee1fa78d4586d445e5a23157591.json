@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.status AS \"status: DocumentStatus\", t.requires_legal_review\n             FROM documents d JOIN document_types t ON t.id = d.document_type_id WHERE d.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: DocumentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "active",
+                "renewal_due",
+                "overdue",
+                "expired",
+                "superseded",
+                "archived"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "requires_legal_review",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "requires_legal_review"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "92fcef28f327b8e50d94dd634f727e6d7107aee1fa78d4586d445e5a23157591"
+}

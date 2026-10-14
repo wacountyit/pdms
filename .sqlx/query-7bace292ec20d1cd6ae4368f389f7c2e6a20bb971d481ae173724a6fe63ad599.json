@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tags (id, name, slug, color, description, is_curated, created_by)\n         VALUES ($1, $2, $3, $4, $5, true, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bace292ec20d1cd6ae4368f389f7c2e6a20bb971d481ae173724a6fe63ad599"
+}

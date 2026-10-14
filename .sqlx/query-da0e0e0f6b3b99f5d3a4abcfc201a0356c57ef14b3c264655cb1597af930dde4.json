@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.position_id, a.person_name, p.name AS position_name, p.body_name,\n                  p.department_id, p.manager_user_id, a.end_date, a.reappointment_due_date\n             FROM appointments a JOIN positions p ON p.id = a.position_id\n            WHERE a.status = 'active' AND p.is_active\n              AND ($1::uuid IS NULL OR a.id = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "position_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "position_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "person_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "person_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "body_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "body_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "manager_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "manager_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "end_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "end_date"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "reappointment_due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "reappointment_due_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "da0e0e0f6b3b99f5d3a4abcfc201a0356c57ef14b3c264655cb1597af930dde4"
+}

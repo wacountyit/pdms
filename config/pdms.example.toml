@@ -1,0 +1,165 @@
+# Example configuration. install.sh generates config/pdms.toml for you.
+# Every key can also be set with an environment variable: PDMS_<SECTION>__<KEY>,
+# e.g. PDMS_SERVER__PUBLIC_URL. Append _FILE to read a value from a file.
+
+secret_key = ""                 # base64, >= 32 bytes; prefer PDMS_SECRET_KEY_FILE
+
+[org]
+name = "Policy and Document Management System"
+timezone = "America/New_York"
+# Where users can get the source code of this installation (AGPL-3.0-or-later,
+# section 13). Linked from every page as "Source code". Example:
+# "https://github.com/your-org/pdms"
+source_url = ""
+
+[server]
+bind = "0.0.0.0:8080"
+public_url = "https://pdms.example.org"
+trusted_proxies = ["127.0.0.1/32"]
+secure_cookies = true
+max_body_bytes = 2097152
+metrics_enabled = true
+
+[database]
+url = ""                        # pdms_app role; prefer PDMS_DATABASE__URL_FILE
+owner_url = ""                  # pdms_owner role, for `pdms migrate` only
+max_connections = 16
+
+[auth]
+session_idle_minutes = 30
+session_absolute_hours = 12
+login_attempts_per_minute = 10
+
+[auth.local]
+enabled = true
+require_totp = true
+max_failed_attempts = 5
+lockout_minutes = 15
+
+[auth.oidc]
+enabled = false
+issuer_url = "https://login.microsoftonline.com/<tenant-id>/v2.0"
+client_id = ""
+client_secret = ""              # prefer PDMS_AUTH__OIDC__CLIENT_SECRET_FILE
+scopes = ["openid", "profile", "email"]
+subject_claim = "oid"           # Entra object ID; use "sub" for other IdPs
+groups_claim = "groups"
+auto_provision = true
+display_name = "Microsoft"
+
+[storage]
+backend = "local"               # or "s3"
+local_path = "data/blobs"       # container: /var/lib/pdms/blobs
+spool_path = "data/spool"       # uploads in progress (always local)
+max_upload_bytes = 104857600    # 100 MB
+clamav_addr = ""                # e.g. "clamav:3310"; empty disables scanning
+clamav_required = true          # with scanning on: reject uploads if clamd is down
+
+[storage.s3]                    # any S3-compatible service (AWS, SeaweedFS, MinIO, appliance S3 endpoints)
+endpoint = ""                   # e.g. "https://s3.example.org"; empty for AWS
+bucket = ""
+region = "us-east-1"
+access_key_id = ""
+secret_access_key = ""          # prefer PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE
+prefix = ""
+allow_http = false
+
+[documents]
+free_form_tags = true           # editors may add new, uncurated tags
+
+[notifications]
+send_hour = 7                   # local hour (org.timezone) after which reminders go out
+renewal_due_days = 90           # Active -> Renewal Due this many days before the renewal date
+task_lead_days = 90             # review/renewal tasks appear this many days ahead
+stale_after_days = 30           # a missed one-off reminder older than this (after the due date) is not sent late
+
+[email]
+transport = "disabled"          # "smtp", "file" (writes .eml files), or "disabled"
+from = "Records System <pdms@example.org>"
+reply_to = ""
+smtp_host = "smtp.office365.com"
+smtp_port = 587
+smtp_security = "starttls"      # "starttls", "tls", or "none" (trusted relay only)
+smtp_username = ""              # empty for an unauthenticated relay / Exchange connector
+smtp_password = ""              # prefer PDMS_EMAIL__SMTP_PASSWORD_FILE
+file_dir = "data/mail"
+
+[log]
+format = "json"                 # or "pretty"
+filter = "info"
+
+[worker]
+concurrency = 4
+poll_interval_ms = 1000
+lease_seconds = 300
+
+[workflow]
+# Separation of duties: the person who submits a document for review cannot
+# approve it or give the legal sign-off. Set to true only if your organization
+# explicitly allows self-approval.
+allow_self_approval = false
+
+[api]
+# The REST API at /api/v1 (reference: /api/docs). Users create scoped tokens
+# under "API tokens"; a token can never do more than its user.
+enabled = true
+max_token_days = 365
+request_log_days = 90          # API request log retention
+requests_per_minute = 600      # per token
+
+[integrations]
+# Outbound events. Webhooks are configured under Administration -> Webhooks.
+webhooks_enabled = true
+allow_http_webhooks = false    # https only, except for testing
+webhook_timeout_seconds = 10
+webhook_max_attempts = 8       # exponential backoff between attempts
+# Integration providers to enable by key. Built-in: "log" (writes each event
+# to the application log; a reference for future connectors).
+providers = []
+
+[audit_forward]
+# Copy every audit entry to an external log system as it is written.
+# target = "none" | "file" | "syslog"
+target = "none"
+file_path = "/var/lib/pdms/audit-forward.jsonl"   # JSON lines (for a log shipper)
+syslog_addr = ""                                    # host:port, RFC 5424 over UDP
+syslog_app_name = "pdms"
+
+[exports]
+# Records request packages.
+max_documents = 500
+max_bytes = 2147483648         # 2 GB of files per package
+
+[comments]
+# Anyone who can view a document may comment on it (comments never change the
+# document). Set to false to require the edit permission.
+viewers_can_comment = true
+
+[ocr]
+# Text in PDFs, Word documents, and text files is read in Rust and made
+# searchable; dates found are offered for confirmation (never applied).
+text_extraction = true
+suggest_dates = true
+# OCR for scanned PDFs and images: start the sidecar with
+# `docker compose --profile ocr up -d` and set sidecar_url = "http://ocr:8080".
+sidecar_url = ""
+sidecar_timeout_seconds = 300
+max_bytes = 52428800
+min_text_chars = 100           # PDFs with less embedded text are OCR'd
+
+[graph_calendar]
+# Optional: keep all-day Outlook events for document and appointment dates in
+# a shared calendar through Microsoft Graph. See docs/ADMIN_GUIDE.md.
+enabled = false
+tenant_id = ""
+client_id = ""
+# client_secret: put it in secrets/graph_client_secret
+mailbox = ""                   # e.g. "pdms-calendar@yourdomain.org"
+include_appointments = true
+past_days = 30
+future_days = 730
+sync_interval_minutes = 15
+# Per-department calendars (department code = mailbox):
+# [graph_calendar.department_mailboxes]
+# OPS = "ops-calendar@yourdomain.org"
+

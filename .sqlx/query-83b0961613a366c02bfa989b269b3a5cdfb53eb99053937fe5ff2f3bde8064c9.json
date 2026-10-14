@@ -1,0 +1,176 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, document_type_id, department_id, owner_id, inherit_acl, is_confidential,\n                  status AS \"status: DocumentStatus\", next_review_date, renewal_date, expiration_date,\n                  external_id, title\n             FROM documents\n            WHERE deleted_at IS NULL\n              AND status IN ('active', 'renewal_due', 'overdue', 'expired')\n              AND ($1::uuid IS NULL OR id = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_type_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "document_type_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "inherit_acl",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "inherit_acl"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "is_confidential",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "is_confidential"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status: DocumentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "active",
+                "renewal_due",
+                "overdue",
+                "expired",
+                "superseded",
+                "archived"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "next_review_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "next_review_date"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "renewal_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "renewal_date"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "expiration_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "expiration_date"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "83b0961613a366c02bfa989b269b3a5cdfb53eb99053937fe5ff2f3bde8064c9"
+}

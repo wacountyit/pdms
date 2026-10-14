@@ -1,0 +1,16 @@
+# Sample Caddy configuration: automatic HTTPS in front of PDMS.
+# Caddy adds X-Forwarded-For; PDMS trusts it only from server.trusted_proxies.
+
+pdms.example.org {
+	encode zstd gzip
+
+	# Metrics are for your monitoring system, not the public internet.
+	@metrics path /metrics
+	respond @metrics 404
+
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy 127.0.0.1:8080
+}

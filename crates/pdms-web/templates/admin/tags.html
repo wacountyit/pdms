@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Curated tags are managed here. People who can edit a document may also add free-form tags, which appear below as uncurated; you can curate them or change their color.</p>
+<table>
+  <caption>Tags</caption>
+  <thead><tr><th scope="col">Tag</th><th scope="col">Documents</th><th scope="col">Edit</th></tr></thead>
+  <tbody>
+  {% for t in tags %}
+    <tr><td><span class="{{ t.1 }}">{{ t.0.name }}</span>{% if !t.0.is_curated %} <span class="muted small">(free-form)</span>{% endif %}</td><td>{{ t.0.document_count }}</td>
+    <td><form method="post" action="/admin/tags/{{ t.0.id }}" class="inline">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label class="visually-hidden" for="n-{{ t.0.id }}">Name</label><input id="n-{{ t.0.id }}" name="name" value="{{ t.0.name }}" required maxlength="60">
+      <label class="visually-hidden" for="c-{{ t.0.id }}">Color</label><input id="c-{{ t.0.id }}" name="color" type="color" value="{{ t.0.color }}">
+      <label class="visually-hidden" for="d-{{ t.0.id }}">Description</label><input id="d-{{ t.0.id }}" name="description" value="{{ t.0.description }}" placeholder="Description" maxlength="500">
+      <label class="check"><input type="checkbox" name="is_curated" value="true" {% if t.0.is_curated %}checked{% endif %}> Curated</label>
+      <button type="submit" class="small">Save</button>
+    </form></td></tr>
+  {% else %}<tr><td colspan="3">No tags yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-tag-h">
+  <h2 id="new-tag-h">Add a curated tag</h2>
+  <form method="post" action="/admin/tags" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="t-name">Name</label><input id="t-name" name="name" required maxlength="60">
+    <label for="t-color">Color</label><input id="t-color" name="color" type="color" value="#0b4f8a">
+    <label for="t-desc">Description</label><input id="t-desc" name="description" maxlength="500">
+    <span></span><button type="submit" class="primary">Add tag</button>
+  </form>
+</section>
+{% endblock %}

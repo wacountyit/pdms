@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Every report shows only what you are allowed to see, and can be downloaded as CSV (downloads are recorded).</p>
+<ul class="events">
+  {% for r in reports %}<li><a href="/reports/{{ r.key }}"><strong>{{ r.title }}</strong></a><br><span class="muted small">{{ r.description }}</span></li>{% endfor %}
+</ul>
+{% endblock %}

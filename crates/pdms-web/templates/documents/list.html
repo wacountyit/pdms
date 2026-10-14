@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" action="/documents" class="filters" role="search" aria-label="Find documents">
+  <div class="wide"><label for="q">Search</label><input id="q" name="q" type="search" value="{{ q.q }}" placeholder="Title, ID, description, tags, field values"></div>
+  <div><label for="f-type">Type</label>
+    <select id="f-type" name="type"><option value="">Any</option>{% for t in types %}<option value="{{ t.id }}" {% if q.doc_type == t.id.to_string() %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div><label for="f-dept">Department</label>
+    <select id="f-dept" name="department"><option value="">Any</option>{% for d in departments %}<option value="{{ d.id }}" {% if q.department == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+  <div><label for="f-status">Status</label>
+    <select id="f-status" name="status"><option value="">Any (except archived)</option>{% for s in statuses %}<option value="{{ s.0 }}" {% if q.status == s.0 %}selected{% endif %}>{{ s.1 }}</option>{% endfor %}</select></div>
+  <div><label for="f-date">Date</label>
+    <select id="f-date" name="date_field"><option value="">—</option>{% for d in date_fields %}<option value="{{ d.0 }}" {% if q.date_field == d.0 %}selected{% endif %}>{{ d.1 }}</option>{% endfor %}</select></div>
+  <div><label for="f-from">From</label><input id="f-from" name="from" type="date" value="{{ q.from }}"></div>
+  <div><label for="f-to">To</label><input id="f-to" name="to" type="date" value="{{ q.to }}"></div>
+  {% if !fields.is_empty() %}
+  <div><label for="f-cf">Custom field</label>
+    <select id="f-cf" name="cf"><option value="">—</option>{% for f in fields %}<option value="{{ f.key }}" {% if q.cf == f.key %}selected{% endif %}>{{ f.label }}</option>{% endfor %}</select></div>
+  <div><label for="f-cfv">Field value</label><input id="f-cfv" name="cf_value" value="{{ q.cf_value }}" aria-describedby="cf-help"></div>
+  <div><label for="f-cfmin">Min</label><input id="f-cfmin" name="cf_min" value="{{ q.cf_min }}"></div>
+  <div><label for="f-cfmax">Max</label><input id="f-cfmax" name="cf_max" value="{{ q.cf_max }}"></div>
+  {% endif %}
+  <div><label for="f-sort">Sort by</label>
+    <select id="f-sort" name="sort">
+      {% for s in [("", "Default"), ("relevance", "Relevance"), ("updated", "Last updated"), ("title", "Title"), ("external_id", "ID"), ("next_review_date", "Next review"), ("renewal_date", "Renewal date"), ("expiration_date", "Expiration date"), ("effective_date", "Effective date"), ("status", "Status")] %}
+      <option value="{{ s.0 }}" {% if q.sort == s.0 %}selected{% endif %}>{{ s.1 }}</option>
+      {% endfor %}
+      {% for f in fields %}<option value="cf.{{ f.key }}" {% if q.sorts_by_field(f.key) %}selected{% endif %}>{{ f.label }}</option>{% endfor %}
+    </select></div>
+  <div><label for="f-dir">Order</label>
+    <select id="f-dir" name="dir"><option value="">Default</option><option value="asc" {% if q.dir == "asc" %}selected{% endif %}>Ascending</option><option value="desc" {% if q.dir == "desc" %}selected{% endif %}>Descending</option></select></div>
+  {% if !tags.is_empty() %}
+  <fieldset class="wide tag-filter">
+    <legend>Tags</legend>
+    {% for t in tags %}<label class="check"><input type="checkbox" name="tag" value="{{ t.id }}" {% if q.tag.contains(&t.id.to_string()) %}checked{% endif %}> <span class="tag tag-{{ t.id.simple() }}">{{ t.name }}</span></label>{% endfor %}
+    <span class="tag-mode">
+      <label class="check"><input type="radio" name="tag_mode" value="any" {% if q.tag_mode != "all" %}checked{% endif %}> any selected</label>
+      <label class="check"><input type="radio" name="tag_mode" value="all" {% if q.tag_mode == "all" %}checked{% endif %}> all selected</label>
+    </span>
+  </fieldset>
+  {% endif %}
+  <div class="checks">
+    <label class="check"><input type="checkbox" name="mine" value="1" {% if q.mine == "1" %}checked{% endif %}> Owned by me</label>
+    <label class="check"><input type="checkbox" name="archived" value="1" {% if q.archived == "1" %}checked{% endif %}> Include archived</label>
+  </div>
+  <div class="actions"><button type="submit">Search</button> <a href="/documents">Clear</a></div>
+  <p id="cf-help" class="help wide">Text fields match any part of the value; number and date fields use Min/Max.</p>
+</form>
+<div class="toolbar">
+  {% if can_create %}<a class="button primary" href="/documents/new">New document</a>{% endif %}
+  <a class="button" href="/documents/export.csv?{{ query }}">Export CSV</a>
+  <span class="muted">{{ total }} document(s)</span>
+</div>
+<table>
+  <caption class="visually-hidden">Documents</caption>
+  <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Type</th><th scope="col">Department</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col">Next review</th><th scope="col">Renewal</th><th scope="col">Expires</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><code>{{ r.external_id }}</code></td>
+      <td><a href="/documents/{{ r.id }}">{{ r.title }}</a>{% if r.confidential %} <span class="badge confidential">Confidential</span>{% endif %}
+        {% if !r.tags.is_empty() %}<div class="tags">{% for t in r.tags %}<span class="{{ t.0 }}">{{ t.1 }}</span>{% endfor %}</div>{% endif %}</td>
+      <td>{{ r.type_name }}</td><td>{{ r.department_name }}</td><td>{{ r.owner_name }}</td>
+      <td><span class="badge status-{{ r.status }}">{{ r.status_label }}</span></td>
+      <td>{{ r.next_review }}</td><td>{{ r.renewal }}</td><td>{{ r.expiration }}</td>
+    </tr>
+  {% else %}<tr><td colspan="9">No documents match.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a href="/documents?{{ query }}&amp;page={{ page - 1 }}">← Previous</a>{% endif %}
+  <span>Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a href="/documents?{{ query }}&amp;page={{ page + 1 }}">Next →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

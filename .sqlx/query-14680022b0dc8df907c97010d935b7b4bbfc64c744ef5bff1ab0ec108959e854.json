@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE documents SET status = $3, updated_at = now(),\n                archived_at = CASE WHEN $3 = 'archived'::document_status THEN now() ELSE NULL END\n          WHERE id = $1 AND status = $2 AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "active",
+                "renewal_due",
+                "overdue",
+                "expired",
+                "superseded",
+                "archived"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "active",
+                "renewal_due",
+                "overdue",
+                "expired",
+                "superseded",
+                "archived"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "14680022b0dc8df907c97010d935b7b4bbfc64c744ef5bff1ab0ec108959e854"
+}

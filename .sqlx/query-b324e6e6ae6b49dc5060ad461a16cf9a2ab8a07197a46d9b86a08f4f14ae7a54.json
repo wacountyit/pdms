@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE review_tasks SET status = CASE WHEN status = 'overdue' THEN 'overdue'::task_status ELSE 'initiated'::task_status END,\n                initiated_by = $2, initiated_at = now(), updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b324e6e6ae6b49dc5060ad461a16cf9a2ab8a07197a46d9b86a08f4f14ae7a54"
+}

@@ -1,0 +1,27 @@
+<form method="post" action="/admin/grants" class="grid-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  {% if let Some(dept) = scope_department %}
+  <input type="hidden" name="scope" value="department:{{ dept }}">
+  {% else %}
+  <label for="g-scope">Applies to</label>
+  <select id="g-scope" name="scope" required>
+    <option value="global">All non-confidential documents</option>
+    {% for d in departments %}<option value="department:{{ d.id }}">{{ d.name }} documents</option>{% endfor %}
+  </select>
+  {% endif %}
+  <label for="g-subject">Grant to</label>
+  <select id="g-subject" name="subject" required>
+    <optgroup label="Departments (all members)">{% for d in departments %}<option value="department:{{ d.id }}">{{ d.name }}</option>{% endfor %}</optgroup>
+    <optgroup label="Roles">{% for r in roles %}<option value="role:{{ r.id }}">{{ r.name }}</option>{% endfor %}</optgroup>
+    <optgroup label="Groups">{% for g in groups %}<option value="group:{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>
+    <optgroup label="Users">{% for u in users %}<option value="user:{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}</optgroup>
+  </select>
+  <label for="g-perm">Permission</label>
+  <select id="g-perm" name="permission" required>
+    {% for p in permissions %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+  </select>
+  <label for="g-exp">Expires (optional)</label><input id="g-exp" name="expires_on" type="date">
+  <label for="g-reason">Reason</label><input id="g-reason" name="reason" maxlength="500" required>
+  <span></span><button type="submit" class="primary">Grant access</button>
+</form>

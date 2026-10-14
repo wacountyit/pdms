@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO comment_revisions (id, comment_id, revision_no, body, edited_by) VALUES ($1, $2, 1, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06b537115806fa9fdad14777135014974f87ab87af51defd144452a4ed1fdbfd"
+}

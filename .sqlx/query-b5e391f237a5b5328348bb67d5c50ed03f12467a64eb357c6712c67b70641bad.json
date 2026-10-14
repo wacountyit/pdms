@@ -1,0 +1,120 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.request_reference, p.created_at, u.display_name, cardinality(p.document_ids) AS \"docs!\",\n                          p.include_versions, p.include_audit, p.file_count, p.size_bytes, p.package_sha256\n                     FROM export_packages p JOIN users u ON u.id = p.requested_by\n                    WHERE p.created_at >= $1 AND p.created_at < $2 ORDER BY p.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_reference",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "request_reference"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "docs!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "include_versions",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "include_versions"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "include_audit",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "include_audit"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "file_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "file_count"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "package_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "export_packages",
+            "name": "package_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b5e391f237a5b5328348bb67d5c50ed03f12467a64eb357c6712c67b70641bad"
+}

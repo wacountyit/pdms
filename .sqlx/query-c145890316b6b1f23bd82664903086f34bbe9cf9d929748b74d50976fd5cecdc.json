@@ -1,0 +1,237 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.document_id, d.external_id, d.title, t.kind AS \"kind: DueEvent\", t.due_date,\n                  t.status AS \"status: TaskStatus\",\n                  ui.display_name AS \"initiated_by?\", t.initiated_at,\n                  t.completed_by AS completed_by_id, uc.display_name AS \"completed_by?\", t.completed_at, t.completed_on,\n                  ua.display_name AS \"approved_by?\", t.approved_at, t.outcome_note\n             FROM review_tasks t\n             JOIN documents d ON d.id = t.document_id\n             LEFT JOIN users ui ON ui.id = t.initiated_by\n             LEFT JOIN users uc ON uc.id = t.completed_by\n             LEFT JOIN users ua ON ua.id = t.approved_by\n            WHERE d.deleted_at IS NULL\n              AND ($1::uuid IS NULL OR t.document_id = $1)\n              AND ($2::uuid IS NULL OR d.owner_id = $2)\n              AND (NOT $3 OR t.status IN ('open', 'initiated', 'overdue'))\n            ORDER BY (t.status IN ('open', 'initiated', 'overdue')) DESC, t.due_date DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "kind: DueEvent",
+        "type_info": {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "due_date"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status: TaskStatus",
+        "type_info": {
+          "Custom": {
+            "name": "task_status",
+            "kind": {
+              "Enum": [
+                "open",
+                "initiated",
+                "completed",
+                "approved",
+                "overdue",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "initiated_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "initiated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "initiated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "completed_by_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "completed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "completed_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "completed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_on",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "completed_on"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "approved_by?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "approved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "approved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "outcome_note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "outcome_note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "c145890316b6b1f23bd82664903086f34bbe9cf9d929748b74d50976fd5cecdc"
+}

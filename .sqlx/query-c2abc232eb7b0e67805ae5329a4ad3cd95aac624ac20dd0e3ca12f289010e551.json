@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO local_credentials (user_id, password_hash, totp_secret_enc)\n         VALUES ($1, $2, $3)\n         ON CONFLICT (user_id) DO UPDATE\n            SET password_hash = EXCLUDED.password_hash,\n                totp_secret_enc = EXCLUDED.totp_secret_enc,\n                totp_last_step = NULL,\n                failed_attempts = 0,\n                locked_until = NULL,\n                password_changed_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c2abc232eb7b0e67805ae5329a4ad3cd95aac624ac20dd0e3ca12f289010e551"
+}

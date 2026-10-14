@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sessions (id, token_hash, user_id, auth_method, ip, user_agent, expires_at)\n           VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "auth_method",
+            "kind": {
+              "Enum": [
+                "oidc",
+                "local",
+                "api_token",
+                "ics_token",
+                "system"
+              ]
+            }
+          }
+        },
+        "Inet",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aca655d1a2425428428b89b6cbd5f850f26374979290ee385c324fe710604ecf"
+}

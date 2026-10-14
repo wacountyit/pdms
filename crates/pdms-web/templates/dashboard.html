@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dash-grid">
+<section aria-labelledby="overdue-h" class="card wide">
+  <h2 id="overdue-h">Overdue <span class="muted small">({{ overdue.len() }})</span></h2>
+  {% if overdue.is_empty() %}<p class="muted">Nothing is overdue.</p>{% else %}
+  <table>
+    <thead><tr><th scope="col">Document or appointment</th><th scope="col">What</th><th scope="col">Was due</th><th scope="col">Overdue</th><th scope="col">Missed review cycles</th></tr></thead>
+    <tbody>
+    {% for o in overdue %}
+      <tr><td><code>{{ o.e.external_id }}</code> <a href="{{ o.e.href }}">{{ o.e.title }}</a><br><span class="muted small">{{ o.e.department }}</span></td>
+      <td><span class="badge ev-{{ o.e.kind }}">{{ o.e.label }}</span></td><td>{{ o.e.date }}</td>
+      <td><strong>{{ o.days }} days</strong></td>
+      <td>{% if o.missed_count > 0 %}<strong>{{ o.missed_count }}</strong> <span class="muted small">({{ o.missed }})</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section aria-labelledby="upcoming-h" class="card">
+  <h2 id="upcoming-h">Coming up in the next {{ days }} days</h2>
+  <nav class="tabs" aria-label="Time range">
+    {% for d in [30, 60, 90, 365] %}<a href="/?days={{ d }}" {% if *d == days %}aria-current="page"{% endif %}>{{ d }} days</a>{% endfor %}
+  </nav>
+  {% if upcoming.is_empty() %}<p class="muted">Nothing scheduled.</p>{% else %}
+  <ul class="events">
+    {% for e in upcoming %}<li><span class="date">{{ e.date }}</span> <span class="badge ev-{{ e.kind }}">{{ e.label }}</span> <a href="{{ e.href }}">{{ e.title }}</a> <span class="muted small">{{ e.external_id }} · {{ e.department }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p><a href="/calendar">Open the calendar →</a></p>
+</section>
+
+<section aria-labelledby="approvals-h" class="card">
+  <h2 id="approvals-h">Awaiting my review or approval</h2>
+  {% if approvals.is_empty() %}<p class="muted">Nothing is waiting for you.</p>{% else %}
+  <ul class="events">
+    {% for a in approvals %}<li><span class="badge wf-in_progress">{{ a.kind }}</span> <a href="/documents/{{ a.document_id }}#workflow">{{ a.title }}</a> <span class="muted small">{{ a.external_id }} · submitted by {{ a.submitted }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section aria-labelledby="tasks-h" class="card">
+  <h2 id="tasks-h">My open reviews and renewals</h2>
+  {% if tasks.is_empty() %}<p class="muted">None. Tasks appear here for documents you own as their dates approach.</p>{% else %}
+  <ul class="events">
+    {% for t in tasks %}<li><span class="date">{{ t.due }}</span> <span class="badge task-{{ t.status }}">{{ t.status_label }}</span> {{ t.kind }}: <a href="/documents/{{ t.document_id }}#reviews">{{ t.title }}</a> <span class="muted small">{{ t.external_id }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section aria-labelledby="inbox-h" class="card">
+  <h2 id="inbox-h">Notifications</h2>
+  {% if inbox.is_empty() %}<p class="muted">You are all caught up.</p>{% else %}
+  <ul class="events">
+    {% for i in inbox %}<li><a href="{{ i.href }}">{{ i.headline }}</a>{% if !i.title.is_empty() %}: {{ i.title }}{% endif %}</li>{% endfor %}
+  </ul>
+  <p><a href="/notifications">All notifications →</a></p>
+  {% endif %}
+</section>
+<section aria-labelledby="access-h" class="card">
+  <h2 id="access-h">Your access</h2>
+  <dl class="facts">
+    <dt>Departments</dt><dd>{% if departments.is_empty() %}None yet. An administrator assigns departments.{% else %}{{ departments.join(", ") }}{% endif %}</dd>
+    <dt>Roles</dt><dd>{% if roles.is_empty() %}None{% else %}{{ roles.join(", ") }}{% endif %}</dd>
+  </dl>
+</section>
+</div>
+{% endblock %}

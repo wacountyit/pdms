@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/positions">← All boards and appointments</a></p>
+<div class="two-col">
+<section aria-labelledby="pos-h">
+  <h2 id="pos-h">Position</h2>
+  <dl class="facts">
+    <dt>Board or body</dt><dd>{{ p.body_name }}</dd>
+    <dt>Position</dt><dd>{{ p.name }}{% if !p.is_active %} <span class="badge">Inactive</span>{% endif %}</dd>
+    <dt>Appointing authority</dt><dd>{% if p.appointing_authority.is_empty() %}—{% else %}{{ p.appointing_authority }}{% endif %}</dd>
+    <dt>Term</dt><dd>{{ term }}</dd>
+    <dt>Seats</dt><dd>{{ p.filled }} of {{ p.seats }} filled{% if p.vacancies() > 0 %} · <strong>{{ p.vacancies() }} vacant</strong>{% endif %}</dd>
+    <dt>Department</dt><dd>{{ department }}</dd>
+    <dt>Manager</dt><dd>{{ manager }}</dd>
+    <dt>Reappointment decision</dt><dd>{{ p.reappointment_lead_days }} days before a term ends</dd>
+    {% if !p.description.is_empty() %}<dt>Description</dt><dd>{{ p.description }}</dd>{% endif %}
+  </dl>
+  <h3>Reminders</h3>
+  <ul class="small">
+    {% for r in rules %}<li><strong>{{ r.event }}</strong> ({{ r.source }}): {% if r.summary.is_empty() %}none{% else %}{{ r.summary }}{% endif %}</li>{% endfor %}
+  </ul>
+  {% if can_manage %}
+  <details><summary>Edit position</summary>
+    <form method="post" action="/positions/{{ p.id }}" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label for="e-body">Board or body</label><input id="e-body" name="body_name" maxlength="200" required value="{{ p.body_name }}">
+      <label for="e-name">Position</label><input id="e-name" name="name" maxlength="200" required value="{{ p.name }}">
+      <label for="e-auth">Appointing authority</label><input id="e-auth" name="appointing_authority" maxlength="200" value="{{ p.appointing_authority }}">
+      <label for="e-term">Term (months)</label><input id="e-term" name="term_months" type="number" min="1" max="600" value="{{ term_value() }}">
+      <label for="e-seats">Seats</label><input id="e-seats" name="seats" type="number" min="1" max="500" value="{{ p.seats }}">
+      <label for="e-lead">Reappointment lead time (days)</label><input id="e-lead" name="reappointment_lead_days" type="number" min="0" max="3650" value="{{ p.reappointment_lead_days }}">
+      <label for="e-dept">Department</label>
+      <select id="e-dept" name="department_id"><option value="">—</option>{% for d in departments %}<option value="{{ d.id }}" {% if dept_selected(d.id) %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select>
+      <label for="e-mgr">Manager</label>
+      <select id="e-mgr" name="manager_user_id"><option value="">—</option>{% for u in users %}<option value="{{ u.0 }}" {% if manager_selected(u.0) %}selected{% endif %}>{{ u.1 }}</option>{% endfor %}</select>
+      <label for="e-desc">Description</label><textarea id="e-desc" name="description" rows="2" maxlength="4000">{{ p.description }}</textarea>
+      <label for="e-active">Status</label>
+      <select id="e-active" name="is_active"><option value="true" {% if p.is_active %}selected{% endif %}>Active</option><option value="false" {% if !p.is_active %}selected{% endif %}>Inactive (no reminders)</option></select>
+      <span></span><button type="submit">Save position</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+<section aria-labelledby="req-h" id="requirements">
+  <h2 id="req-h">Requirements checklist</h2>
+  <p class="muted small">Every appointment to this position tracks each item: satisfied or not, who recorded it, and when. A new term starts the checklist over.</p>
+  {% if requirements.is_empty() %}<p class="muted">No requirements yet.</p>{% else %}
+  <ul class="checklist">
+    {% for r in requirements %}
+    <li><span>{{ r.label }}{% if !r.is_active %} <span class="badge">Retired</span>{% endif %}{% if !r.description.is_empty() %}<br><span class="muted small">{{ r.description }}</span>{% endif %}</span>
+      {% if can_manage %}
+      <details><summary class="small">Edit</summary>
+        <form method="post" action="/positions/{{ p.id }}/requirements/{{ r.id }}" class="stack">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <label for="rl-{{ r.id }}">Requirement</label><input id="rl-{{ r.id }}" name="label" maxlength="200" required value="{{ r.label }}">
+          <label for="rd-{{ r.id }}">Description</label><input id="rd-{{ r.id }}" name="description" maxlength="2000" value="{{ r.description }}">
+          <label for="ra-{{ r.id }}">Status</label>
+          <select id="ra-{{ r.id }}" name="is_active"><option value="true" {% if r.is_active %}selected{% endif %}>In use</option><option value="false" {% if !r.is_active %}selected{% endif %}>Retired</option></select>
+          <div><button type="submit" class="small">Save</button></div>
+        </form>
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if can_manage %}
+  <form method="post" action="/positions/{{ p.id }}/requirements" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="nr-label">Add a requirement</label>
+    <input id="nr-label" name="label" maxlength="200" required placeholder="e.g. Acceptance letter on file">
+    <label for="nr-desc">Description (optional)</label><input id="nr-desc" name="description" maxlength="2000">
+    <div><button type="submit">Add requirement</button></div>
+  </form>
+  {% endif %}
+</section>
+</div>
+
+<section aria-labelledby="cur-h" id="appointees">
+  <h2 id="cur-h">Current appointees</h2>
+  {% if current.is_empty() %}<p class="muted">This position is vacant.</p>{% endif %}
+  {% for a in current %}
+  <article class="appointee" aria-labelledby="ap-{{ a.id }}">
+    <h3 id="ap-{{ a.id }}">{{ a.person }} <span class="badge ap-{{ a.standing_class }}">{{ a.standing }}</span></h3>
+    <dl class="facts">
+      <dt>Term</dt><dd>{{ a.start }} – {{ a.end }}{% if a.reappointed %} <span class="muted small">(follows an earlier appointment)</span>{% endif %}</dd>
+      <dt>Reappointment decision due</dt><dd>{% if a.reappointment.is_empty() %}—{% else %}{{ a.reappointment }}{% endif %}</dd>
+      <dt>Appointed by</dt><dd>{{ a.appointed_by }}{% if !a.reference.is_empty() %} · {{ a.reference }}{% endif %}</dd>
+      {% if !a.email.is_empty() %}<dt>Contact</dt><dd>{{ a.email }}</dd>{% endif %}
+      {% if !a.notes.is_empty() %}<dt>Notes</dt><dd>{{ a.notes }}</dd>{% endif %}
+      <dt>Requirements</dt><dd>{{ a.met }} satisfied</dd>
+    </dl>
+    {% if !a.checks.is_empty() %}
+    <ul class="checklist" aria-label="Requirements for {{ a.person }}">
+      {% for c in a.checks %}
+      <li><span class="{% if c.satisfied %}done{% else %}todo{% endif %}">{{ c.label }}</span>
+        {% if c.satisfied %}<span class="muted small">{{ c.by }}</span>{% endif %}
+        {% if !c.note.is_empty() %}<span class="small">— {{ c.note }}</span>{% endif %}
+        {% if can_track %}
+        <form method="post" action="/positions/{{ p.id }}/appointments/{{ a.id }}/requirements/{{ c.requirement_id }}" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <input type="hidden" name="satisfied" value="{% if c.satisfied %}false{% else %}true{% endif %}">
+          <label class="visually-hidden" for="cn-{{ a.id }}-{{ c.requirement_id }}">Note for {{ c.label }}</label>
+          <input id="cn-{{ a.id }}-{{ c.requirement_id }}" name="note" maxlength="1000" placeholder="Note" value="{{ c.note }}">
+          <button type="submit" class="small">{% if c.satisfied %}Mark not done{% else %}Mark done{% endif %}</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if can_manage %}
+    <div class="toolbar">
+      <details><summary>Reappoint</summary>
+        <form method="post" action="/positions/{{ p.id }}/appointments/{{ a.id }}/reappoint" class="grid-form">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <label for="rs-{{ a.id }}">New term starts</label><input id="rs-{{ a.id }}" name="start_date" type="date" aria-describedby="rs-help-{{ a.id }}">
+          <span></span><span id="rs-help-{{ a.id }}" class="help">Defaults to the day after the current term ends. End and decision dates default from the position.</span>
+          <label for="re-{{ a.id }}">New term ends</label><input id="re-{{ a.id }}" name="end_date" type="date">
+          <label for="rr-{{ a.id }}">Reappointment decision due</label><input id="rr-{{ a.id }}" name="reappointment_due_date" type="date">
+          <label for="rb-{{ a.id }}">Appointed by</label><input id="rb-{{ a.id }}" name="appointed_by" maxlength="200" placeholder="{{ p.appointing_authority }}">
+          <label for="rref-{{ a.id }}">Reference</label><input id="rref-{{ a.id }}" name="appointment_reference" maxlength="200" placeholder="e.g. Resolution 2026-14">
+          <label for="rn-{{ a.id }}">Notes</label><input id="rn-{{ a.id }}" name="notes" maxlength="4000">
+          <span></span><button type="submit" class="primary">Reappoint {{ a.person }}</button>
+        </form>
+      </details>
+      <details><summary>Replace</summary>
+        <form method="post" action="/positions/{{ p.id }}/appointments/{{ a.id }}/replace" class="grid-form">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          {% let prefix = "rp" %}{% let aid = a.id.to_string() %}
+          {% include "positions/person_fields.html" %}
+          <span></span><button type="submit" class="primary">Appoint successor</button>
+        </form>
+      </details>
+      <details><summary>End without successor</summary>
+        <form method="post" action="/positions/{{ p.id }}/appointments/{{ a.id }}/end" class="stack">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <label for="eo-{{ a.id }}">Ended on</label><input id="eo-{{ a.id }}" name="ended_on" type="date" value="{{ today }}" required>
+          <label for="er-{{ a.id }}">Reason</label><input id="er-{{ a.id }}" name="reason" maxlength="200" required placeholder="e.g. Resigned, Removed, Term ended">
+          <div><button type="submit" class="danger">End appointment</button></div>
+        </form>
+      </details>
+      <details><summary>Correct details</summary>
+        <form method="post" action="/positions/{{ p.id }}/appointments/{{ a.id }}/edit" class="grid-form">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <label for="ed-n-{{ a.id }}">Name</label><input id="ed-n-{{ a.id }}" name="person_name" maxlength="200" required value="{{ a.person }}">
+          <label for="ed-u-{{ a.id }}">User here</label>
+          <select id="ed-u-{{ a.id }}" name="user_id"><option value="">—</option>{% for u in users %}<option value="{{ u.0 }}" {% if u.0.to_string() == a.user_id %}selected{% endif %}>{{ u.1 }}</option>{% endfor %}</select>
+          <label for="ed-e-{{ a.id }}">Email</label><input id="ed-e-{{ a.id }}" name="contact_email" type="email" maxlength="320" value="{{ a.email }}">
+          <label for="ed-b-{{ a.id }}">Appointed by</label><input id="ed-b-{{ a.id }}" name="appointed_by" maxlength="200" value="{{ a.appointed_by }}">
+          <label for="ed-r-{{ a.id }}">Reference</label><input id="ed-r-{{ a.id }}" name="appointment_reference" maxlength="200" value="{{ a.reference }}">
+          <label for="ed-s-{{ a.id }}">Start</label><input id="ed-s-{{ a.id }}" name="start_date" type="date" required value="{{ a.start_iso }}">
+          <label for="ed-t-{{ a.id }}">End</label><input id="ed-t-{{ a.id }}" name="end_date" type="date" value="{{ a.end_iso }}">
+          <label for="ed-d-{{ a.id }}">Reappointment decision due</label><input id="ed-d-{{ a.id }}" name="reappointment_due_date" type="date" value="{{ a.reappointment_iso }}">
+          <label for="ed-o-{{ a.id }}">Notes</label><input id="ed-o-{{ a.id }}" name="notes" maxlength="4000" value="{{ a.notes }}">
+          <span></span><button type="submit">Save</button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+  </article>
+  {% endfor %}
+
+  {% if can_manage && p.is_active && p.vacancies() > 0 %}
+  <details {% if current.is_empty() %}open{% endif %}>
+    <summary>Appoint someone</summary>
+    <form method="post" action="/positions/{{ p.id }}/appointments" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      {% let prefix = "new" %}{% let aid = p.id.to_string() %}
+      {% include "positions/person_fields.html" %}
+      <span></span><button type="submit" class="primary">Record appointment</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+<section aria-labelledby="hist-h">
+  <h2 id="hist-h">History</h2>
+  {% if history.is_empty() %}<p class="muted">No earlier appointments.</p>{% else %}
+  <table>
+    <caption class="visually-hidden">Earlier appointments</caption>
+    <thead><tr><th scope="col">Person</th><th scope="col">Term</th><th scope="col">Ended</th><th scope="col">Appointed by</th><th scope="col">Requirements</th></tr></thead>
+    <tbody>
+    {% for a in history %}
+      <tr><td>{{ a.person }}</td><td>{{ a.start }} – {{ a.end }}</td><td>{{ a.ended }}</td>
+      <td>{{ a.appointed_by }}{% if !a.reference.is_empty() %}<br><span class="muted small">{{ a.reference }}</span>{% endif %}</td>
+      <td>{{ a.met }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

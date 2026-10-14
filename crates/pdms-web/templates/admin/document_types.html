@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <caption>Document types</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Key</th><th scope="col">ID prefix</th><th scope="col">Review cycle</th><th scope="col">Legal review</th><th scope="col">Signatures</th><th scope="col">Retention</th><th scope="col">Documents</th><th scope="col">Status</th></tr></thead>
+  <tbody>
+  {% for t in types %}
+    <tr><td><a href="/admin/document-types/{{ t.id }}">{{ t.name }}</a></td><td><code>{{ t.key }}</code></td><td><code>{{ t.id_prefix }}</code></td>
+    <td>{% if let Some(m) = t.review_interval_months %}Every {{ m }} months{% else %}<span class="muted">None</span>{% endif %}</td>
+    <td>{% if t.requires_legal_review %}Yes{% endif %}</td><td>{% if t.requires_signatures %}Yes{% endif %}</td>
+    <td>{% if let Some(p) = t.retention_policy_name %}{{ p }}{% endif %}</td><td>{{ t.document_count }}</td>
+    <td>{% if t.is_active %}Active{% else %}Retired{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-type-h">
+  <h2 id="new-type-h">Add a document type</h2>
+  <form method="post" action="/admin/document-types" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="t-key">Key</label><input id="t-key" name="key" required pattern="[a-z][a-z0-9_]{1,63}" aria-describedby="t-key-help">
+    <span></span><span id="t-key-help" class="help">Permanent identifier: lowercase letters, digits, underscores.</span>
+    {% include "admin/type_form.html" %}
+    <span></span><button type="submit" class="primary">Add type</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <caption>Groups</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th><th scope="col">Synced from IdP</th></tr></thead>
+  <tbody>
+  {% for g in groups %}
+    <tr><td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a></td><td>{{ g.description }}</td><td>{{ g.member_count }}</td><td>{% if g.external_id.is_some() %}Yes{% else %}No{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4">No groups yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-group-h">
+  <h2 id="new-group-h">Add a group</h2>
+  <form method="post" action="/admin/groups" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="name">Name</label><input id="name" name="name" required maxlength="200">
+    <label for="desc">Description</label><input id="desc" name="description" maxlength="2000">
+    <span></span><button type="submit" class="primary">Add group</button>
+  </form>
+</section>
+{% endblock %}

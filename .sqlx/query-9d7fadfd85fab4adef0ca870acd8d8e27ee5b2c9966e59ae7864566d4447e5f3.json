@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE documents SET deleted_at = NULL, deleted_by = NULL, updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d7fadfd85fab4adef0ca870acd8d8e27ee5b2c9966e59ae7864566d4447e5f3"
+}

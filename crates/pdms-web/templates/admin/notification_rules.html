@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Reminders for each document come from the most specific rules: rules set on the document itself, otherwise its document type’s rules, otherwise the organization defaults below. Rules apply per event (review, renewal, expiration).</p>
+{% for rv in rules %}
+<section class="card" aria-labelledby="h-{{ rv.form.form_id }}">
+  <h2 id="h-{{ rv.form.form_id }}">{{ rv.scope_label }}: {{ rv.rule.event.label() }}{% if !rv.rule.is_active %} <span class="badge">Inactive</span>{% endif %}</h2>
+  <p class="muted">{{ rv.rule.summary() }} · {{ rv.rule.channel_labels() }} · to {{ rv.rule.recipient_labels() }}</p>
+  <details>
+    <summary>Edit</summary>
+    <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <input type="hidden" name="back" value="/admin/notification-rules">
+      {% let rf = rv.form %}
+      {% include "rule_form.html" %}
+      <label class="check"><input type="checkbox" name="is_active" value="false" {% if !rv.rule.is_active %}checked{% endif %}> Inactive</label>
+      <p><button type="submit">Save rule</button></p>
+    </form>
+    <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}/delete">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/admin/notification-rules">
+      <button type="submit" class="danger small">Remove rule</button>
+    </form>
+  </details>
+</section>
+{% endfor %}
+<section aria-labelledby="new-rule-h">
+  <h2 id="new-rule-h">Add a rule</h2>
+  <form method="post" action="/admin/notification-rules">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <div class="grid-form">
+      <label for="nr-type">Applies to</label>
+      <select id="nr-type" name="document_type_id"><option value="">All documents (organization default)</option>{% for t in types %}<option value="{{ t.id }}">{{ t.name }} documents</option>{% endfor %}</select>
+    </div>
+    {% let rf = new_form %}
+    {% include "rule_form.html" %}
+    <p><button type="submit" class="primary">Add rule</button></p>
+  </form>
+</section>
+{% endblock %}

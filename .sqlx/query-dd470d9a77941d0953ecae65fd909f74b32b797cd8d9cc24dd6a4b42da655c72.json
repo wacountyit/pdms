@@ -1,0 +1,179 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.name, p.body_name, p.department_id, d.name AS \"department_name?\",\n                  p.appointing_authority, p.term_months, p.seats, p.manager_user_id,\n                  u.display_name AS \"manager_name?\", p.reappointment_lead_days, p.description, p.is_active,\n                  (SELECT count(*) FROM appointments a WHERE a.position_id = p.id AND a.status = 'active') AS \"filled!\"\n             FROM positions p\n             LEFT JOIN departments d ON d.id = p.department_id\n             LEFT JOIN users u ON u.id = p.manager_user_id\n            WHERE ($1::uuid IS NULL OR p.id = $1)\n            ORDER BY p.body_name, p.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "body_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "department_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "appointing_authority",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "appointing_authority"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "term_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "term_months"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "seats",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "seats"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "manager_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "manager_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "manager_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "reappointment_lead_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "reappointment_lead_days"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "is_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "positions",
+            "name": "is_active"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "filled!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "dd470d9a77941d0953ecae65fd909f74b32b797cd8d9cc24dd6a4b42da655c72"
+}

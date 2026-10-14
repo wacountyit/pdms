@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.kind AS \"kind: StepKind\", s.assignee_user_id, s.assignee_role_id, w.submitted_by,\n                  u.display_name AS \"submitter?\", w.note\n             FROM workflow_steps s JOIN workflows w ON w.id = s.workflow_id\n             LEFT JOIN users u ON u.id = w.submitted_by\n            WHERE s.workflow_id = $1 AND s.stage = $2 AND s.status = 'pending'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: StepKind",
+        "type_info": {
+          "Custom": {
+            "name": "step_kind",
+            "kind": {
+              "Enum": [
+                "review",
+                "approval",
+                "legal_review"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "assignee_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "assignee_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "assignee_role_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflow_steps",
+            "name": "assignee_role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "submitted_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "submitted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "submitter?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "30b57ad13177f19cad72edc2ad04ed72b4d4aa00f863ab5976d18d0c7f82f859"
+}

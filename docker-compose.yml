@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 PDMS contributors
+# PDMS deployment. Run ./install.sh first: it creates .env (ports, profiles),
+# config/pdms.toml, and secrets/.
+#
+#   postgres  database (data in the `pgdata` volume)
+#   migrate   one-shot schema migration, runs before app and worker
+#   app       web server, published on PDMS_HTTP_BIND (.env; default 127.0.0.1:8080)
+#   worker    background jobs: reminder planning every 15 minutes, email
+#             delivery with retries, nightly audit verification
+#
+#   caddy     optional reverse proxy with automatic HTTPS (profile "caddy")
+#   clamav    optional virus scanner: `docker compose --profile clamav up -d`
+#             and set storage.clamav_addr = "clamav:3310" in config/pdms.toml
+#   ocr       optional OCR for scanned files (OCRmyPDF/Tesseract):
+#             `docker compose --profile ocr up -d` and set
+#             ocr.sidecar_url = "http://ocr:8080" in config/pdms.toml
+#
+# Files live in the `pdmsdata` volume (local storage backend). To use S3-compatible
+# object storage instead, set [storage] backend = "s3" in config/pdms.toml.
+
+name: pdms
+
+x-pdms: &pdms
+  image: ${PDMS_IMAGE:-pdms:latest}
+  restart: unless-stopped
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  environment: &pdms-env
+    PDMS_CONFIG: /etc/pdms/pdms.toml
+    PDMS_DATABASE__URL_FILE: /run/secrets/db_app_url
+    PDMS_SECRET_KEY_FILE: /run/secrets/pdms_secret_key
+    PDMS_AUTH__OIDC__CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+    PDMS_EMAIL__SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    PDMS_GRAPH_CALENDAR__CLIENT_SECRET_FILE: /run/secrets/graph_client_secret
+  volumes:
+    - ./config/pdms.toml:/etc/pdms/pdms.toml:ro
+    - pdmsdata:/var/lib/pdms
+  secrets: [db_app_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_client_secret]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+    secrets: [pg_superuser_password, pg_owner_password, pg_app_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - ./deploy/postgres/00_roles.sql:/pdms/00_roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pdms"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    <<: *pdms
+    build: .
+    restart: "no"
+    command: ["migrate"]
+    environment:
+      <<: *pdms-env
+      PDMS_DATABASE__OWNER_URL_FILE: /run/secrets/db_owner_url
+    secrets: [db_app_url, db_owner_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_client_secret]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  app:
+    <<: *pdms
+    command: ["serve"]
+    ports:
+      - "${PDMS_HTTP_BIND:-127.0.0.1:8080}:8080"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    <<: *pdms
+    command: ["worker"]
+    healthcheck: { disable: true }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  ocr:
+    build: ./deploy/ocr
+    image: ${PDMS_OCR_IMAGE:-pdms-ocr:latest}
+    profiles: ["ocr"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      OCR_LANGUAGES: ${PDMS_OCR_LANGUAGES:-eng}
+
+  caddy:
+    # Bundled reverse proxy with automatic HTTPS (install.sh option 1).
+    image: caddy:2.8.4-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["clamav"]
+    restart: unless-stopped
+    environment:
+      CLAMAV_NO_MILTERD: "true"
+    # clamd.conf = the image default with limits raised to the 100 MB upload limit.
+    volumes:
+      - clamdb:/var/lib/clamav
+      - ./deploy/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+
+secrets:
+  pg_superuser_password: { file: ./secrets/pg_superuser_password }
+  pg_owner_password: { file: ./secrets/pg_owner_password }
+  pg_app_password: { file: ./secrets/pg_app_password }
+  db_owner_url: { file: ./secrets/db_owner_url }
+  db_app_url: { file: ./secrets/db_app_url }
+  pdms_secret_key: { file: ./secrets/pdms_secret_key }
+  oidc_client_secret: { file: ./secrets/oidc_client_secret }
+  smtp_password: { file: ./secrets/smtp_password }
+  graph_client_secret: { file: ./secrets/graph_client_secret }
+
+volumes:
+  pgdata:
+  pdmsdata:
+  clamdb:
+  caddy_data:
+  caddy_config:

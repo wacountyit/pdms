@@ -1,0 +1,35 @@
+<div class="field">
+  <label for="title">Title <span class="req" aria-hidden="true">*</span></label>
+  <input id="title" name="title" value="{{ form.v("title") }}" required maxlength="500">
+</div>
+<div class="field">
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="3">{{ form.v("description") }}</textarea>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="document_type_id">Document type <span class="req" aria-hidden="true">*</span></label>
+    <select id="document_type_id" name="document_type_id" required
+            hx-get="/documents/fields" hx-target="#custom-fields" hx-trigger="change" hx-include="this{{ fields_doc_param }}">
+      {% for t in types %}<option value="{{ t.id }}" {% if form.v("document_type_id") == t.id.to_string() %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </div>
+</div>
+<fieldset>
+  <legend>Dates</legend>
+  <p class="help">Leave the expiration date empty for documents that do not expire; they stay active and never appear in expiration alerts.</p>
+  <div class="date-grid">
+    <div class="field"><label for="execution_date">Execution (signed)</label><input id="execution_date" name="execution_date" type="date" value="{{ form.v("execution_date") }}"></div>
+    <div class="field"><label for="effective_date">Effective</label><input id="effective_date" name="effective_date" type="date" value="{{ form.v("effective_date") }}"></div>
+    <div class="field"><label for="last_review_date">Last review</label><input id="last_review_date" name="last_review_date" type="date" value="{{ form.v("last_review_date") }}"></div>
+    <div class="field"><label for="next_review_date">Next review</label><input id="next_review_date" name="next_review_date" type="date" value="{{ form.v("next_review_date") }}"></div>
+    <div class="field"><label for="renewal_date">Renewal</label><input id="renewal_date" name="renewal_date" type="date" value="{{ form.v("renewal_date") }}"></div>
+    <div class="field"><label for="expiration_date">Expiration</label><input id="expiration_date" name="expiration_date" type="date" value="{{ form.v("expiration_date") }}"></div>
+    <div class="field"><label for="review_interval_months">Review every (months)</label><input id="review_interval_months" name="review_interval_months" inputmode="numeric" value="{{ form.v("review_interval_months") }}" aria-describedby="interval-help"></div>
+  </div>
+  <p id="interval-help" class="help">Leave the review interval empty to use the document type’s default.</p>
+</fieldset>
+<fieldset>
+  <legend>Additional fields</legend>
+  <div id="custom-fields">{% include "documents/fields.html" %}</div>
+</fieldset>

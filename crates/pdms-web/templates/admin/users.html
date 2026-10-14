@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" action="/admin/users" class="inline" role="search">
+  <label for="q">Find users</label>
+  <input id="q" name="q" type="search" value="{{ q }}" placeholder="Name or email">
+  <button type="submit">Search</button>
+</form>
+<table>
+  <caption>Users{% if !q.is_empty() %} matching “{{ q }}”{% endif %}</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Departments</th><th scope="col">Sign-in</th><th scope="col">Last sign-in</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td><a href="/admin/users/{{ u.id }}">{{ u.name }}</a></td>
+      <td>{{ u.email }}</td>
+      <td><span class="badge status-{{ u.status }}">{{ u.status }}</span></td>
+      <td>{{ u.departments }}</td>
+      <td>{{ u.methods }}</td>
+      <td>{{ u.last_login }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6">No users found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<section aria-labelledby="new-user-h">
+  <h2 id="new-user-h">Add a user</h2>
+  <p class="help">Users added here sign in with single sign-on; their account is matched by email on first sign-in. New users can only view their department’s documents until granted more.</p>
+  <form method="post" action="/admin/users" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="nu-name">Display name</label><input id="nu-name" name="display_name" required maxlength="200">
+    <label for="nu-email">Email</label><input id="nu-email" name="email" type="email" required maxlength="320">
+    <label for="nu-dept">Primary department</label>
+    <select id="nu-dept" name="department_id">
+      <option value="">None</option>
+      {% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+    </select>
+    <span></span><button type="submit" class="primary">Add user</button>
+  </form>
+</section>
+{% endblock %}

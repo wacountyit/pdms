@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT category::text AS \"category!\", action, count(*) AS \"total!\",\n                          count(*) FILTER (WHERE outcome = 'denied') AS \"denied!\",\n                          count(*) FILTER (WHERE outcome = 'failure') AS \"failed!\",\n                          count(DISTINCT actor_user_id) AS \"people!\"\n                     FROM audit_log WHERE occurred_at >= $1 AND occurred_at < $2\n                    GROUP BY category, action ORDER BY category, action",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_log",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "denied!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "failed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "people!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ef43e1ea02e67a1a6c0b96a0a0e95fd20a08fac881ee954fb8e411bb17e22683"
+}

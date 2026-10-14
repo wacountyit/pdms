@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO review_tasks (id, document_id, kind, due_date, status)\n             VALUES ($1, $2, $3, $4, CASE WHEN $4::date < $5::date THEN 'overdue'::task_status ELSE 'open'::task_status END)\n             ON CONFLICT (document_id, kind, due_date) DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "review_tasks",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e32b3f33501cd3f0c5e722d1ebb64fdf4a272b412e4203e87aa8a35bdce25bcb"
+}

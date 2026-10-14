@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT is_active, review_interval_months FROM document_types WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "is_active"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "review_interval_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "review_interval_months"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "da7d48f6cd798c2d743e5b01a8e8c9965bfdfdeb79b6c9b52d2b961b24cdce46"
+}

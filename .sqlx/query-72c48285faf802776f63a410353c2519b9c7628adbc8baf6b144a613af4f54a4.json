@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO notification_deliveries (id, notification_id, user_id, channel, status, skip_reason, sent_at)\n                 VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $5 = 'sent'::delivery_status THEN now() END)\n                 ON CONFLICT ON CONSTRAINT notification_deliveries_key DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notification_deliveries",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "delivery_channel",
+            "kind": {
+              "Enum": [
+                "email",
+                "in_app"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "delivery_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "sending",
+                "sent",
+                "failed",
+                "skipped"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "72c48285faf802776f63a410353c2519b9c7628adbc8baf6b144a613af4f54a4"
+}

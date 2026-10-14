@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE document_types SET name = $2, description = $3, id_prefix = $4, review_interval_months = $5,\n                requires_legal_review = $6, requires_signatures = $7, retention_policy_id = $8,\n                is_active = $9, sort_order = $10, updated_at = now()\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "83b5b71922ecfb3185f6f20488a7d51a8a8077d57180e963476360051cd3616e"
+}

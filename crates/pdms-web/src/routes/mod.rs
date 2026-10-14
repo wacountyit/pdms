@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PDMS contributors
+pub mod admin;
+pub mod api;
+pub mod appointments;
+pub mod audit;
+pub mod auth;
+pub mod collab;
+pub mod doc_admin;
+pub mod documents;
+pub mod exports;
+pub mod integrations;
+pub mod ops;
+pub mod schedule;
+pub mod workflow;

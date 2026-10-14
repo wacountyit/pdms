@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO department_members (department_id, user_id, is_primary, source)\n         VALUES ($1, $2, $3, 'manual')\n         ON CONFLICT (department_id, user_id) DO UPDATE SET is_primary = EXCLUDED.is_primary",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "666187a20da5271814ea2615c7cc1eacf67067c4c5c22894f9860884fddc31b0"
+}

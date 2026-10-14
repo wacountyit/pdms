@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_deliveries dl SET acknowledged_at = now(), read_at = coalesce(read_at, now()), updated_at = now()\n             FROM notifications n\n            WHERE dl.id = $1 AND dl.user_id = $2 AND dl.channel = 'in_app' AND dl.acknowledged_at IS NULL\n              AND n.id = dl.notification_id\n          RETURNING n.kind AS \"kind: NotificationKind\", n.document_id, n.appointment_id, n.event AS \"event: DueEvent\",\n                    n.due_date, n.subject",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: NotificationKind",
+        "type_info": {
+          "Custom": {
+            "name": "notification_kind",
+            "kind": {
+              "Enum": [
+                "reminder",
+                "action"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "appointment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "appointment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "event: DueEvent",
+        "type_info": {
+          "Custom": {
+            "name": "due_event",
+            "kind": {
+              "Enum": [
+                "review",
+                "renewal",
+                "expiration",
+                "term_end",
+                "reappointment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "due_date"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "subject"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "51dc5b988dfa8714dda3cb4ddad760f26bd445901278622ebc0ce346174cefdf"
+}

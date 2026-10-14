@@ -1,0 +1,57 @@
+[package]
+name = "pdms-core"
+description = "PDMS domain services: configuration, authentication, directory, grants, audit access, and the job queue."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+aes-gcm.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+base64.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+figment.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+hex.workspace = true
+hkdf.workspace = true
+hmac = "0.12"
+icalendar = "0.17"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls", "hostname", "pool"] }
+ipnet.workspace = true
+metrics.workspace = true
+openidconnect.workspace = true
+pdf-extract.workspace = true
+pdms-audit.workspace = true
+pdms-authz.workspace = true
+pdms-storage.workspace = true
+rand.workspace = true
+regex = "1"
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+totp-rs.workspace = true
+tracing.workspace = true
+url = { workspace = true, features = ["serde"] }
+uuid.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+testcontainers.workspace = true
+pdms-audit.workspace = true
+pdms-storage.workspace = true
+pdms-authz = { workspace = true, features = ["strategies"] }
+pdms-testkit.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

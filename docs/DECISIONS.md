@@ -1,0 +1,590 @@
+# Decisions
+
+Lightweight decision records. D-001 to D-013 were reviewed with the Phase 0
+plan and accepted on 2026-10-13. D-014 to D-025 were made while building
+Phase 0, D-026 to D-040 while building Phase 1, and D-041 onward while
+building Phase 2.
+
+### D-001 Single binary, separate server and worker processes — Accepted
+One image and one binary with subcommands. The server and worker run as separate
+compose services so a stuck job can't starve HTTP, and the worker can be
+restarted alone (needed for the idempotency acceptance test). Small installs can
+run `serve --with-worker`.
+
+### D-002 Two database roles; app role owns nothing — Accepted
+`pdms_owner` runs migrations and owns the schema. `pdms_app` gets explicit
+per-table grants with no default privileges, so every new table is
+inaccessible until a migration grants access. Users, departments, groups, and
+roles get no `DELETE` (deactivate instead). Role names are fixed because SQLx
+migrations can't be parameterized.
+
+### D-003 Allow-only ACLs; overrides via broken inheritance, not deny entries — Accepted
+Deny ACEs make evaluation order-dependent and hard to reason about. "Override"
+means setting `inherit_acl = false` on the document and granting explicitly.
+Confidential documents ignore department and global grants. Admins get global
+`view` and `manage_permissions` through a seeded, editable grant, not hard-coded
+superuser access.
+
+### D-004 Audit hash computed in Rust, chain serialized by a head-row lock — Accepted
+Alternatives were computing hashes in a PL/pgSQL trigger (the Rust verifier
+would then have to match Postgres's text rendering of jsonb exactly) and
+per-partition chains (more complex for little gain at this volume). The head
+lock serializes audited commits; the audit insert is always the last statement
+of a transaction so the lock is held for milliseconds. Revisit if write volume
+exceeds roughly 200 audited transactions per second.
+
+### D-005 Audit values exclude floating point — Accepted
+Hashes are recomputed from data read back from jsonb. Floats can change textual
+form on round-trip; integers, strings, booleans, and null can't. Money and
+decimals are recorded as strings.
+
+### D-006 In-house Postgres job queue instead of `apalis` — Accepted
+The queue is about 300 lines. We need control over idempotency keys, leases,
+and the dead-letter state, and it avoids depending on a fast-moving crate.
+
+### D-007 Notification delivery: exactly-once except the SMTP-ack window — Accepted
+No SMTP transaction can be atomic with a Postgres commit. Deliveries are
+committed as `sending` before the SMTP call and `sent` after. If the worker dies
+between the server's 250 response and the commit, the next run sends again with
+the same deterministic `Message-ID`, which many clients and Exchange treat as a
+duplicate. We chose this (at-least-once in that window) over at-most-once
+because a missed renewal notice costs more than a rare duplicate. The
+acceptance test kills the worker at every other point and asserts zero
+duplicates and zero misses.
+
+### D-008 No cross-request authorization cache — Accepted
+Each request loads the principal (memberships, groups, roles) in one query and
+evaluates grants against the DB. Revocation takes effect on the next request.
+Add a cache only if profiling shows a need, and invalidate it on any
+grant-table write.
+
+### D-009 Organization-neutral naming — Accepted
+`org.name` comes from config (set by `install.sh`, default "Policy and Document
+Management System"). Org-specific roles use neutral keys with editable display
+names: `legal_counsel` (which an organization might display as "General Counsel's Office") and
+`department_head`. Requirements like "Appointed by the board" are
+admin-entered data, not seeds.
+
+### D-010 Local break-glass requires TOTP — Accepted
+ASVS L2 expects MFA for administrative access. A password-only local admin
+account would be the weakest path into the system.
+
+### D-011 Entra identity key is `oid`, not `sub` — Accepted
+`sub` is pairwise per application registration. `oid` is stable across apps
+and matches Graph.
+
+### D-012 Department hierarchy deferred — Accepted
+Departments are flat in Phase 0. A sub-department needs its own grant. Parent
+links can be added later without changing the grant model.
+
+### D-013 Package renamed `pdnms` → workspace `pdms` — Accepted
+The scaffold's `Cargo.toml` package name looked like a typo. The root is now a
+virtual workspace and the binary crate is named `pdms`.
+
+### D-014 CSRF: HMAC token bound to the session, plus Origin check — Accepted
+The token is HMAC-SHA256(key derived from `PDMS_SECRET_KEY`, session token).
+It is accepted from `X-CSRF-Token` (HTMX) or a `_csrf` form field, so forms
+also work without JavaScript. Unsafe requests with a foreign `Origin` (or
+`Sec-Fetch-Site: cross-site`) are rejected first. This replaced the
+`sessions.csrf_secret` column from the reviewed schema: nothing needs storing.
+
+### D-015 Conservative RustCrypto versions — Accepted
+We use `argon2` 0.5, `aes-gcm` 0.10, `sha2` 0.10, `hkdf` 0.12, and `rand` 0.8
+rather than the newer major lines. These are the widely deployed, audited
+releases; the new lines changed APIs. Upgrade together in one change later.
+
+### D-016 Compile-time-checked SQL for static queries; QueryBuilder for dynamic filters — Accepted
+Static queries use `sqlx::query!` (checked against the schema, with offline
+metadata in `.sqlx/`). Filtered lists (audit search; later document search) use
+`QueryBuilder` with bound parameters, and the authz predicate is pushed in as a
+`SqlFragment`. Integration tests cover the dynamic queries.
+
+### D-017 `auth.local.require_totp` can be turned off only for demos — Accepted
+The seeded demo users have no TOTP. Turning the requirement off logs a warning
+at startup, and each such login is audited with a warning. `install.sh` never
+turns it off.
+
+### D-018 Runtime image: `debian:bookworm-slim`, non-root UID 10001 — Accepted
+Distroless (gcr.io) was not reachable from the build network, and may not be
+from restricted networks. Docker Hub images are widely mirrored. No packages are
+added: rustls and the embedded time-zone data mean the binary needs nothing
+else. `pdms healthcheck` replaces curl for container health checks.
+
+### D-019 Secrets as files — Accepted
+`install.sh` writes `secrets/` (directory 0700, files 0644 so non-root containers
+can read their bind mounts). Compose mounts each file as a secret, and the app
+reads `PDMS_*_FILE`. Secrets never appear in `docker inspect` environment
+output or in the config file.
+
+### D-020 Reading the audit log is audited; export is auditor-only — Accepted
+`audit.searched` and `audit.exported` record who looked at what (with the
+filter). Administrators can view and verify the log but cannot export it unless
+they also hold `auditor`. This separates running the system from auditing it.
+
+### D-021 OIDC discovery failure does not stop the server — Accepted
+If the IdP is unreachable at startup, single sign-on is disabled (logged as an
+error) until the next restart, and break-glass login keeps working. A
+background re-discovery loop is a candidate improvement.
+
+### D-022 OIDC users are auto-provisioned; email-linking only for unbound accounts — Accepted
+New SSO users are created on first login with no access beyond what IdP group
+mappings give them, which follows from deny-by-default. An administrator can
+pre-create a user by email; the first SSO login links that account only if it
+is not already bound to another identity. Set `auth.oidc.auto_provision = false`
+to require pre-provisioning.
+
+### D-023 Administrator lockout guards — Accepted
+An administrator cannot deactivate their own account, and the last active
+org-wide administrator cannot be removed or deactivated.
+
+### D-024 Which denials are audited — Accepted (updated in Phase 1)
+Every denial is recorded as `access.denied` with `outcome = 'denied'`:
+- capability checks in the web layer (admin pages, the audit log);
+- every document decision in `documents::access`, which records the
+  document and the permission that was missing.
+
+Lists never produce denials, because they only ever contain permitted rows.
+
+### D-025 Entra ID tokens must carry `sub` — Accepted
+The OIDC library rejects ID tokens without `sub` (required by the spec), even
+though identity is keyed on `oid`. Entra always sends both.
+
+### D-026 Content-addressed, write-once blob storage — Accepted
+Files are stored under their SHA-256 and are never overwritten.
+- **Local backend:** writes to a temp file, re-hashes while copying, fsyncs,
+  renames into `ab/cd/<hash>`, and marks the file read-only.
+- **S3 backend:** uses a conditional `PUT` (`If-None-Match: *`) for files up to
+  16 MB and multipart uploads above that. It works with AWS, other S3-compatible
+  interface, SeaweedFS, and MinIO.
+
+MinIO no longer publishes freely pullable images, so the integration tests use
+SeaweedFS's S3 gateway, which also honors the conditional `PUT`. The
+`BlobStore` trait has no delete; purging under retention will be a separate
+privileged operation.
+
+### D-027 File types are decided by content, not by the client — Accepted
+Uploads are sniffed from their first 64 KB and must match an allowlist: PDF,
+Office (OOXML and legacy), OpenDocument, RTF, common images, text/CSV, and
+email. Legacy Office/Outlook (OLE) and zip-based formats also need a matching
+extension. Executables and unknown binaries are rejected, and every rejection
+is audited. Downloads are always `Content-Disposition: attachment` with
+`nosniff`, using the stored, sniffed media type.
+
+### D-028 CSRF for file uploads without JavaScript — Accepted
+A plain HTML file form cannot send a header. On an allowlist of upload routes
+only (`POST /documents`, `POST /documents/{id}/versions`), the middleware
+defers the check to the handler. The handler requires `_csrf` as the **first**
+multipart field and verifies it before reading any other field or file data.
+Every other multipart request without the header is rejected.
+
+### D-029 Custom fields: immutable key and type, versioned definition — Accepted
+- **Values:** stored in `documents.custom_fields` keyed by the field's key,
+  with numbers as exact decimal strings.
+- **Definition changes:** renaming, re-labelling, or changing options or rules
+  appends a definition version and never rewrites values.
+- **Retired data:** removed options display as "(retired option)". Deprecated
+  fields leave forms but keep their values in views, search, and exports.
+- **Type changes:** changing a document's type keeps the old type's values.
+- **Recording:** each version snapshot records which definition version
+  applied to each value.
+
+### D-030 Every content or descriptive change appends an immutable version — Accepted
+Uploading a file, editing metadata, and restoring each add a
+`document_versions` row with a full metadata snapshot and the file current at
+that point. Database triggers reject UPDATE and DELETE on versions, blobs, and
+field versions, even by the schema owner.
+
+Restoring "details" restores title, description, dates, custom fields, and
+tags. It never restores owner, department, status, or access settings, which
+need their own permissions.
+
+### D-031 Status transitions — Accepted, with one item deferred
+- **Date-driven statuses:** only the scheduler (Phase 2) can set Renewal Due,
+  Overdue, and Expired.
+- **Leaving review:** In Review → Active needs `approve`.
+- **Other transitions:** need `edit` and are validated against a fixed table
+  (for example, Superseded can only become Archived).
+- **Deferred:** blocking a user from approving their own submission is
+  enforced by the Phase 3 approval workflow, which records who submitted. The
+  authz function for it exists and is tested.
+
+### D-032 Deletion is soft, retention-aware, and leaves a tombstone — Accepted
+- **Blocked:** deleting needs `delete` and is refused while a legal hold
+  applies or the retention period (document override, else the type's policy)
+  has not passed. A policy measured from a date that is not set also blocks
+  deletion.
+- **Tombstone:** the `document.deleted` audit entry carries the reason and a
+  full metadata snapshot.
+- **Restore:** administrators can restore deleted documents.
+- **Not built:** hard purge. It would be an owner-role procedure, like
+  audit-log archival.
+
+### D-033 Primary ownership — Accepted (answers an open question)
+Transfer needs `manage_permissions` on the document. Administrators have it on
+non-confidential documents through the seeded grant. The new owner must be an
+active user and gets the owner permissions (`view`, `edit`). Owners cannot
+delete, share, or approve without explicit grants.
+
+### D-034 Which reads are audited — Accepted
+Opening a document, downloading any version, exporting a list, and reading a
+document's audit timeline are each audited. Ordinary search result lists are
+not: they contain only permitted documents, and auditing every keystroke-level
+search would bury the signal. Exports record the filter and the exported IDs.
+
+### D-035 Search — Accepted
+- **Engine:** PostgreSQL full-text search (`english` configuration) over
+  title, ID, description, tags, custom text and select values, and file names,
+  plus prefix matching on external IDs. File-content text arrives with OCR and
+  text extraction in Phase 5.
+- **Archived documents:** hidden unless requested.
+- **Authorization:** every list query starts from the authz predicate, and the
+  equivalence property test keeps it identical to the in-memory rules.
+
+### D-036 Seeded retention policies are placeholders — Accepted
+"Permanent" (policies) and "Contract: expiration + 5 years" (contracts and
+ILAs) are starting points only. Each organization must confirm periods against
+its records retention schedule. Records officers and administrators manage
+policies, overrides, and legal holds.
+
+### D-037 Tag colors through a generated stylesheet — Accepted
+The strict CSP forbids inline styles, so `/tag-colors.css` emits one class per
+tag. Colors are validated hex, and the text color is chosen for contrast.
+
+### D-038 Optimistic concurrency on edits — Accepted
+The edit form carries `row_version`. A stale save is rejected with an
+explanation instead of silently overwriting someone else's change.
+Resubmitting identical content is a harmless no-op.
+
+### D-039 Who can read a document's timeline — Accepted
+The owner, anyone with `manage_permissions` on the document, and audit
+viewers. Client IP addresses are shown only to audit viewers.
+
+### D-040 System actions have no `created_by` — Accepted
+Documents and versions created by the system (demo seed, scheduler) store NULL
+and display "System", rather than being attributed to a person.
+
+### D-041 Reminders are materialized with a natural key — Accepted
+- **Idempotent planning:** each run, the planner computes, per document,
+  event, and rule, the latest reminder that should exist as of today. It
+  inserts that reminder with a unique key (document, rule, event, due date,
+  trigger, offset). Re-running, running two planners at once, or restarting
+  after a crash creates nothing new. Acceptance test 5 kills the worker mid-send
+  and checks that every email went out exactly once.
+- **Missed reminders:** when several reminders were missed (downtime, or a
+  document entered with past dates), only the latest is sent, never a burst.
+- **After the due date:** a non-repeating reminder more than
+  `stale_after_days` late is dropped.
+- **Before the due date:** a late reminder still goes out.
+- **Wording:** day counts come from the dates, not the trigger. A 90-day
+  reminder sent 30 days late says "due in 60 days". Long-overdue items say
+  "overdue since <date>".
+
+### D-042 Rule precedence: document → type → organization — Accepted
+Only active rules count. A document's own rule for an event replaces the
+defaults for that event. Deleting a rule that already produced notifications
+deactivates it instead, so history keeps its rule.
+
+### D-043 Never notify someone who cannot open the document — Accepted
+Recipients are checked against the document's permissions when a reminder is
+planned and again when it is sent. Anyone without access (for example,
+confidential documents, or someone who has since left) gets a `skipped`
+delivery with the reason recorded.
+
+### D-044 The scheduler owns date-driven statuses, in both directions — Accepted
+- **What it manages:** only Active, Renewal Due, Overdue, and Expired
+  documents. It moves them among those statuses, including back to Active
+  once a review is recorded or dates are corrected.
+- **People:** cannot move a document out of a date-driven status by hand.
+  They complete the review or renewal task (or fix the dates), so the status
+  always matches the dates.
+- **Not managed:** Draft, In Review, Superseded, and Archived.
+
+### D-045 Review and renewal tasks — Accepted
+- **Creation:** one task per document, kind, and due date, created when the
+  date is within `task_lead_days` (default 90) or past. A task becomes
+  overdue after its due date, and is cancelled automatically if the date
+  changes.
+- **Completing a review:** sets the last review date and computes the next
+  one from the completion date plus the interval (the document's own interval,
+  else its type's).
+- **Completing a renewal:** requires a later renewal or expiration date.
+- **Approval:** optional. The person who completed a task cannot approve it
+  unless the policy allows self-approval. This is the separation-of-duties
+  check from D-031, now enforced for reviews; document approval routing is
+  still Phase 3.
+
+### D-046 "Next review" is computed when left empty — Accepted
+It is the last review date, else the effective date, else the execution date,
+plus the review interval.
+
+### D-047 ICS feeds — Accepted
+- **Token:** a revocable random token, stored hashed and shown once.
+- **Content:** the feed is rendered at fetch time with its owner's current
+  permissions, so revoked access and disabled owners disappear immediately.
+  It never includes confidential documents, because feed URLs end up on
+  phones and in shared calendars.
+- **Recurrence:** reviews carry an `RRULE`, so future cycles show in Outlook.
+- **Auditing:** fetches are audited at most once an hour per feed, since
+  calendar clients poll constantly.
+
+### D-048 Email delivery — Accepted
+- **Transport:** SMTP via `lettre`: STARTTLS for Exchange Online, implicit
+  TLS, or a trusted relay. A file transport exists for development.
+- **No email configured:** email deliveries are recorded as skipped, and
+  in-app notifications still work.
+- **Messages:** each has a deterministic `Message-ID` and an
+  `Auto-Submitted: auto-generated` header.
+- **Retries and logging:** up to 6 attempts with exponential backoff. Every
+  attempt is logged, and each successful send is audited.
+- **Testing:** verified against a real SMTP server (Mailpit) in the test
+  suite.
+
+### D-049 Reminders go out after a local hour — Accepted
+Reminders are planned all day but sent only after `send_hour` in the
+organization's time zone (default 07:00). The UTC conversion goes through the
+time zone, so daylight saving time is handled.
+
+### D-050 Outlook calendar sync through Microsoft Graph — Deferred to Phase 5
+As the spec plans. ICS subscriptions cover Outlook today.
+
+### D-051 Workflows run in fixed stages: reviewers, legal, approvers — Accepted
+The spec asks for named reviewers and approvers and a legal step "where
+applicable". Stages are reviewers (parallel) → legal counsel → approvers
+(parallel, all must approve). Arbitrary step graphs were not needed and would
+make the screens harder to follow. The data model (`stage` per step) allows
+custom orders later.
+
+### D-052 Approval steps require the approve permission — Accepted
+Being named an approver does not grant authority by itself: approval steps
+also need `approve` on the document from the central engine, legal steps need
+`view` plus the role, and the submitter can never sign off on their own
+submission unless `[workflow] allow_self_approval` is set. Routing is validated at
+submission (no step may be impossible to complete), and checked again at
+decision time.
+
+### D-053 Seeded grants for legal counsel and department heads — Accepted
+Migration 0005 seeds two editable role grants so the workflow works out of the
+box: Legal Counsel may *view* non-confidential documents org-wide, and
+Department Head may *approve* (holders assigned for a department: that
+department's documents only). Neither reaches confidential documents. Both
+roles have no holders until an administrator assigns them.
+
+### D-054 Failed rounds return the document; history is per round — Accepted
+Reject and request changes end the round (remaining steps are marked "not
+needed") and return the document to Draft, or to Active for a revision of an
+active document (the planner re-applies Overdue/Renewal Due). A new round is
+a new submission; every round is kept.
+
+### D-055 Approval is refused after a new file during review — Accepted
+Approvals refer to the file version submitted. If a new file version is added
+during review, approval is refused until the review is cancelled and
+resubmitted. Metadata edits do not count.
+
+### D-056 One notification pipeline for reminders and action notices — Accepted
+`notifications` gained `kind` (reminder/action), `appointment_id`, and stored
+subject/body/link for action notices, with a `dedupe_key`. Action notices are
+written in the same transaction as the workflow change that causes them, and
+reuse deliveries, the email job, visibility checks at planning and at send
+time, the inbox, and the delivery log.
+
+### D-057 Signatures are tracked, not collected — Accepted
+As the spec requires: status, timestamps, who recorded it, and the signed copy
+as a version. A `SignatureProvider` trait (built-in: manual) is the seam for an
+e-signature service, which would set `provider_ref` and record results through
+the same `record_signed`. Only never-requested signers can be removed.
+
+### D-058 Appointments are never edited into history — Accepted
+Reappointment and replacement end the current appointment and create a new,
+linked one; resignations end it. History is therefore the list of rows, and
+each term has its own checklist. An active appointment past its end date is a
+holdover (common for boards whose members serve until a successor qualifies),
+shown as overdue rather than ended automatically.
+
+### D-059 Appointment visibility and roles — Accepted
+New role `appointments_clerk`. Capabilities `ManageAppointments` (admin,
+clerk) and `ViewAllAppointments` (admin, clerk, auditor). Otherwise a position
+is visible to its manager and its department's members, and the manager may
+record checklist items. Appointment reminders, calendar entries, and ICS
+events follow the same rule.
+
+### D-060 Appointment reminders reuse rules with a position scope — Accepted
+`due_event` gained `term_end` and `reappointment` (in their own migration,
+because Postgres cannot use a new enum value in the transaction that adds it).
+Rules can be organization-wide (seeded) or per position (core API; a per-position
+editor in the UI is left for later). "Owner" means the position's manager for
+these events.
+
+### D-061 The audit log is the outbound event stream — Accepted
+Webhooks, integration providers, and audit forwarding read audit entries after
+a stored, row-locked cursor. Audit entries are written in the same transaction
+as every change and their sequence numbers commit in order, so nothing is
+missed and no service needed changes. A new consumer starts at the current end
+of the log (history is not replayed). Published: document, workflow,
+signature, review task, appointment, and position actions; never reads
+(views, downloads) or denials.
+
+### D-062 Webhooks act as a service user — Accepted
+A webhook names a user; an event is delivered only if that user may view the
+document or position it is about, decided by the central engine at dispatch
+time. Administrators therefore control what a receiving system learns with
+the same grants as everywhere else. Integration providers run as part of the
+organization's own installation and receive every published event.
+
+### D-063 Webhook delivery: signed, HTTPS, retried by the job queue — Accepted
+JSON POST with `X-PDMS-Event`, `X-PDMS-Delivery` (stable across retries), and
+`X-PDMS-Signature: t=<ts>,v1=<HMAC-SHA256("<ts>.<body>")>`. Secrets are shown
+once and stored encrypted with a key derived from the master secret. HTTPS
+only (plain HTTP behind a test-only flag); redirects are not followed.
+Retries use the job queue's exponential backoff; every attempt is logged and
+can be redelivered.
+
+### D-064 API tokens act as their user, limited by scopes — Accepted
+`pdms_`-prefixed secrets, SHA-256 stored, shown once, required expiry (max
+`api.max_token_days`), revocable by the owner or an administrator. Each
+request loads the user's current principal, so revocation, deactivation, and
+grant changes apply immediately. Every request is logged (`api_request_log`,
+purged after `request_log_days`); token use is audited at most hourly, and
+every audited action through the API records the token ID. Per-token rate
+limit. Scopes: documents read/write, calendar, appointments, reports, audit.
+
+### D-065 The first API is read-mostly — Accepted
+Integrations named in the spec (records platforms, records-request portals) need
+to read documents, files, dates, and history. Writes are limited to creating
+document records and validated status changes. File upload, edits, workflow,
+and appointment changes through the API are left for when an integration
+needs them; the web app remains the place for those.
+
+### D-066 Records requests need the export permission — Accepted
+Building packages requires the `BuildExportPackages` capability *and* the
+`export` permission on every document (checked per document, denials
+audited). Migration 0006 seeds a global `export` grant for the Records Officer
+role, which by design never reaches confidential documents ("excludes from
+broad exports"); those need an explicit document grant. The search offered to
+records officers is the same authorized search.
+
+### D-067 Package format and storage — Accepted
+ZIP with README, `manifest.json`, per-document metadata, files, optional audit
+history (JSON and CSV), and `SHA256SUMS`. Each stored file is re-hashed while
+packaging and must match. The package is stored in the blob store (content
+addressed, never overwritten) with its SHA-256 and the manifest's SHA-256 in
+`export_packages`, so the organization can prove exactly what it released.
+Only the requester and auditors can download it; both actions are audited,
+and each document's timeline shows the export with the request reference.
+
+### D-068 No audit checkpoint table — Accepted
+The Phase 0 plan listed `audit_checkpoints` for archival. Nothing purges audit
+rows, and audit forwarding (file or syslog, each entry with its hash) gives an
+independent, external copy, which is what checkpoints were for. Revisit if
+audit archival is ever required.
+
+### D-069 Backups: database first, then files — Accepted
+PDMS writes a file before committing the rows that reference it and never
+modifies or deletes files, so a dump followed by a file-store copy is always
+consistent. `deploy/backup/pdms-backup.sh` does exactly that (plus
+configuration and secrets, with checksums); `pdms-restore.sh` restores and
+ends with `verify-integrity`. For backup software that supports it, a pre-script that runs the backup
+script into a protected directory is recommended over volume snapshots.
+
+### D-070 Reports are computed live — Accepted
+Reports run against current data through the same authorization as the rest
+of the app (no reporting tables to keep in sync or secure separately). CSV
+exports are audited, and cells that a spreadsheet would treat as formulas are
+prefixed with `'`.
+
+### D-071 Test databases clean up after themselves — Accepted
+The test kit's Postgres container lives for the whole test process (in a
+`static`, which Rust never drops), so it is removed by a detached watcher once
+the process exits. Local runs can instead point `PDMS_TEST_DATABASE_URL` at
+the dev server; test databases are named after their process and those of
+finished runs are dropped on the next run. `sqlx::migrate!` crates have a
+`build.rs` so a new migration always rebuilds them.
+
+### D-072 Comments: one level of threads, anyone who can view may comment — Accepted
+A comment and its replies are enough for document discussions and keep the
+page readable. Commenting never changes the record, so viewers may comment by
+default (configurable to require `edit`). Comments respect the document's
+ACL for reading, writing, and notifications.
+
+### D-073 Comment edits and deletions never lose text — Accepted
+Every version is a row in `comment_revisions`, protected by triggers like the
+version tables. Deletion is soft. Earlier versions are shown to the author,
+permission managers, and auditors (the audit log also holds the text). Only
+authors edit; authors and permission managers delete.
+
+### D-074 Mentions by email or unique handle — Accepted
+`@carol@example.org` or `@carol` (the email's local part, if exactly one
+active user has it). Ambiguous or unknown handles are left as text. Mentioned
+users who cannot view the document are never notified (their delivery is
+recorded as skipped). Newly added mentions on edit are notified.
+
+### D-075 Text extraction in Rust; OCR in a sidecar — Accepted
+Embedded PDF text (`pdf-extract`), Word XML, and text files are read in Rust.
+OCR uses OCRmyPDF/Tesseract in an optional container with a narrow HTTP
+interface (`POST /ocr`), as the spec allows for capabilities Rust lacks; its
+wrapper is a small Python standard-library script because OCRmyPDF is
+Python. A PDF with less than `min_text_chars` embedded characters is treated
+as scanned. Text is stored per version, reused for identical files, and the
+latest is part of full-text search (weight D).
+
+### D-076 Dates found in files are suggestions only — Accepted
+`ocr::dates` finds written dates and classifies them by the nearest preceding
+keyword in the same sentence; terms and review cycles are recognized too.
+Suggestions equal to the current value are not stored. A person with `edit`
+must accept each one; accepting writes an ordinary audited metadata version.
+Confidence values describe the classification, not the correctness of the
+date, and the source sentence is always shown.
+
+### D-077 Outlook events through Graph: reconcile, don't push — Accepted
+Instead of hooking every date change, a periodic job computes the events that
+should exist and reconciles them with stored links (content hash per event):
+create, update, recreate if deleted in Outlook, move between mailboxes, or
+delete. It is idempotent, survives outages, and catches changes from any
+path. Application permissions with client credentials, scoped to specific
+mailboxes by an Exchange application access policy. Confidential documents
+are excluded (a shared calendar is a broad audience), as in ICS feeds.
+
+### D-078 Graph and OCR are off by default — Accepted
+Both depend on outside services (an Entra app registration and a mailbox; an
+OCR container). The system is fully functional without them; ICS feeds and
+embedded-text extraction cover the common cases.
+
+### D-079 Guided installer — Accepted
+Modeled on the organization's existing installer style: the installer asks
+everything first (proxy mode, free host ports, optional database port, name,
+time zone, Entra ID, SMTP, Outlook, OCR, ClamAV, first administrator), then
+builds and starts unattended. Secrets stay in Docker secret files (never in
+`.env`); `.env` holds only deployment settings. Managed configuration blocks
+are marked so `--configure <part>` can redo one part without touching
+hand-edited settings, and settings from earlier installers are adopted, not
+overwritten. Services restart only when a setting changed. The bundled Caddy
+option covers sites without a reverse proxy (Let's Encrypt for a domain, an
+internal certificate for an IP address).
+
+### D-080 License: AGPL-3.0-or-later — Accepted
+Chosen by the organization. All Rust dependencies are under permissive,
+AGPL-compatible licenses (checked with `cargo metadata`), as are the vendored
+htmx (0BSD) and the bundled root certificates (CDLA-Permissive-2.0). To make
+section 13 (network use) easy to honor, every page links to `/source` (which
+redirects to `[org] source_url`, or explains how to ask while it is unset; the
+server warns at startup until it is set) and `/license` (the text compiled
+into the binary). Source files carry SPDX identifiers; migrations do not,
+because editing an applied migration changes its checksum and would stop
+existing installations from starting.
+
+## Open questions (configurable defaults; not blocking)
+
+| Question | Default chosen |
+|---|---|
+| Reminder offsets / overdue repeat | Seeded org defaults: 90, 30, 7 days before, on the due date, then every 7 days overdue (none for expiration), to the owner and the department head. Change under Administration → Notification rules; override per type or per document |
+| Annual vs. 5-year review by type | Policy: annual. Contract: renewal-date driven, no fixed review. Partnership Agreement: 5-year. Other: none |
+| Types requiring legal review / signatures | Contract and Partnership Agreement require the `legal_counsel` step and signatory tracking; Policy requires approval only; all configurable per type |
+| Who assigns primary owners | Anyone with `manage_permissions` on the document (administrators have it on non-confidential documents); the new owner must be an active user. See D-033 |
+| Seeded positions/appointments | None in migrations; the demo dataset includes sample boards (Advisory Committee, Program Advisory Board, Safety Coordinator) for testing only |
+| Self-approval | Off (`[workflow] allow_self_approval = false`) |
+| Reappointment decision lead time | 90 days before term end, per position |
+| Retention periods | Placeholder policies only (D-036); confirm with your records retention schedule |
+| SharePoint/OneDrive storage | Not built; `BlobStore` is key-based so a Graph backend can be added |
+| ECM system vs. records-request portal | Neither integrated. Either can use the REST API (read documents, files, history), receive webhooks, or get a dedicated `IntegrationProvider`; the records request package format is product-neutral |
+| Audit forwarding target | Off; file (JSON lines) or syslog when configured |
+| API token lifetime | Up to 365 days; 90 suggested |
+| Audit retention | Audit rows are never purged by the app. A future owner-role archival procedure would export a prefix, record a checkpoint, and continue the chain from that hash |

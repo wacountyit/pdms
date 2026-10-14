@@ -1,0 +1,141 @@
+<section aria-labelledby="workflow-h" id="workflow">
+  <h2 id="workflow-h">Review and approval</h2>
+  {% if wf.rounds.is_empty() %}<p class="muted">This document has not been submitted for review.</p>{% endif %}
+  {% for r in wf.rounds %}
+  <details class="round" {% if loop.first %}open{% endif %}>
+    <summary><span class="badge wf-{{ r.status }}">{{ r.status_label }}</span> {{ r.submitted }} <span class="muted small">(version {{ r.version_no }})</span></summary>
+    {% if !r.note.is_empty() %}<p class="note">{{ r.note }}</p>{% endif %}
+    <table class="steps">
+      <caption class="visually-hidden">Steps</caption>
+      <thead><tr><th scope="col">Stage</th><th scope="col">Step</th><th scope="col">Assigned to</th><th scope="col">Status</th><th scope="col">Decision</th></tr></thead>
+      <tbody>
+      {% for s in r.steps %}
+        <tr>
+          <td>{{ s.stage }}</td><td>{{ s.kind_label }}</td><td>{{ s.assignee }}</td>
+          <td><span class="badge step-{{ s.status }}">{{ s.status_label }}</span></td>
+          <td>{% if !s.acted.is_empty() %}<span class="small">{{ s.acted }}</span>{% endif %}{% if !s.comment.is_empty() %}<br><q>{{ s.comment }}</q>{% endif %}
+            {% if s.can_act %}
+            <form method="post" action="/documents/{{ d.id }}/workflow/steps/{{ s.id }}" class="stack decision">
+              <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+              <label for="c-{{ s.id }}">Comment <span class="muted small">(required to reject or request changes)</span></label>
+              <textarea id="c-{{ s.id }}" name="comment" rows="2" maxlength="4000"></textarea>
+              <div class="toolbar">
+                <button type="submit" name="decision" value="approve" class="primary">Approve</button>
+                <button type="submit" name="decision" value="request_changes">Request changes</button>
+                <button type="submit" name="decision" value="reject" class="danger">Reject</button>
+              </div>
+            </form>
+            {% else if s.self_blocked %}<p class="muted small">You submitted this document, so someone else must give this sign-off.</p>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <h3 class="visually-hidden">Activity</h3>
+    <ol class="activity">
+      {% for e in r.events %}<li><span class="muted small">{{ e.when }}</span> {% if !e.who.is_empty() %}<strong>{{ e.who }}</strong>: {% endif %}{{ e.label }}{% if !e.comment.is_empty() %} — <q>{{ e.comment }}</q>{% endif %}</li>{% endfor %}
+    </ol>
+    {% if r.active %}
+      {% if wf.can_comment %}
+      <form method="post" action="/documents/{{ d.id }}/workflow/{{ r.id }}/comment" class="stack">
+        <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+        <label for="wf-comment">Add a comment</label>
+        <textarea id="wf-comment" name="text" rows="2" maxlength="4000" required></textarea>
+        <div><button type="submit">Comment</button></div>
+      </form>
+      {% endif %}
+      {% if wf.can_cancel %}
+      <details><summary>Cancel this review</summary>
+        <form method="post" action="/documents/{{ d.id }}/workflow/{{ r.id }}/cancel" class="stack">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <label for="wf-cancel">Reason</label><input id="wf-cancel" name="text" maxlength="2000">
+          <div><button type="submit" class="danger">Cancel review</button></div>
+        </form>
+      </details>
+      {% endif %}
+    {% endif %}
+  </details>
+  {% endfor %}
+
+  {% if wf.can_submit %}
+  <details class="submit-review" {% if wf.rounds.is_empty() %}open{% endif %}>
+    <summary>Submit for review and approval</summary>
+    <form method="post" action="/documents/{{ d.id }}/workflow" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label for="wf-reviewers">Reviewers <span class="muted small">(optional; all review in parallel)</span></label>
+      <select id="wf-reviewers" name="reviewer" multiple size="5" aria-describedby="wf-pick-help">
+        <optgroup label="People">{% for p in wf.people %}<option value="{{ p.0 }}">{{ p.1 }}</option>{% endfor %}</optgroup>
+        <optgroup label="Roles">{% for p in wf.roles %}<option value="{{ p.0 }}">{{ p.1 }}</option>{% endfor %}</optgroup>
+      </select>
+      <label for="wf-approvers">Approvers <span class="muted small">(at least one; each must approve)</span></label>
+      <select id="wf-approvers" name="approver" multiple size="5" required aria-describedby="wf-pick-help">
+        <optgroup label="People">{% for p in wf.people %}<option value="{{ p.0 }}">{{ p.1 }}</option>{% endfor %}</optgroup>
+        <optgroup label="Roles">{% for p in wf.roles %}<option value="{{ p.0 }}">{{ p.1 }}</option>{% endfor %}</optgroup>
+      </select>
+      <span></span><span id="wf-pick-help" class="help">Hold Ctrl (or ⌘) to choose several. Approvers need the approve permission on this document; you cannot approve your own submission. Choosing a role lets any holder of it act.</span>
+      <span>Legal review</span>
+      {% if wf.legal_required %}<span>This document type requires a legal counsel review. That step is added automatically, after the reviewers and before the approvers.</span>
+      {% else %}<label class="check"><input type="checkbox" name="legal" value="1"> Add a legal counsel review step</label>{% endif %}
+      <label for="wf-note">Note to reviewers</label><textarea id="wf-note" name="note" rows="2" maxlength="2000"></textarea>
+      <span></span><button type="submit" class="primary">Submit for review</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{% if wf.requires_signatures || !wf.signatories.is_empty() || wf.can_manage_signatures %}
+<section aria-labelledby="sign-h" id="signatures">
+  <h2 id="sign-h">Signatures {% if !wf.signatories.is_empty() %}<span class="muted small">({{ wf.signatures_summary() }})</span>{% endif %}</h2>
+  <p class="muted small">Tracks who must sign and whether they have. Upload the signed copy when recording a signature; it is kept as a “Signed copy” version.</p>
+  {% if wf.signatories.is_empty() %}<p class="muted">{% if wf.requires_signatures %}This document type requires signatures. No signers have been added yet.{% else %}No signers.{% endif %}</p>{% else %}
+  <table>
+    <caption class="visually-hidden">Signers</caption>
+    <thead><tr><th scope="col">Signer</th><th scope="col">Status</th><th scope="col">Details</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for s in wf.signatories %}
+      <tr>
+        <td>{{ s.who }}{% if !s.email.is_empty() %}<br><span class="muted small">{{ s.email }}</span>{% endif %}</td>
+        <td><span class="badge sig-{{ s.status }}">{{ s.status_label }}</span></td>
+        <td class="small">{{ s.detail }}{% if let Some(v) = s.signed_version %}<br><a href="/documents/{{ d.id }}/versions/{{ v }}/download">Signed copy (version {{ v }})</a>{% endif %}{% if !s.note.is_empty() %}<br>{{ s.note }}{% endif %}</td>
+        <td>
+          {% if s.can_request %}<form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/request" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">{% if s.status == "requested" %}Ask again{% else %}Request{% endif %}</button></form>{% endif %}
+          {% if s.can_remove %}<form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Remove</button></form>{% endif %}
+          {% if s.can_record %}
+          <details><summary>Record signature</summary>
+            <form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/signed" enctype="multipart/form-data" class="stack">
+              <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+              <label for="so-{{ s.id }}">Signed on</label><input id="so-{{ s.id }}" name="signed_on" type="date" value="{{ wf.today }}" max="{{ wf.today }}">
+              <label for="sf-{{ s.id }}">Signed copy (optional)</label><input id="sf-{{ s.id }}" name="file" type="file">
+              <label for="sn-{{ s.id }}">Note</label><input id="sn-{{ s.id }}" name="note" maxlength="1000">
+              <div><button type="submit" class="primary small">Record as signed</button></div>
+            </form>
+            <form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/declined" class="stack">
+              <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+              <label for="sd-{{ s.id }}">Or record that they declined</label><input id="sd-{{ s.id }}" name="text" maxlength="1000" placeholder="Reason">
+              <div><button type="submit" class="small">Record as declined</button></div>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if wf.can_manage_signatures %}
+  <details><summary>Add a signer</summary>
+    <form method="post" action="/documents/{{ d.id }}/signatories" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label for="sg-user">User here (optional)</label>
+      <select id="sg-user" name="user"><option value="">— Someone outside this system —</option>{% for u in wf.signers %}<option value="{{ u.0 }}">{{ u.1 }}</option>{% endfor %}</select>
+      <label for="sg-name">Name</label><input id="sg-name" name="name" maxlength="200" aria-describedby="sg-name-help">
+      <span></span><span id="sg-name-help" class="help">Leave blank to use the chosen user's name.</span>
+      <label for="sg-title">Title</label><input id="sg-title" name="title" maxlength="200" placeholder="e.g. Board Chair">
+      <label for="sg-org">Organization</label><input id="sg-org" name="organization" maxlength="200" placeholder="e.g. the other party">
+      <label for="sg-email">Email</label><input id="sg-email" name="email" type="email" maxlength="320">
+      <span></span><button type="submit">Add signer</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endif %}

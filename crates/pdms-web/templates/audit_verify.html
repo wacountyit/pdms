@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+{% if intact %}
+<div class="flash flash-ok" role="status">The audit chain is intact: {{ checked }} entries verified, ending at entry {{ last_seq }}.</div>
+{% else %}
+<div class="flash flash-error" role="alert">Integrity check FAILED: {{ breaks.len() }} problem(s) found in {{ checked }} entries. Preserve the database and investigate.</div>
+<ul>{% for b in breaks %}<li><code>{{ b }}</code></li>{% endfor %}</ul>
+{% endif %}
+<p class="muted">Last entry hash: <code>{{ last_hash }}</code></p>
+<p><a href="/audit">Back to the audit log</a></p>
+{% endblock %}

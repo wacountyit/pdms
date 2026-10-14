@@ -1,0 +1,25 @@
+[package]
+name = "pdms-authz"
+description = "Pure authorization policy engine: grants, principals, decisions, and the matching SQL predicate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Exposes proptest strategies for other crates' tests.
+strategies = ["dep:proptest"]
+
+[dependencies]
+proptest = { workspace = true, optional = true }
+chrono.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

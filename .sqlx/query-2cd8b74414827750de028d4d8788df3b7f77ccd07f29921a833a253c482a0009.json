@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE appointments SET person_name = $2, user_id = $3, contact_email = $4, appointed_by = $5,\n                appointment_reference = $6, start_date = $7, end_date = $8, reappointment_due_date = $9,\n                notes = $10, updated_at = now()\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Date",
+        "Date",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2cd8b74414827750de028d4d8788df3b7f77ccd07f29921a833a253c482a0009"
+}

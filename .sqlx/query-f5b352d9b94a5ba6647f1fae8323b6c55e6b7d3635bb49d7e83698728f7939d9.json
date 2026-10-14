@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.blob_sha256 AS \"sha!\", b.media_type, b.size_bytes, d.external_id, d.title, d.department_id,\n                  d.owner_id, d.inherit_acl, d.is_confidential\n             FROM document_versions v\n             JOIN blobs b ON b.sha256 = v.blob_sha256\n             JOIN documents d ON d.id = v.document_id\n            WHERE v.document_id = $1 AND v.version_no = $2 AND d.deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sha!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "blob_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "owner_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "inherit_acl",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "inherit_acl"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "is_confidential",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "is_confidential"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f5b352d9b94a5ba6647f1fae8323b6c55e6b7d3635bb49d7e83698728f7939d9"
+}

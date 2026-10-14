@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE graph_calendar_links SET last_error = $2, updated_at = now() WHERE source_key = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "76cf6bfbf182b171572521412a21a2bd8b6ec1ff22c35e07668c446fea02e93e"
+}

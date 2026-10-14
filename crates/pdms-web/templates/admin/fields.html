@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Custom fields appear on document forms. A field’s key and type never change; edits create a new version and never alter existing values. Deprecate a field to hide it from forms while keeping its values.</p>
+<table>
+  <caption>Custom fields</caption>
+  <thead><tr><th scope="col">Label</th><th scope="col">Key</th><th scope="col">Type</th><th scope="col">Applies to</th><th scope="col">Required</th><th scope="col">Version</th><th scope="col">Status</th></tr></thead>
+  <tbody>
+  {% for f in fields %}
+    <tr><td><a href="/admin/fields/{{ f.id }}">{{ f.label }}</a></td><td><code>{{ f.key }}</code></td><td>{{ f.field_type.label() }}</td>
+    <td>{% if let Some(t) = f.document_type_name %}{{ t }}{% else %}All types{% endif %}</td>
+    <td>{% if f.required %}Yes{% endif %}</td><td>{{ f.version }}</td><td>{% if f.is_deprecated %}Deprecated{% else %}Active{% endif %}</td></tr>
+  {% else %}<tr><td colspan="7">No custom fields yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<section aria-labelledby="new-field-h">
+  <h2 id="new-field-h">Add a field</h2>
+  <form method="post" action="/admin/fields" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="f-label">Label</label><input id="f-label" name="label" required maxlength="200">
+    <label for="f-key">Key</label><input id="f-key" name="key" required pattern="[a-z][a-z0-9_]{0,62}" aria-describedby="f-key-help">
+    <span></span><span id="f-key-help" class="help">Permanent: lowercase letters, digits, underscores (e.g. contract_amount).</span>
+    <label for="f-type">Type</label>
+    <select id="f-type" name="field_type">{% for t in field_types %}<option value="{{ t.0 }}">{{ t.1 }}</option>{% endfor %}</select>
+    <label for="f-doctype">Applies to</label>
+    <select id="f-doctype" name="document_type_id"><option value="">All document types</option>{% for t in types %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select>
+    {% include "admin/field_form.html" %}
+    <span></span><button type="submit" class="primary">Add field</button>
+  </form>
+</section>
+{% endblock %}

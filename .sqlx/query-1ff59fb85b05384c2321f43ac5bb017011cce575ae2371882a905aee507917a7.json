@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version_no, status::text AS \"status!\", method, char_count, error, extracted_at,\n                  left(text, 2000) AS \"preview!\"\n             FROM document_texts WHERE document_id = $1 ORDER BY version_no DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_texts",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "method",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_texts",
+            "name": "method"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "char_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_texts",
+            "name": "char_count"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_texts",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "extracted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "document_texts",
+            "name": "extracted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "preview!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "1ff59fb85b05384c2321f43ac5bb017011cce575ae2371882a905aee507917a7"
+}

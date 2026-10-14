@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_delivery_attempts SET finished_at = $2, outcome = $3, error = $4 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "606999efbd18a514a9061119f98fc1a89e3866c36f7358b60787e8892fff56a7"
+}

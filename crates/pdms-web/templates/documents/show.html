@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="doc-header">
+  <p class="muted"><code>{{ d.external_id }}</code> · {{ d.type_name }} · {{ d.department_name }}</p>
+  <p>
+    <span class="badge status-{{ status_class }}">{{ status_label }}</span>
+    {% if d.is_confidential %}<span class="badge confidential">Confidential</span>{% endif %}
+    {% if !d.inherit_acl %}<span class="badge">Inheritance off</span>{% endif %}
+    {% if d.legal_hold %}<span class="badge hold">Legal hold</span>{% endif %}
+  </p>
+  <div class="toolbar">
+    {% if let Some(f) = current_file %}<a class="button primary" href="/documents/{{ d.id }}/download">Download {{ f.file_name }}</a>{% endif %}
+    {% if can_edit %}<a class="button" href="/documents/{{ d.id }}/edit">Edit details</a>{% endif %}
+    {% if can_timeline %}<a class="button" href="/documents/{{ d.id }}/history">Audit history</a>{% endif %}
+  </div>
+</div>
+
+{% if !d.description.is_empty() %}<p class="description">{{ d.description }}</p>{% endif %}
+
+<div class="two-col">
+<section aria-labelledby="details-h">
+  <h2 id="details-h">Details</h2>
+  <dl class="facts">
+    <dt>Primary owner</dt><dd>{{ d.owner_name }}</dd>
+    {% for x in dates %}<dt>{{ x.0 }}</dt><dd>{% if x.1.is_empty() %}<span class="muted">—</span>{% else %}{{ x.1 }}{% endif %}</dd>{% endfor %}
+    <dt>Review cycle</dt><dd>{{ review_interval }}</dd>
+    <dt>Retention</dt><dd>{% if let Some(p) = d.retention_policy_name %}{{ p }}{% else %}<span class="muted">No policy</span>{% endif %}</dd>
+    <dt>Created</dt><dd>{{ created }}</dd>
+    <dt>Last updated</dt><dd>{{ updated }}</dd>
+  </dl>
+  {% if !custom.is_empty() %}
+  <h3>Additional fields</h3>
+  <dl class="facts">
+    {% for c in custom %}<dt>{{ c.label }}</dt><dd>{{ c.value }}{% if !c.note.is_empty() %} <span class="muted small">({{ c.note }})</span>{% endif %}</dd>{% endfor %}
+  </dl>
+  {% endif %}
+</section>
+
+<section aria-labelledby="tags-h">
+  <h2 id="tags-h">Tags</h2>
+  <ul class="tag-list">
+    {% for t in tags %}
+    <li><span class="{{ t.1 }}">{{ t.2 }}</span>
+      {% if can_edit %}<form method="post" action="/documents/{{ d.id }}/tags/{{ t.0 }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="link small" aria-label="Remove tag {{ t.2 }}">×</button></form>{% endif %}
+    </li>
+    {% else %}<li class="muted">No tags.</li>{% endfor %}
+  </ul>
+  {% if can_edit %}
+  <form method="post" action="/documents/{{ d.id }}/tags" class="inline">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="tag-name">Add tag</label><input id="tag-name" name="name" maxlength="200" required>
+    <button type="submit">Add</button>
+  </form>
+  {% endif %}
+
+  {% if !next.is_empty() %}
+  <h2>Status</h2>
+  <form method="post" action="/documents/{{ d.id }}/status" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="status-note">Note (optional)</label>
+    <input id="status-note" name="note" maxlength="1000">
+    <div class="toolbar">{% for s in next %}<button type="submit" name="status" value="{{ s.0 }}">Move to {{ s.1 }}</button>{% endfor %}</div>
+  </form>
+  {% endif %}
+</section>
+</div>
+
+{% include "documents/workflow.html" %}
+
+{% include "documents/collab.html" %}
+
+<section aria-labelledby="reviews-h" id="reviews">
+  <h2 id="reviews-h">Reviews and renewals</h2>
+  {% if missed_count > 0 %}
+  <div class="flash flash-error" role="note"><strong>Review overdue.</strong> {{ missed_count }} review cycle(s) missed (due {{ missed }}).</div>
+  {% endif %}
+  {% for t in open_tasks %}
+  <div class="card task">
+    <h3>{{ t.kind_label }} due {{ t.due }} <span class="badge task-{{ t.status }}">{{ t.status_label }}</span></h3>
+    {% if !t.detail.is_empty() %}<p class="muted small">{{ t.detail }}</p>{% endif %}
+    {% if t.can_start %}
+    <form method="post" action="/documents/{{ d.id }}/tasks/{{ t.id }}/start" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit">Start {{ t.kind_label.to_lowercase() }}</button></form>
+    {% endif %}
+    {% if t.can_complete %}
+    <details>
+      <summary>Record the completed {{ t.kind_label.to_lowercase() }}</summary>
+      <form method="post" action="/documents/{{ d.id }}/tasks/{{ t.id }}/complete" class="grid-form">
+        <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+        <label for="c-on-{{ t.id }}">Completed on</label><input id="c-on-{{ t.id }}" name="completed_on" type="date" aria-describedby="c-on-help-{{ t.id }}">
+        <span></span><span id="c-on-help-{{ t.id }}" class="help">Leave empty for today.{% if t.kind == "review" %} The next review is scheduled from this date.{% endif %}</span>
+        {% if t.kind == "renewal" %}
+        <label for="c-ren-{{ t.id }}">New renewal date</label><input id="c-ren-{{ t.id }}" name="new_renewal_date" type="date">
+        <label for="c-exp-{{ t.id }}">New expiration date</label><input id="c-exp-{{ t.id }}" name="new_expiration_date" type="date">
+        {% endif %}
+        <label for="c-note-{{ t.id }}">Outcome / notes</label><input id="c-note-{{ t.id }}" name="note" maxlength="2000">
+        <span></span><button type="submit" class="primary">Mark completed</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% else %}<p class="muted">No open review or renewal tasks. Tasks appear as due dates approach.</p>{% endfor %}
+  {% if !task_history.is_empty() %}
+  <table>
+    <caption>Completed reviews and renewals</caption>
+    <thead><tr><th scope="col">What</th><th scope="col">Was due</th><th scope="col">Status</th><th scope="col">Details</th><th scope="col">Notes</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for t in task_history %}
+      <tr><td>{{ t.kind_label }}</td><td>{{ t.due }}</td><td><span class="badge task-{{ t.status }}">{{ t.status_label }}</span></td><td class="small">{{ t.detail }}</td><td>{{ t.note }}</td>
+      <td>{% if t.can_approve %}<form method="post" action="/documents/{{ d.id }}/tasks/{{ t.id }}/approve"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Approve</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section aria-labelledby="notif-h" id="notifications">
+  <h2 id="notif-h">Reminders</h2>
+  <table>
+    <thead><tr><th scope="col">Event</th><th scope="col">Schedule</th><th scope="col">Send by</th><th scope="col">Notify</th><th scope="col">From</th></tr></thead>
+    <tbody>
+    {% for sec in rule_sections %}
+      {% for rv in sec.rules %}
+      <tr><td>{{ sec.event_label }}</td><td>{{ rv.rule.summary() }}</td><td>{{ rv.rule.channel_labels() }}</td><td>{{ rv.rule.recipient_labels() }}</td><td><span class="muted small">{{ sec.source_label }}</span></td></tr>
+      {% else %}
+      <tr><td>{{ sec.event_label }}</td><td colspan="4" class="muted">No reminders</td></tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if let Some(opts) = opts %}
+  {% for sec in rule_sections %}{% if sec.is_document %}{% for rv in sec.rules %}
+  <details class="card">
+    <summary>Edit this document’s {{ sec.event_label.to_lowercase() }} reminder</summary>
+    <form method="post" action="/documents/{{ d.id }}/rules/{{ rv.rule.id }}">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/documents/{{ d.id }}#notifications">
+      {% let rf = rv.form %}
+      {% include "rule_form.html" %}
+      <p><button type="submit">Save</button></p>
+    </form>
+    <form method="post" action="/documents/{{ d.id }}/rules/{{ rv.rule.id }}/delete">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/documents/{{ d.id }}#notifications">
+      <button type="submit" class="danger small">Remove (use the defaults again)</button>
+    </form>
+  </details>
+  {% endfor %}{% endif %}{% endfor %}
+  <details class="card">
+    <summary>Set reminders for this document</summary>
+    <p class="help">Rules set here replace the defaults for that event on this document only.</p>
+    <form method="post" action="/documents/{{ d.id }}/rules">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      {% let rf = new_rule %}
+      {% include "rule_form.html" %}
+      <p><button type="submit" class="primary">Add reminder rule</button></p>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+<section aria-labelledby="versions-h">
+  <h2 id="versions-h">Version history</h2>
+  <table>
+    <thead><tr><th scope="col">Version</th><th scope="col">Change</th><th scope="col">File</th><th scope="col">Note</th><th scope="col">Milestone</th><th scope="col">By</th><th scope="col">When</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for v in versions %}
+      <tr {% if v.file_changed %}class="file-version"{% endif %}>
+        <td>{{ v.version_no }}</td>
+        <td>{{ v.kind }}</td>
+        <td>{% if v.has_file %}{% if v.file_changed %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/download">{{ v.file_name }}</a> <span class="muted small">{{ v.size }} · <code>{{ v.sha }}</code></span>{% else %}<span class="muted small">{{ v.file_name }} (unchanged)</span>{% endif %}{% endif %}</td>
+        <td>{{ v.note }}</td><td>{{ v.milestone }}</td><td>{{ v.by }}</td><td>{{ v.when }}</td>
+        <td>{% if can_edit && v.version_no != d.current_version %}
+          <form method="post" action="/documents/{{ d.id }}/versions/{{ v.version_no }}/restore" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+            {% if v.file_changed %}<button type="submit" name="part" value="file" class="small">Restore file</button>{% endif %}
+            <button type="submit" name="part" value="metadata" class="small">Restore details</button>
+          </form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if can_edit %}
+  <h3>Upload a new version</h3>
+  <form method="post" action="/documents/{{ d.id }}/versions" enctype="multipart/form-data" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="v-kind">Kind</label>
+    <select id="v-kind" name="kind"><option value="revision">Revision</option><option value="amendment">Amendment</option><option value="signed_copy">Signed copy</option></select>
+    <label for="v-file">File</label><input id="v-file" name="file" type="file" required aria-describedby="v-file-help">
+    <span></span><span id="v-file-help" class="help">Up to {{ max_upload_mb }} MB. Earlier versions are always kept.</span>
+    <label for="v-note">Note</label><input id="v-note" name="note" maxlength="1000" placeholder="e.g. Amendment 1">
+    <label for="v-milestone">Milestone date</label><input id="v-milestone" name="milestone_date" type="date">
+    <span></span><button type="submit" class="primary">Upload</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if can_manage %}
+<section aria-labelledby="access-h">
+  <h2 id="access-h">Access</h2>
+  <form method="post" action="/documents/{{ d.id }}/access" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label class="check"><input type="checkbox" name="inherit_acl" value="true" {% if d.inherit_acl %}checked{% endif %}> Inherit department and organization access</label>
+    <label class="check"><input type="checkbox" name="is_confidential" value="true" {% if d.is_confidential %}checked{% endif %}> Confidential (only the owner and people granted access below can see it)</label>
+    <div><button type="submit">Save access settings</button></div>
+  </form>
+  <table>
+    <caption>Shared with</caption>
+    <thead><tr><th scope="col">Who</th><th scope="col">Permission</th><th scope="col">Expires</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for g in grants %}
+      <tr><td>{{ g.subject }}</td><td><code>{{ g.permission }}</code></td><td>{{ g.expires }}</td><td>{{ g.reason }}</td>
+      <td><form method="post" action="/documents/{{ d.id }}/grants/{{ g.id }}/revoke"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Remove</button></form></td></tr>
+    {% else %}<tr><td colspan="5">Not shared with anyone individually.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/documents/{{ d.id }}/grants" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="s-subject">Share with</label>
+    <select id="s-subject" name="subject" required>
+      <optgroup label="Users">{% for u in share_users %}<option value="user:{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}</optgroup>
+      <optgroup label="Groups">{% for g in share_groups %}<option value="group:{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>
+      <optgroup label="Departments (all members)">{% for x in share_departments %}<option value="department:{{ x.id }}">{{ x.name }}</option>{% endfor %}</optgroup>
+      <optgroup label="Roles">{% for r in share_roles %}<option value="role:{{ r.id }}">{{ r.name }}</option>{% endfor %}</optgroup>
+    </select>
+    <label for="s-perm">Permission</label>
+    <select id="s-perm" name="permission">{% for p in permissions %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select>
+    <label for="s-exp">Expires (optional)</label><input id="s-exp" name="expires_on" type="date">
+    <label for="s-reason">Reason</label><input id="s-reason" name="reason" required maxlength="500">
+    <span></span><button type="submit">Share</button>
+  </form>
+  <h3>Primary record owner</h3>
+  <form method="post" action="/documents/{{ d.id }}/owner" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="o-user">New owner</label>
+    <select id="o-user" name="owner_id">{% for u in share_users %}<option value="{{ u.id }}" {% if u.id == d.owner_id %}selected{% endif %}>{{ u.display_name }} ({{ u.email }})</option>{% endfor %}</select>
+    <label for="o-reason">Reason</label><input id="o-reason" name="reason" maxlength="500">
+    <span></span><button type="submit">Transfer ownership</button>
+  </form>
+</section>
+{% endif %}
+
+{% if can_retention %}
+<section aria-labelledby="ret-h">
+  <h2 id="ret-h">Retention</h2>
+  <form method="post" action="/documents/{{ d.id }}/retention" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="r-hold">Legal hold</label><input id="r-hold" type="checkbox" name="legal_hold" value="true" {% if d.legal_hold %}checked{% endif %}>
+    <label for="r-policy">Policy override</label>
+    <select id="r-policy" name="retention_policy_id"><option value="">Use the document type’s policy</option>{% for p in policies %}<option value="{{ p.id }}" {% if policy_selected(p.id) %}selected{% endif %}>{{ p.name }} ({{ p.summary() }})</option>{% endfor %}</select>
+    <label for="r-reason">Reason</label><input id="r-reason" name="reason" required maxlength="500">
+    <span></span><button type="submit">Save retention</button>
+  </form>
+</section>
+{% endif %}
+
+{% if can_delete %}
+<section aria-labelledby="del-h">
+  <h2 id="del-h">Delete</h2>
+  {% if let Some(why) = deletion_block %}
+  <p>{{ why }}</p>
+  {% else %}
+  <p class="help">Deleting hides the document everywhere. The record and its files are kept, and an administrator can restore it.</p>
+  <form method="post" action="/documents/{{ d.id }}/delete" class="inline">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="del-reason">Reason</label><input id="del-reason" name="reason" required maxlength="1000">
+    <button type="submit" class="danger">Delete document</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

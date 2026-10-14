@@ -1,0 +1,219 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, position_id, person_name, user_id, contact_email, appointed_by, appointment_reference,\n                  start_date, end_date, reappointment_due_date, status AS \"status: AppointmentStatus\", ended_on,\n                  end_reason, predecessor_id, notes, created_at\n             FROM appointments\n            WHERE ($1::uuid IS NULL OR position_id = $1) AND ($2::uuid IS NULL OR id = $2)\n            ORDER BY (status = 'active') DESC, start_date DESC, created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "position_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "position_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "person_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "person_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "contact_email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "contact_email"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "appointed_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "appointed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "appointment_reference",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "appointment_reference"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "start_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "start_date"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "end_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "end_date"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "reappointment_due_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "reappointment_due_date"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "status: AppointmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "appointment_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "ended"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "ended_on",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "ended_on"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "end_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "end_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "predecessor_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "predecessor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "notes",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "notes"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "appointments",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b8d61f1f54e65220723b5ddb85df1020af8584ccc11d8b84087d9b87e9bbee26"
+}

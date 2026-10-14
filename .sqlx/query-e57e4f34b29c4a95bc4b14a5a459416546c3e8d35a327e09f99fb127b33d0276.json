@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE workflow_steps SET status = $2, acted_by = $3, acted_at = now(), comment = $4 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "step_status",
+            "kind": {
+              "Enum": [
+                "waiting",
+                "pending",
+                "approved",
+                "rejected",
+                "changes_requested",
+                "skipped"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e57e4f34b29c4a95bc4b14a5a459416546c3e8d35a327e09f99fb127b33d0276"
+}

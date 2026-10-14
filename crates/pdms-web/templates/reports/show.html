@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/reports">← All reports</a></p>
+<p class="muted">{{ info.description }}</p>
+<form method="get" action="/reports/{{ info.key }}" class="filters" aria-label="Report options">
+  {% if info.uses_days %}<div><label for="r-days">{% if info.key == "upcoming" %}Days ahead{% else %}Flag older than (days){% endif %}</label><input id="r-days" name="days" type="number" min="1" max="3660" value="{{ q.days }}" placeholder="90"></div>{% endif %}
+  {% if info.uses_dates %}
+  <div><label for="r-from">From</label><input id="r-from" name="from" type="date" value="{{ q.from }}"></div>
+  <div><label for="r-to">To</label><input id="r-to" name="to" type="date" value="{{ q.to }}"></div>
+  {% endif %}
+  {% if !info.uses_dates && info.key != "orphaned_accounts" %}
+  <div><label for="r-dept">Department</label><select id="r-dept" name="department"><option value="">All</option>{% for d in departments %}<option value="{{ d.id }}" {% if q.department == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+  {% endif %}
+  <div class="actions"><button type="submit">Run</button> <a class="button" href="{{ csv_link }}">Download CSV</a></div>
+</form>
+<p><strong>{{ r.rows.len() }}</strong> rows · {{ r.subtitle }}</p>
+<div class="table-scroll"><table class="report-table">
+  <caption class="visually-hidden">{{ r.title }}</caption>
+  <thead><tr>{% for c in r.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in r.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="{{ r.columns.len() }}">Nothing to report.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

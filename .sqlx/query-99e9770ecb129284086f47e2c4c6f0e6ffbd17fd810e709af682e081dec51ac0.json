@@ -1,0 +1,165 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.key, t.name, t.description, t.id_prefix, t.review_interval_months,\n                  t.requires_legal_review, t.requires_signatures, t.retention_policy_id,\n                  r.name AS \"retention_policy_name?\", t.is_active, t.sort_order,\n                  (SELECT count(*) FROM documents d WHERE d.document_type_id = t.id AND d.deleted_at IS NULL)\n                    AS \"document_count!\"\n             FROM document_types t LEFT JOIN retention_policies r ON r.id = t.retention_policy_id\n            ORDER BY t.sort_order, t.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "id_prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "id_prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "review_interval_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "review_interval_months"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "requires_legal_review",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "requires_legal_review"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "requires_signatures",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "requires_signatures"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "retention_policy_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "retention_policy_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "retention_policy_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention_policies",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "is_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "is_active"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "sort_order",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_types",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "document_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "99e9770ecb129284086f47e2c4c6f0e6ffbd17fd810e709af682e081dec51ac0"
+}

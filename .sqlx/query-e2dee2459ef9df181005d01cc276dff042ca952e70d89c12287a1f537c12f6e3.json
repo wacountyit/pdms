@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE date_suggestions SET status = 'dismissed', decided_by = $2, decided_at = now()\n          WHERE id = $1 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e2dee2459ef9df181005d01cc276dff042ca952e70d89c12287a1f537c12f6e3"
+}

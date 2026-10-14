@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/admin/webhooks">← All webhooks</a></p>
+<form method="post" action="/admin/webhooks/{{ w.id }}" class="grid-form">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <label for="w-name">Name</label><input id="w-name" name="name" maxlength="200" required value="{{ w.name }}">
+  <label for="w-url">URL</label><input id="w-url" name="url" type="url" required value="{{ w.url }}">
+  <label for="w-events">Events</label><textarea id="w-events" name="events" rows="4" required>{{ events }}</textarea>
+  <label for="w-user">Service user</label>
+  <select id="w-user" name="acts_as_user_id" required>{% for u in users %}<option value="{{ u.0 }}" {% if u.0 == w.acts_as_user_id %}selected{% endif %}>{{ u.1 }}</option>{% endfor %}</select>
+  <label for="w-active">State</label>
+  <select id="w-active" name="is_active"><option value="true" {% if w.is_active %}selected{% endif %}>Active</option><option value="false" {% if !w.is_active %}selected{% endif %}>Paused (events are not sent)</option></select>
+  <span></span><button type="submit" class="primary">Save</button>
+</form>
+<form method="post" action="/admin/webhooks/{{ w.id }}/rotate" class="stack">
+  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+  <p class="muted small">Verify requests with the signing secret: <code>X-PDMS-Signature: t=&lt;unix time&gt;,v1=&lt;hex HMAC-SHA256 of "t.body"&gt;</code>. Rotating it shows a new secret once; the old one stops working at once.</p>
+  <div><button type="submit">Rotate signing secret</button></div>
+</form>
+<h2>Deliveries</h2>
+{% include "admin/deliveries_table.html" %}
+{% endblock %}

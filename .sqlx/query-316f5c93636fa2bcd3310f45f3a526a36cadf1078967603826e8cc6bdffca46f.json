@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE review_tasks SET status = 'approved', approved_by = $2, approved_at = now(), updated_at = now()\n          WHERE id = $1 AND status = 'completed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "316f5c93636fa2bcd3310f45f3a526a36cadf1078967603826e8cc6bdffca46f"
+}

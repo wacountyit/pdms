@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE outbound_cursors SET last_seq = $2 WHERE name = $1 AND last_seq < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "584f41c445bcbf6162892ec2752393a2e4303166f79e09c6fb73641652ba53a9"
+}

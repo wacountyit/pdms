@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM role_assignments ra\n             JOIN roles r ON r.id = ra.role_id\n             JOIN users u ON u.id = ra.user_id\n            WHERE r.key = $1 AND ra.department_id IS NULL AND u.status = 'active'\n              AND ra.user_id IS DISTINCT FROM $2 AND ra.id IS DISTINCT FROM $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "1c6560436edf9f411bfb76ba7ec3765821e296186f0286bdc8b0a69e2294fefc"
+}
