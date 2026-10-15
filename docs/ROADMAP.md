@@ -6,7 +6,99 @@ remains is to prove it in your environment with your people and documents,
 close the gaps listed below, and decide which additions matter most.
 
 This document is the plan for that: **1** test it, **2** pilot it, **3** go
-live, **4** grow it.
+live, **4** grow it. **Section 0 is the current status and the plan of
+record**. Read it first if you are picking up the work.
+
+---
+
+## 0. Where things stand (updated 2026-10-14)
+
+The product is now called **PADM**. The code, crates, binary, and Docker
+images are still named `pdms`.
+
+### 0.1 Done
+
+- **Original phases 0–5:** built and tested (see the Status table in the
+  README).
+  - At commit `cbc9c70`, `cargo fmt --check` and `cargo clippy -D warnings`
+    are clean.
+  - `cargo test --workspace` gives 228 passed, 0 failed, and 2 ignored. The
+    ignored ones are the opt-in real-OCR and real-ClamAV tests.
+- **Test deployment:** installed on the county's development server with
+  `install.sh`.
+  - It uses the bundled Caddy (HTTPS with an internal certificate), OCR,
+    ClamAV, and the demo data.
+  - For the demo users, local sign-in there is password-only
+    (`require_totp = false`, marked "TEST SERVER ONLY" in its config). Never
+    copy that setting to production.
+- **Security and code review** of the initial release, 2026-10-14. The
+  findings are kept privately, **not in this public repository**; ask the
+  project owner for them. Fixing the High and Medium findings is part of
+  go-live (§3).
+- **Design spec for sub-projects 1 and 2:**
+  [2026-10-14-sharepoint-storage-entra-sync-design.md](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md).
+  It is written and waiting for the owner's review.
+
+### 0.2 Direction (decided 2026-10-14)
+
+- **SharePoint holds the files; PADM is the application.**
+  - Every file is stored in one dedicated SharePoint site.
+  - Files are organised by department and can be browsed read-only there.
+  - Document details, workflow, reminders, appointments, permissions, audit,
+    and search stay in PADM (D-081 to D-084, D-089).
+- **Three visibility levels per document**, replacing today's "confidential"
+  and "inherit permissions" switches (D-085):
+  - Department (default);
+  - County-wide (everyone in the county can view);
+  - Restricted.
+- **Users come from Entra ID.**
+  - Their department is taken from the **Department field** on the Entra
+    account; groups are not used, because AD groups are not synced to Entra.
+  - Roles are assigned in PADM.
+  - Sign-in is SSO (D-086).
+- **The calendar is internal to PADM.** The optional Outlook calendar sync
+  (Phase 5) is removed (D-087).
+- **Document types and tags** (D-088):
+  - "Partnership Agreement" becomes **Interlocal Agreement (ILA)**;
+  - admins can still add their own types;
+  - tags are maintained by admins.
+
+### 0.3 Sub-projects
+
+Work through these in order unless noted. Each one gets its own spec and plan.
+
+| # | Sub-project | Scope | Status | Spec / plan |
+|---|---|---|---|---|
+| 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Designing**: spec written, awaiting owner review | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md) |
+| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Designing**: same spec | same spec |
+| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
+| 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
+| 5 | **UI redesign** | Every page | Not started; needs a spec. Do after 1–3 so it covers the final features | — |
+| — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live | private |
+| later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
+
+**Waiting on the county** (needed before sub-projects 1–2 can be tested live;
+the steps are in Appendix A of the spec):
+
+- a `PADM Records – Test` SharePoint site, set up as described there;
+- a correct **Department** value on every staff account, plus the list of
+  distinct values in use;
+- later, the `PADM Service` app registration and the site grant.
+
+### 0.4 How work moves through this list
+
+1. **Design:** a spec in `docs/superpowers/specs/`, reviewed and approved by
+   the project owner.
+2. **Plan:** an implementation plan in `docs/superpowers/plans/`.
+3. **Build:** on a branch, with tests. Before handing over, run
+   `cargo fmt`, `clippy -D warnings`, `cargo test`, and `cargo sqlx prepare`
+   (see §6).
+4. **Record:** update the status column above, add any new decisions to
+   [DECISIONS.md](DECISIONS.md), and correct the README and ARCHITECTURE if
+   behaviour changed.
+
+Status values: Not started → Designing → Designed (spec approved) → Planned →
+In progress → Done.
 
 ---
 
@@ -48,7 +140,7 @@ Denied access attempts**.
 - [ ] Emails arrive through your Exchange/SMTP setup; the in-app notification count matches.
 - [ ] The partnership-agreement scenario (2013 original, 2014 amendment, five-year review, never reviewed) shows Overdue with 2 missed cycles.
 - [ ] Calendar month/agenda views; subscribe in Outlook (ICS); revoke the subscription.
-- [ ] Optional: Outlook calendar sync (`--configure outlook`) creates, moves, and removes events in the shared calendar.
+- [ ] ~~Optional: Outlook calendar sync~~: being removed (D-087); skip.
 
 **Workflow, signatures, appointments**
 - [ ] Submit a contract: reviewers → Legal counsel → approver; each is notified; rejection and "request changes" return it; the submitter cannot approve their own submission.
@@ -136,8 +228,8 @@ Things that work but are limited, or were deliberately left for later:
 
 | Area | Gap | Why it matters | Effort |
 |---|---|---|---|
-| Migration | **No bulk import tool.** Documents are created one at a time (or via the API without files). | Go-live with hundreds of existing documents needs it. | L |
-| Identity | Department/role changes from Entra apply at the user's next sign-in; departed staff are not disabled automatically. | Offboarding relies on someone marking the account departed. | M |
+| Migration | **No bulk import tool.** Documents are created one at a time (or via the API without files). | Go-live with hundreds of existing documents needs it. Planned as sub-project 4 (§0.3). | L |
+| Identity | Department/role changes from Entra apply at the user's next sign-in; departed staff are not disabled automatically. | Offboarding relies on someone marking the account departed. Addressed by sub-project 2 (§0.3). | M |
 | Appointments | Reminder rules per position exist in the engine but have no screen (organization defaults are editable). | Boards with unusual timing need the admin to edit defaults. | S |
 | API | Read-mostly: no file upload, edits, workflow, or appointment changes through the API. | Integrations that write back (e.g. a records platform) need more. | M |
 | Workflow | Fixed stage order (reviewers → legal → approvers); no conditional routing or delegation while someone is away. | Some approvals need a different order or a backup approver. | M |
@@ -152,13 +244,13 @@ Things that work but are limited, or were deliberately left for later:
 
 ## 5. Future additions
 
-Ordered by likely value; adjust after the pilot.
+Ordered by likely value; adjust after the pilot. Where these overlap the sub-projects in §0.3, §0.3 takes precedence.
 
 ### Next (after testing feedback)
 
-1. **Bulk import.** A CSV of document details plus a folder of files, with a dry run that reports problems before anything is created, and an audit entry per document. Essential for go-live.
+1. **Bulk import.** A CSV of document details plus a folder of files, with a dry run that reports problems before anything is created, and an audit entry per document. Essential for go-live. **Now sub-project 4 (§0.3).**
 2. **Fixes and polish from testing.** This always comes first once testing starts.
-3. **Entra lifecycle sync** through Microsoft Graph: nightly group-membership sync and automatic deactivation of disabled Entra accounts.
+3. ~~**Entra lifecycle sync** through Microsoft Graph: nightly group-membership sync and automatic deactivation of disabled Entra accounts.~~ **Replaced by sub-project 2 (§0.3)**: sync from the Department field, not groups (D-086).
 4. **Position reminder rules screen**, and per-user notification preferences (daily digest instead of individual emails).
 5. **Saved searches and "watch this document"**, so people can follow documents they do not own.
 6. **Release engineering:** versioned releases and a changelog, a published container image, `cargo audit`/`cargo deny` and an image scan in CI, and Playwright smoke tests.
@@ -187,5 +279,5 @@ Ordered by likely value; adjust after the pilot.
 
 - **Code:** Rust workspace; see README "Develop". Before handing over a change: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`, and after query or migration changes `cargo sqlx prepare --workspace -- --all-targets`.
 - **Database changes:** add a new migration file (`migrations/0008_…`); never edit an applied one.
-- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md` (next number after D-079).
+- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md` (next number after the last entry, currently D-089).
 - **Versions:** tag releases (`v1.0.0` for go-live), keep a `CHANGELOG.md`, and upgrade servers with `git pull && ./install.sh` after a backup.

@@ -5,8 +5,10 @@ for policies, contracts, partnership agreements, and other dated documents, plus
 personnel appointments. Organization-neutral; the display name is set at install
 time (default: "Policy and Document Management System").
 
-Status: **Phases 0, 1, and 2 complete** (foundation; documents; dates, reminders, calendar). Sections describing later phases are
-the agreed design, marked with their phase. Decisions referenced as `D-nnn` are
+Status: **Phases 0–5 complete.** This document describes the system as built. Planned
+changes (SharePoint file storage, Entra user sync, County-wide visibility; D-081 to D-089)
+are designed in [the spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md)
+and tracked in [ROADMAP §0](ROADMAP.md#0-where-things-stand-updated-2026-10-14). Decisions referenced as `D-nnn` are
 in [DECISIONS.md](DECISIONS.md).
 
 ## 1. Principles
@@ -297,7 +299,8 @@ Schema: `migrations/0001_foundation.sql` (`audit_log`, `audit_chain_head`).
 `BlobStore` has `put_file`, `get`, `size`, and `verify`, but no delete. The
 backends are the local filesystem (temp file, re-hash, fsync, rename, read-only)
 and S3-compatible storage (conditional `PUT`, multipart above 16 MB). The
-interface is key-based, so a SharePoint/Graph backend can be added later.
+interface is key-based, so a SharePoint/Graph backend can be added later
+(planned: D-081 to D-084, ROADMAP §0.3 sub-project 1).
 
 **Data model:**
 - `documents` holds the current metadata. `custom_fields` is typed JSONB keyed

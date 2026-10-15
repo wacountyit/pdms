@@ -3,7 +3,10 @@
 Lightweight decision records. D-001 to D-013 were reviewed with the Phase 0
 plan and accepted on 2026-10-13. D-014 to D-025 were made while building
 Phase 0, D-026 to D-040 while building Phase 1, and D-041 onward while
-building Phase 2.
+building Phases 2–5. D-081 to D-089 were decided on 2026-10-14, when the
+county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
+§0. Entries marked "design, not built" or "not done" are agreed but not yet
+implemented.
 
 ### D-001 Single binary, separate server and worker processes — Accepted
 One image and one binary with subcommands. The server and worker run as separate
@@ -18,7 +21,7 @@ inaccessible until a migration grants access. Users, departments, groups, and
 roles get no `DELETE` (deactivate instead). Role names are fixed because SQLx
 migrations can't be parameterized.
 
-### D-003 Allow-only ACLs; overrides via broken inheritance, not deny entries — Accepted
+### D-003 Allow-only ACLs; overrides via broken inheritance, not deny entries — Accepted (amended by D-085)
 Deny ACEs make evaluation order-dependent and hard to reason about. "Override"
 means setting `inherit_acl = false` on the document and granting explicitly.
 Confidential documents ignore department and global grants. Admins get global
@@ -126,7 +129,7 @@ If the IdP is unreachable at startup, single sign-on is disabled (logged as an
 error) until the next restart, and break-glass login keeps working. A
 background re-discovery loop is a candidate improvement.
 
-### D-022 OIDC users are auto-provisioned; email-linking only for unbound accounts — Accepted
+### D-022 OIDC users are auto-provisioned; email-linking only for unbound accounts — Accepted (email linking superseded by D-086)
 New SSO users are created on first login with no access beyond what IdP group
 mappings give them, which follows from deny-by-default. An administrator can
 pre-create a user by email; the first SSO login links that account only if it
@@ -534,7 +537,7 @@ must accept each one; accepting writes an ordinary audited metadata version.
 Confidence values describe the classification, not the correctness of the
 date, and the source sentence is always shown.
 
-### D-077 Outlook events through Graph: reconcile, don't push — Accepted
+### D-077 Outlook events through Graph: reconcile, don't push — Superseded by D-087
 Instead of hooking every date change, a periodic job computes the events that
 should exist and reconciles them with stored links (content hash per event):
 create, update, recreate if deleted in Outlook, move between mailboxes, or
@@ -543,7 +546,7 @@ path. Application permissions with client credentials, scoped to specific
 mailboxes by an Exchange application access policy. Confidential documents
 are excluded (a shared calendar is a broad audience), as in ICS feeds.
 
-### D-078 Graph and OCR are off by default — Accepted
+### D-078 Graph and OCR are off by default — Accepted (Graph part superseded by D-087)
 Both depend on outside services (an Entra app registration and a mailbox; an
 OCR container). The system is fully functional without them; ICS feeds and
 embedded-text extraction cover the common cases.
@@ -571,6 +574,134 @@ into the binary). Source files carry SPDX identifiers; migrations do not,
 because editing an applied migration changes its checksum and would stop
 existing installations from starting.
 
+### D-081 SharePoint holds the files; PADM keeps everything else — Accepted (design, not built)
+The county wants documents to live in SharePoint and be browsable there,
+while PADM stays the application everyone uses. Three options were
+considered:
+
+- SharePoint stores the files only;
+- SharePoint is the system of record for metadata, permissions, and search
+  too;
+- a split by stage (drafts in SharePoint, records in PADM).
+
+Files-only was chosen. It keeps everything PADM already does: date-driven
+reminders, workflow, restricted documents, and the tamper-evident audit
+trail. It is also the smallest change: a new storage backend plus sync.
+Metadata, workflow, reminders, appointments, permissions, audit, and the
+search index stay in PostgreSQL. SharePoint is the file store and a
+read-only browsing mirror, and PADM is authoritative when they disagree.
+Spec: `docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md`.
+
+### D-082 App-only Graph access to one site; downloads go through PADM — Accepted (design, not built)
+PADM authenticates to Microsoft Graph as itself, with a certificate rather
+than a client secret, using `Sites.Selected`. It is granted full control on
+one dedicated site only; full control is needed to manage folder
+permissions.
+
+Users never receive SharePoint links from PADM. Every download is
+authorized, streamed, and audited by PADM, whereas a pre-authenticated
+SharePoint URL would bypass both checks for its lifetime. Delegated
+(per-user) Graph access was rejected because every user would then need
+SharePoint permissions, which is what PADM's own model replaces.
+
+### D-083 Search stays in PADM — Accepted (design, not built)
+Text is extracted from each file at upload, while PADM holds the bytes, and
+indexed with the document's details. Results are filtered by PADM
+permissions. Microsoft Search would filter by SharePoint permissions, which
+under D-081 are locked to the PADM app, so its results could not match what
+each user may see in PADM.
+
+### D-084 SharePoint layout with folder-level permissions only — Accepted (design, not built)
+**Layout.** One site and one library, with top-level `Departments/`,
+`County-wide/`, and `Restricted/`. Under each are department folders, then a
+folder per document (`{ID} – {title}`), then one file per version. Files
+are never overwritten.
+
+**Columns.** PADM writes metadata columns (type, tags, status, dates, owner,
+current version, link to PADM), so people browsing read-only can sort and
+filter.
+
+**Permissions.** These are set only on the top-level and department
+folders, and changing a document's visibility moves its folder. Per-file
+permissions were rejected because SharePoint handles large numbers of
+unique permissions poorly. PADM grants each department folder to that
+department's people individually, because Entra groups are not available
+(D-086).
+
+### D-085 Three visibility levels replace "confidential" and "inherit permissions" — Accepted (design, not built)
+Each document has one of three visibility levels:
+
+- **Department** (default): its department, plus anyone it is explicitly
+  shared with.
+- **County-wide:** every active county account may view it; editing rights
+  are unchanged.
+- **Restricted:** explicit grants and the owner only. This is today's
+  confidential behaviour.
+
+The owner chooses the level at upload and can change it later. Every change
+is audited. A change that tightens access moves the SharePoint folder before
+the request completes.
+
+The two existing flags (`is_confidential`, `inherit_acl`) had identical
+effects in the authorization engine, and adding a third would allow
+contradictory combinations. One enum therefore replaces both; this amends
+the "broken inheritance" part of D-003. The interface says "County-wide",
+not "Public", so it is never confused with publishing outside the county.
+
+### D-086 Users from Entra; department from the Department field — Accepted (design, not built)
+The county's AD groups are not synced to Entra, so groups cannot drive
+access. Instead, a nightly and on-demand Microsoft Graph `/users/delta` sync
+creates, updates, and deactivates member accounts.
+
+**Departments.** Each user's Department attribute is mapped to a PADM
+department through an admin-maintained list of values. Several spellings
+can map to one department. Users whose value is blank or unmapped can sign
+in but see only what is shared with them, and they are listed for admins.
+The account-creation procedure must therefore set the Department field.
+
+**Other rules.**
+
+- Roles are assigned in PADM.
+- Guest (B2B) accounts are excluded.
+- Single sign-on matches users by Entra object ID only. Email-based account
+  linking (D-022) is removed, because the sync already knows every object
+  ID.
+
+### D-087 Calendar is internal; the Outlook calendar sync is removed — Accepted (not done)
+The calendar was always meant to be PADM's own look-ahead at upcoming
+reviews, renewals, and expirations (month and agenda views, dashboards). The
+optional Outlook calendar sync built in Phase 5 (D-050, D-077) is not wanted.
+It will be removed (code, configuration, installer step, docs), which also
+narrows the Graph permissions PADM needs. ICS feed subscriptions are not
+affected by this decision. Supersedes D-077 and the Graph part of D-078.
+
+### D-088 ILA document type; admin-curated tags — Accepted (not done)
+The seeded "Partnership Agreement" type is renamed **Interlocal Agreement
+(ILA)**, with ID prefix `ILA`. Admins can still add their own types.
+
+- **Types** say what a document *is*. A document has exactly one, and it
+  drives numbering, the review cycle, legal review, signatures, retention,
+  and extra fields.
+- **Tags** are cross-cutting labels, any number per document.
+
+Tags become admin-curated (`[documents] free_form_tags = false`), so the
+filter list stays short and consistent for a county-wide audience.
+
+### D-089 Changes made directly in SharePoint are detected, not prevented — Accepted (design, not built)
+One or two named site owners keep edit rights for emergencies, so PADM
+cannot rely on SharePoint permissions alone. Every few minutes PADM reads
+the site's change feed (Graph delta). If a file is edited, added, or deleted
+by anyone other than PADM, the document is flagged, the change is audited,
+and admins are alerted. An admin then does one of two things:
+
+- restores the original, from SharePoint version history or the recycle
+  bin;
+- accepts the change as a new PADM version, which goes through the normal
+  upload checks.
+
+A Purview retention policy on the site is recommended, so files cannot be
+permanently deleted.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |
@@ -583,7 +714,7 @@ existing installations from starting.
 | Self-approval | Off (`[workflow] allow_self_approval = false`) |
 | Reappointment decision lead time | 90 days before term end, per position |
 | Retention periods | Placeholder policies only (D-036); confirm with your records retention schedule |
-| SharePoint/OneDrive storage | Not built; `BlobStore` is key-based so a Graph backend can be added |
+| SharePoint/OneDrive storage | Decided: SharePoint holds the files (D-081 to D-084). Not built yet; see ROADMAP §0.3, sub-project 1 |
 | ECM system vs. records-request portal | Neither integrated. Either can use the REST API (read documents, files, history), receive webhooks, or get a dedicated `IntegrationProvider`; the records request package format is product-neutral |
 | Audit forwarding target | Off; file (JSON lines) or syslog when configured |
 | API token lifetime | Up to 365 days; 90 suggested |

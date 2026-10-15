@@ -23,6 +23,11 @@ packaged as a single Docker image.
 | 4 | Records request packages, reports (CSV), REST API with OpenAPI and scoped tokens, webhooks and integration providers, audit forwarding, access review reports, backup/restore with `verify-integrity` | **Done** |
 | 5 | Threaded comments with @mentions and preserved edits; text extraction (PDF, Word) and optional OCR sidecar with date suggestions; optional Outlook calendar sync through Microsoft Graph | **Done** |
 
+**What's next:** the PADM plan (SharePoint document storage, Entra user sync, a UI
+redesign, and more), with what is done and what remains, is in
+[docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand-updated-2026-10-14).
+Start there if you are picking up the work.
+
 ## Install
 
 Requirements: Linux with Docker Engine, the Docker Compose plugin, and `openssl`.
@@ -135,7 +140,7 @@ crates/pdms-testkit  disposable test databases
 migrations/          SQL migrations
 deploy/              database bootstrap, reverse-proxy samples, backup and restore scripts,
                      the OCR sidecar (deploy/ocr)
-docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP
+docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP, ROADMAP; superpowers/specs (designs)
 ```
 
 ## Documentation
@@ -144,6 +149,7 @@ docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP
 - [docs/DECISIONS.md](docs/DECISIONS.md): decision log and open questions
 - [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md): installation, SSO, users and access, documents, reminders, workflow, appointments, records requests, reports, API and webhooks, audit, operations
 - [docs/ROADMAP.md](docs/ROADMAP.md): testing plan, pilot, go-live checklist, known gaps, and future additions
+- [docs/superpowers/specs/](docs/superpowers/specs/): design specs for planned work (one per sub-project)
 - [docs/BACKUP.md](docs/BACKUP.md): what to back up, consistent backups (including enterprise backup systems), restore, and `verify-integrity`
 - API reference: `/api/docs` on a running server, and `/api/v1/openapi.json`
 
