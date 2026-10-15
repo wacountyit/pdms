@@ -151,7 +151,7 @@ Every change is recorded in the audit log with before and after values.
 |---|---|
 | Administrator | Manage users, departments, groups, roles, grants, and IdP mappings; view and verify the audit log. Sees non-Restricted documents through a seeded, editable grant. |
 | Auditor | View, export, and verify the audit log; access review and audit reports; read every position and every export package. |
-| Records Officer | Builds records request packages. Can view and export non-Restricted documents org-wide (seeded grant); confidential documents need a document grant. |
+| Records Officer | Builds records request packages. Can view and export non-Restricted documents org-wide (seeded grant); Restricted documents need a document grant. |
 | Legal Counsel | Gives the legal review step in workflows. Can view non-Restricted documents org-wide (seeded grant). |
 | Department Head | Department-scoped notification recipient and default approver: can approve the non-Restricted documents of the department it is assigned for (seeded grant; assign it org-wide for a presiding officer who approves everything). |
 | Appointments Clerk | Manages boards, positions, requirement checklists, and appointments; receives appointment reminders. |
