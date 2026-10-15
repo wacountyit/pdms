@@ -865,7 +865,7 @@ async fn outlook_events_follow_dates_through_graph() {
     );
     assert!(
         !ev.iter().any(|e| e.1.contains("Settlement")),
-        "confidential documents are never sent"
+        "Restricted documents are never sent"
     );
     assert!(
         !ev.iter().any(|e| e.1.contains("Far future")),

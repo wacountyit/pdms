@@ -383,7 +383,7 @@ async fn exports_follow_acls_and_capabilities() {
     assert!(found.iter().any(|d| d.id == public));
     assert!(
         !found.iter().any(|d| d.id == secret),
-        "confidential excluded from broad exports"
+        "restricted excluded from broad exports"
     );
     let req = |ids: Vec<Uuid>| PackageRequest {
         request_reference: "REQ-1".into(),

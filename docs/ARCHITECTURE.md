@@ -166,9 +166,8 @@ All login, logout, failed login, and lockout events are audited.
 2. some unexpired grant has a matching permission, its subject matches the
    principal, and its scope matches the document:
    - `document` scope: same document. Always applies.
-   - `department` scope: same department, **and** the document inherits ACLs
-     and is not confidential.
-   - `global` scope: the document inherits ACLs and is not confidential.
+   - `department` scope: same department, **and** the document is not Restricted.
+   - `global` scope: the document is not Restricted.
    - A role subject matches if the principal holds that role org-wide or for
      the document's department.
 
@@ -177,11 +176,12 @@ So:
 - **Read-only default:** creating a department also creates a grant
   (department members → `view` on that department). A new user can view their
   department's documents and nothing else.
-- **Breaking inheritance:** set `documents.inherit_acl = false`. Only
-  document-scope grants and the owner rule apply.
-- **Confidential:** department and global grants never apply, so the document
-  needs explicit grants. Admins included. An admin can grant themselves access;
-  that grant is audited.
+- **Visibility (D-085):** every document is *Department* (default), *County-wide*
+  (additionally, every active account may **view** it; nothing else), or
+  *Restricted* (department and global grants never apply, so it needs explicit
+  grants; admins included). The owner chooses at upload and can change it later;
+  anyone with `manage_permissions` can too. Changes are audited
+  (`document.visibility_changed`).
 - **Separation of duties:** workflow-level checks such as "cannot approve own
   submission" are separate functions in `pdms-authz`, configurable in settings.
 - **Creating documents:** `create` on department scope (or global) for the
@@ -341,7 +341,7 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
 | Phase | Tables |
 |---|---|
 | 0 (`0001_foundation`) | departments, users, local_credentials, department_members, groups, group_members, roles, role_assignments, idp_group_mappings, sessions, app_settings, acl_entries, audit_chain_head, audit_log, jobs |
-| 1 (`0002_documents`, done) | retention_policies, document_types, custom_field_definitions, custom_field_versions, documents (incl. `external_id`, `inherit_acl`, `is_confidential`, `legal_hold`, `custom_fields jsonb`, `search tsvector`, `row_version`), blobs, document_versions, tags, document_tags; FK `acl_entries.scope_document_id → documents` |
+| 1 (`0002_documents`, done) | retention_policies, document_types, custom_field_definitions, custom_field_versions, documents (incl. `external_id`, `visibility` (0008; replaced `inherit_acl`/`is_confidential`), `legal_hold`, `custom_fields jsonb`, `search tsvector`, `row_version`), blobs, document_versions, tags, document_tags; FK `acl_entries.scope_document_id → documents` |
 | 2 (`0003_notifications`, done) | review_tasks, notification_rules, notification_rule_recipients, notifications, notification_deliveries (email and in-app), notification_delivery_attempts, calendar_feeds. Review schedules are the document/type `review_interval_months` plus `next_review_date` |
 | 3 (`0004_appointment_due_events`, `0005_workflow_appointments`, done) | workflows, workflow_steps (the approval steps), workflow_events, signatories, positions, position_requirements, appointments, appointment_requirement_status; `notifications` generalized (`kind` reminder/action, `appointment_id`, subject/body/link, `dedupe_key`); `notification_rules.position_id`; `due_event` gains `term_end`, `reappointment`; role `appointments_clerk`; seeded grants: legal counsel view, department head approve |
 | 4 (`0006_integrations`, done) | api_tokens, api_request_log, webhooks, webhook_deliveries, webhook_delivery_attempts, outbound_cursors, export_packages; seeded grant: records officer `export` (global). Integration providers are enabled in configuration, not a table; audit checkpoints were not needed (see D-068) |
@@ -360,7 +360,7 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
   nightly audit verification.
 - `pdms-authz`: unit tests for every rule above; proptest invariants
   (deny-by-default, monotonicity: adding a grant never removes access,
-  revocation removes access, confidential documents ignore broad grants,
+  revocation removes access, Restricted documents ignore broad grants,
   `create` never implies `view`); the SQL/engine equivalence test.
 - `pdms-audit`: canonical encoding golden vectors, chain verify and tamper
   detection, and a concurrent-writer test (N tasks appending, chain stays
@@ -486,7 +486,7 @@ tests for position visibility and step assignees.
 **Records request packages (`exports`).** Records officers (`BuildExportPackages`)
 choose documents they may *export* (per-document `export` permission from the
 central engine; migration 0006 seeds a global `export` grant for the role,
-which never reaches confidential documents). A package is a ZIP with
+which never reaches Restricted documents). A package is a ZIP with
 `README.txt`, `manifest.json` (request reference, options, documents, every
 file with SHA-256), `documents/<ID>/metadata.json`, the chosen file versions,
 optional `audit-history.json/.csv`, and `SHA256SUMS`. Every stored file is
@@ -587,7 +587,7 @@ recorded as failed.
 trait; `GraphProvider` uses client credentials (token cached) and
 `/users/{mailbox}/calendar/events`. A periodic job (one run at a time via an
 advisory lock) computes the desired all-day events (document review, renewal,
-expiration dates of non-confidential, non-archived documents; appointment term
+expiration dates of non-Restricted, non-archived documents; appointment term
 ends and reappointment decisions; within a configurable window), compares
 them with `graph_calendar_links` by content hash, and creates, updates
 (recreating events deleted in Outlook), moves between department mailboxes,
@@ -600,7 +600,7 @@ copier-OCR'd PDF, Word, and image files; suggestions never applied until
 accepted; accept/dismiss authorization and audit; OCR retry when unavailable;
 extraction disabled; Graph sync against a mock Graph (create, idempotent
 re-run with one token, update on date change, delete on archive, recreate
-after an event was deleted in Outlook, department mailboxes, confidential and
+after an event was deleted in Outlook, department mailboxes, Restricted and
 out-of-window dates excluded). Opt-in: the real OCR sidecar reads a scanned
 PDF and the dates in it become suggestions. Web: comments and suggestions
 through the document page (escaping of file and comment text), history and

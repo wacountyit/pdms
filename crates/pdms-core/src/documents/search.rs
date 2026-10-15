@@ -504,7 +504,7 @@ pub async fn search(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResult<Se
 
 pub const MAX_EXPORT: i64 = 10_000;
 
-/// CSV of matching documents the caller may `export` (confidential documents
+/// CSV of matching documents the caller may `export` (Restricted documents
 /// appear only with an explicit document grant). Audited with the filter
 /// and the exported IDs.
 pub async fn export_csv(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResult<Vec<u8>> {

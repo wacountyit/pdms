@@ -158,7 +158,7 @@ pub async fn seed(core: &Core) -> CoreResult<DemoSummary> {
         }
     }
 
-    // Legal counsel already views non-confidential documents org-wide, and
+    // Legal counsel already views non-Restricted documents org-wide, and
     // department heads approve (both seeded by migration 0005).
     // Department heads may create and edit documents in their own department.
     let head = directory::role_id_by_key(db, role_keys::DEPARTMENT_HEAD).await?;
@@ -478,6 +478,8 @@ async fn seed_documents(
     .await?;
     // Restrict the investigation procedures, and share the grant with Legal for review.
     documents::set_visibility(core, ctx, ids[3], pdms_authz::Visibility::Restricted).await?;
+    // Everyone in the organization should be able to read the personnel policy.
+    documents::set_visibility(core, ctx, ids[2], pdms_authz::Visibility::CountyWide).await?;
     documents::share(
         core,
         ctx,

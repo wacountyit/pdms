@@ -128,7 +128,7 @@ Every change is recorded in the audit log with before and after values.
   `edit`, `delete`, `approve`, `manage_permissions`, `export`) on a *scope*
   (all documents, one department's documents, or one document). Every
   permission except `create` includes `view`. Grants can expire.
-- **Confidential documents** ignore organization-wide and department grants;
+- **Restricted documents** ignore organization-wide and department grants;
   they need explicit per-document grants (set on the document page).
 - **Changes apply immediately.** Removing a grant, role, or membership affects
   the user's very next request. Disabling a user signs them out everywhere.
@@ -149,11 +149,11 @@ Every change is recorded in the audit log with before and after values.
 
 | Role | What it allows |
 |---|---|
-| Administrator | Manage users, departments, groups, roles, grants, and IdP mappings; view and verify the audit log. Sees non-confidential documents through a seeded, editable grant. |
+| Administrator | Manage users, departments, groups, roles, grants, and IdP mappings; view and verify the audit log. Sees non-Restricted documents through a seeded, editable grant. |
 | Auditor | View, export, and verify the audit log; access review and audit reports; read every position and every export package. |
-| Records Officer | Builds records request packages. Can view and export non-confidential documents org-wide (seeded grant); confidential documents need a document grant. |
-| Legal Counsel | Gives the legal review step in workflows. Can view non-confidential documents org-wide (seeded grant). |
-| Department Head | Department-scoped notification recipient and default approver: can approve the non-confidential documents of the department it is assigned for (seeded grant; assign it org-wide for a presiding officer who approves everything). |
+| Records Officer | Builds records request packages. Can view and export non-Restricted documents org-wide (seeded grant); confidential documents need a document grant. |
+| Legal Counsel | Gives the legal review step in workflows. Can view non-Restricted documents org-wide (seeded grant). |
+| Department Head | Department-scoped notification recipient and default approver: can approve the non-Restricted documents of the department it is assigned for (seeded grant; assign it org-wide for a presiding officer who approves everything). |
 | Appointments Clerk | Manages boards, positions, requirement checklists, and appointments; receives appointment reminders. |
 
 A role assigned *for a department* applies only to that department. System
@@ -194,7 +194,8 @@ On a document's page:
 | View, download any version | `view` (department members have it by default) |
 | Edit details, tags; upload a new version (revision, amendment, signed copy); restore an earlier file or earlier details | `edit` |
 | Move between statuses | `edit`; approving out of In Review needs `approve` |
-| Share with a person, group, department, or role; make confidential; turn off inheritance; transfer ownership | `manage_permissions` |
+| Share with a person, group, department, or role; transfer ownership | `manage_permissions` |
+| Change who can see it (Department, County-wide, Restricted) | the owner, or `manage_permissions` |
 | Legal hold, retention override | Administrator or Records Officer |
 | Delete | `delete`; blocked while on legal hold or within the retention period |
 | Audit history | The owner, `manage_permissions`, or Administrator/Auditor |
@@ -358,7 +359,7 @@ Outlook (**Add calendar → Subscribe from web**) or any calendar app:
 - **Address:** shown only once. Treat it like a password and revoke it if it
   leaks.
 - **Content:** shows only what the subscriber can currently see, and never
-  confidential documents.
+  Restricted documents.
 - **Review cycles** appear as recurring events.
 
 ## 6. Review, approval, and signatures
@@ -439,7 +440,7 @@ subscriptions of everyone who can see the position.
 
 **Records requests.** Records officers use **Records requests** in the menu:
 1. search for the documents (only documents you may *export* appear;
-   confidential ones need an explicit grant);
+   Restricted ones need an explicit grant);
 2. tick the documents, enter the **request reference** (for example
    `REQ-2026-014`), choose the files (current, every version, or none), whether
    to include each document's audit history, and which details to include;
@@ -551,7 +552,7 @@ subscriptions (section 5) work without any setup. If you prefer real Outlook
 events in a shared calendar, PDMS can create one all-day event per review,
 renewal, and expiration date (and appointment term ends and reappointment
 decisions), update it when the date changes, and remove it when the date no
-longer applies. Confidential documents are never included.
+longer applies. Restricted documents are never included.
 1. Create a shared mailbox, for example `pdms-calendar@yourdomain.org`, and
    share its calendar with the staff who should see it (or create one per
    department).

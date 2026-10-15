@@ -4,7 +4,7 @@
 //!
 //! A records officer (capability `BuildExportPackages`) chooses documents
 //! they may *export* (the `export` permission, checked per document by the
-//! central engine, so confidential documents need an explicit grant), the
+//! central engine, so Restricted documents need an explicit grant), the
 //! metadata to include, which file versions, and optionally each document's
 //! audit history. The package is a ZIP with a manifest, a `SHA256SUMS` file,
 //! and a README, tied to the request reference number. Every file's content

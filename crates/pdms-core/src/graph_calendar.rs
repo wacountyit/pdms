@@ -9,9 +9,9 @@
 //! - a new date creates an event;
 //! - a changed date or title updates it;
 //! - a date that no longer applies (resolved, archived, deleted, made
-//!   confidential, out of the window) removes it.
+//!   made Restricted, out of the window) removes it.
 //!
-//! The calendar is shared by its readers, so confidential documents are
+//! The calendar is shared by its readers, so Restricted documents are
 //! never included (as with ICS feeds). [`CalendarProvider`] is the seam;
 //! [`GraphProvider`] uses application permissions (client credentials).
 

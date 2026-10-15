@@ -395,7 +395,7 @@ pub async fn revoke_feed(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()> {
 }
 
 /// Render a feed by its token, with the owner's permissions as of now.
-/// `None` for unknown or revoked tokens and inactive owners. Confidential
+/// `None` for unknown or revoked tokens and inactive owners. Restricted
 /// documents are never included (feed URLs end up on phones and in shared
 /// calendars). Fetches are audited at most once an hour per feed.
 pub async fn render_feed(

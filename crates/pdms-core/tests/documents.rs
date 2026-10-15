@@ -616,7 +616,7 @@ async fn custom_field_filter_and_sort() {
 }
 
 #[tokio::test]
-async fn confidential_documents_and_single_document_sharing() {
+async fn restricted_documents_and_single_document_sharing() {
     let (core, _db) = core().await;
     let (dept, alice) = editing_department(&core, "HR", "alice@x.org").await;
     let colleague = directory::create_user(&core.db, &system(), "c", "c@x.org", Some(dept))
@@ -647,7 +647,7 @@ async fn confidential_documents_and_single_document_sharing() {
     )
     .await;
 
-    // Owner gets view/edit but not manage_permissions; an admin (manage_permissions globally) marks it confidential.
+    // Owner gets view/edit but not manage_permissions; an admin (manage_permissions globally) makes it Restricted.
     let ctx_admin = as_user(&core, admin).await;
     documents::set_visibility(
         &core,
@@ -1438,4 +1438,36 @@ async fn audit_events(core: &Core, action: &str) -> Vec<String> {
     .fetch_all(&core.db)
     .await
     .unwrap()
+}
+
+#[tokio::test]
+async fn demo_seed_shows_all_three_visibilities() {
+    let (core, _db) = core().await;
+    pdms_core::demo::seed(&core).await.unwrap();
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT title, visibility::text FROM documents
+          WHERE title IN ('Personnel Policy Manual', 'Workplace Investigation Procedures',
+                          'Asphalt Supply Contract FY2026')
+          ORDER BY title",
+    )
+    .fetch_all(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "Asphalt Supply Contract FY2026".to_owned(),
+                "department".to_owned()
+            ),
+            (
+                "Personnel Policy Manual".to_owned(),
+                "county_wide".to_owned()
+            ),
+            (
+                "Workplace Investigation Procedures".to_owned(),
+                "restricted".to_owned()
+            ),
+        ]
+    );
 }

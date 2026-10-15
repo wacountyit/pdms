@@ -773,7 +773,7 @@ async fn ics_feeds_follow_permissions_and_revocation() {
     assert!(ics.contains("RRULE:FREQ=MONTHLY;INTERVAL=12"), "{ics}");
     assert!(
         !ics.contains("Secret policy"),
-        "confidential documents never go into feeds"
+        "Restricted documents never go into feeds"
     );
     assert!(!ics.contains("HR only"), "only documents the owner can see");
     assert!(ics.contains(&mine.to_string()));
