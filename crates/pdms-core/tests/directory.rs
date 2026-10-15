@@ -10,7 +10,7 @@ mod common;
 
 use common::*;
 use pdms_audit::{Actor, AuthMethod};
-use pdms_authz::{DocumentAttrs, Permission, Policy, Scope, Subject, decide};
+use pdms_authz::{DocumentAttrs, Permission, Policy, Scope, Subject, Visibility, decide};
 use pdms_core::auth::principal;
 use pdms_core::directory::{self, sync};
 use pdms_core::model::UserStatus;
@@ -54,8 +54,7 @@ async fn new_department_gets_read_only_default_grant() {
         id: Uuid::now_v7(),
         department_id: dept,
         owner_id: Uuid::nil(),
-        inherit_acl: true,
-        is_confidential: false,
+        visibility: Visibility::Department,
     };
     let now = chrono::Utc::now();
     assert!(decide(&Policy::default(), &p, Permission::View, &doc, &grants, now).is_allowed());
@@ -81,8 +80,7 @@ async fn grant_and_revoke_take_effect_on_next_check_and_are_audited() {
         id: Uuid::now_v7(),
         department_id: dept,
         owner_id: Uuid::nil(),
-        inherit_acl: true,
-        is_confidential: false,
+        visibility: Visibility::Department,
     };
     let check = || async {
         let p = principal::load(&core.db, user).await.unwrap();

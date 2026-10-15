@@ -10,7 +10,7 @@
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use icalendar::{Calendar, Component, Event, EventLike};
 use pdms_audit::{Actor, AuditEvent, AuthMethod, Category};
-use pdms_authz::Permission;
+use pdms_authz::{Permission, Visibility};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -429,7 +429,7 @@ pub async fn render_feed(
         search::all(core, &ctx, &filter, Permission::View, MAX_DOCUMENTS)
             .await?
             .into_iter()
-            .filter(|d| !d.is_confidential)
+            .filter(|d| d.visibility != Visibility::Restricted)
             .collect();
 
     let mut cal = Calendar::new();
@@ -604,7 +604,7 @@ mod tests {
             renewal_date: d(renewal),
             expiration_date: d(expiration),
             review_interval_months: interval,
-            is_confidential: false,
+            visibility: Visibility::Department,
             custom_fields: serde_json::json!({}),
             created_at: Utc::now(),
             updated_at: Utc::now(),

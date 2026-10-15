@@ -75,6 +75,7 @@ async fn new_doc(
         core,
         ctx,
         NewDocument {
+            visibility: Default::default(),
             metadata: input,
             owner_id: owner,
             status: DocumentStatus::Active,
@@ -246,6 +247,7 @@ async fn new_user_cannot_edit_own_department_documents_by_default() {
         &core,
         &ctx,
         NewDocument {
+            visibility: Default::default(),
             metadata: meta(other, dept, "x"),
             owner_id: colleague,
             status: DocumentStatus::Draft,
@@ -373,6 +375,7 @@ async fn custom_field_changes_never_break_records_or_exports() {
         &core,
         &ctx,
         NewDocument {
+            visibility: Default::default(),
             metadata: missing,
             owner_id: alice,
             status: DocumentStatus::Draft,
@@ -646,9 +649,14 @@ async fn confidential_documents_and_single_document_sharing() {
 
     // Owner gets view/edit but not manage_permissions; an admin (manage_permissions globally) marks it confidential.
     let ctx_admin = as_user(&core, admin).await;
-    documents::set_access_settings(&core, &ctx_admin, secret, true, true)
-        .await
-        .unwrap();
+    documents::set_visibility(
+        &core,
+        &ctx_admin,
+        secret,
+        pdms_authz::Visibility::Restricted,
+    )
+    .await
+    .unwrap();
     let ctx_col = as_user(&core, colleague).await;
     assert_eq!(
         visible_ids(&core, &ctx_col, DocumentFilter::default()).await,
@@ -702,11 +710,7 @@ async fn confidential_documents_and_single_document_sharing() {
         Err(CoreError::Forbidden(_))
     ));
     let acts = audit_actions(&core).await;
-    for a in [
-        "document.access_settings_changed",
-        "acl.granted",
-        "acl.revoked",
-    ] {
+    for a in ["document.visibility_changed", "acl.granted", "acl.revoked"] {
         assert!(acts.contains(&a.to_owned()), "missing {a}");
     }
     // Grant/revoke events land on the document's timeline.
@@ -730,6 +734,7 @@ async fn status_transitions_are_validated() {
         &core,
         &ctx,
         NewDocument {
+            visibility: Default::default(),
             metadata: meta(other, dept, "Draft"),
             owner_id: alice,
             status: DocumentStatus::Draft,

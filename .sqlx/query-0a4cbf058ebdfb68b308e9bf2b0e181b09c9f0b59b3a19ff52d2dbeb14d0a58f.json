@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE documents SET visibility = $2::text::document_visibility, updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a4cbf058ebdfb68b308e9bf2b0e181b09c9f0b59b3a19ff52d2dbeb14d0a58f"
+}

@@ -44,19 +44,19 @@ impl DocRef {
 /// Load a live (not deleted) document's authorization attributes.
 pub(crate) async fn load(core: &Core, id: Uuid) -> CoreResult<Option<DocRef>> {
     let row = sqlx::query!(
-        "SELECT id, department_id, owner_id, inherit_acl, is_confidential, external_id, title
-           FROM documents WHERE id = $1 AND deleted_at IS NULL",
+        r#"SELECT id, department_id, owner_id, visibility::text AS "visibility!", external_id, title
+             FROM documents WHERE id = $1 AND deleted_at IS NULL"#,
         id
     )
     .fetch_optional(&core.db)
     .await?;
-    Ok(row.map(|r| DocRef {
+    let Some(r) = row else { return Ok(None) };
+    Ok(Some(DocRef {
         attrs: DocumentAttrs {
             id: r.id,
             department_id: r.department_id,
             owner_id: r.owner_id,
-            inherit_acl: r.inherit_acl,
-            is_confidential: r.is_confidential,
+            visibility: r.visibility.parse().map_err(CoreError::internal)?,
         },
         external_id: r.external_id,
         title: r.title,

@@ -350,7 +350,7 @@ async fn desired(core: &Core) -> CoreResult<Vec<Desired>> {
              FROM documents d
              JOIN document_types t ON t.id = d.document_type_id
              JOIN departments dep ON dep.id = d.department_id
-            WHERE d.deleted_at IS NULL AND NOT d.is_confidential AND d.status NOT IN ('superseded', 'archived')"#
+            WHERE d.deleted_at IS NULL AND d.visibility <> 'restricted' AND d.status NOT IN ('superseded', 'archived')"#
     )
     .fetch_all(&core.db)
     .await?;

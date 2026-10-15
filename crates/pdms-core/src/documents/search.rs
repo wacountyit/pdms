@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use pdms_audit::{AuditEvent, AuditValue, Category};
-use pdms_authz::{Permission, visible_documents_predicate};
+use pdms_authz::{Permission, Visibility, visible_documents_predicate};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::types::Json;
@@ -219,7 +219,8 @@ pub struct DocumentSummary {
     pub expiration_date: Option<NaiveDate>,
     /// Effective review interval (the document's own, else its type's).
     pub review_interval_months: Option<i32>,
-    pub is_confidential: bool,
+    #[sqlx(try_from = "String")]
+    pub visibility: Visibility,
     pub custom_fields: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -265,7 +266,7 @@ fn query(
                 o.display_name AS owner_name, d.status, d.execution_date, d.effective_date,
                 d.last_review_date, d.next_review_date, d.renewal_date, d.expiration_date,
                 coalesce(d.review_interval_months, t.review_interval_months) AS review_interval_months,
-                d.is_confidential, d.custom_fields, d.created_at, d.updated_at,
+                d.visibility::text AS visibility, d.custom_fields, d.created_at, d.updated_at,
                 COALESCE((SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'slug', tg.slug,
                                                             'color', tg.color) ORDER BY tg.name)
                             FROM document_tags dt JOIN tags tg ON tg.id = dt.tag_id
@@ -543,7 +544,7 @@ pub async fn export_csv(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResul
         "Renewal date",
         "Expiration date",
         "Tags",
-        "Confidential",
+        "Visibility",
         "Created",
         "Updated",
     ]
@@ -589,7 +590,7 @@ pub async fn export_csv(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResul
                 .map(|t| t.name.as_str())
                 .collect::<Vec<_>>()
                 .join("; "),
-            if it.is_confidential { "yes" } else { "no" }.to_owned(),
+            it.visibility.label().to_owned(),
             it.created_at.to_rfc3339(),
             it.updated_at.to_rfc3339(),
         ];

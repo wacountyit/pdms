@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT d.id, d.external_id, d.title, d.status::text AS \"status!\", t.name AS type_name, dep.code, dep.name AS dept,\n                  d.next_review_date, d.renewal_date, d.expiration_date\n             FROM documents d\n             JOIN document_types t ON t.id = d.document_type_id\n             JOIN departments dep ON dep.id = d.department_id\n            WHERE d.deleted_at IS NULL AND NOT d.is_confidential AND d.status NOT IN ('superseded', 'archived')",
+  "query": "SELECT d.id, d.external_id, d.title, d.status::text AS \"status!\", t.name AS type_name, dep.code, dep.name AS dept,\n                  d.next_review_date, d.renewal_date, d.expiration_date\n             FROM documents d\n             JOIN document_types t ON t.id = d.document_type_id\n             JOIN departments dep ON dep.id = d.department_id\n            WHERE d.deleted_at IS NULL AND d.visibility <> 'restricted' AND d.status NOT IN ('superseded', 'archived')",
   "describe": {
     "columns": [
       {
@@ -125,5 +125,5 @@
       true
     ]
   },
-  "hash": "037475f53b9632e6db539ac8648bb213e59f83e70f38e106c9e19a4c55bca925"
+  "hash": "a430bc2d3550d86cfd4cab9b33de11a9f8e603eca698545a4b96918bffaec679"
 }

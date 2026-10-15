@@ -63,6 +63,7 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
         &app.core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Copier lease".into(),
                 document_type_id: t,

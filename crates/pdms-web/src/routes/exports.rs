@@ -88,7 +88,7 @@ pub async fn page(
                 title: d.title,
                 department: d.department_name,
                 status: d.status.label(),
-                confidential: d.is_confidential,
+                confidential: d.visibility == pdms_authz::Visibility::Restricted,
             })
             .collect()
     } else {

@@ -251,7 +251,7 @@ pub async fn extract(
     }
     let v = sqlx::query!(
         r#"SELECT v.blob_sha256 AS "sha!", b.media_type, b.size_bytes, d.external_id, d.title, d.department_id,
-                  d.owner_id, d.inherit_acl, d.is_confidential
+                  d.owner_id, d.visibility::text AS "visibility!"
              FROM document_versions v
              JOIN blobs b ON b.sha256 = v.blob_sha256
              JOIN documents d ON d.id = v.document_id
@@ -423,8 +423,7 @@ pub async fn extract(
             id: document_id,
             department_id: v.department_id,
             owner_id: v.owner_id,
-            inherit_acl: v.inherit_acl,
-            is_confidential: v.is_confidential,
+            visibility: v.visibility.parse().map_err(CoreError::internal)?,
         };
         let visibility = Visibility::document(core, attrs).await?;
         actions::send(

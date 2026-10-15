@@ -26,8 +26,7 @@ fn doc(id: Uuid, department_id: Uuid, owner_id: Uuid) -> DocumentAttrs {
         id,
         department_id,
         owner_id,
-        inherit_acl: true,
-        is_confidential: false,
+        visibility: Visibility::Department,
     }
 }
 
@@ -147,10 +146,10 @@ fn single_document_share_does_not_expose_department() {
 }
 
 #[test]
-fn broken_inheritance_ignores_department_and_global_grants() {
+fn restricted_ignores_department_and_global_grants() {
     let alice = user(ALICE, &[OPS]);
     let mut d = doc(DOCUMENTS[0], OPS, BOB);
-    d.inherit_acl = false;
+    d.visibility = Visibility::Restricted;
     let g = [
         department_default(OPS),
         grant(Subject::User(ALICE), Scope::Global, Permission::View),
@@ -165,7 +164,7 @@ fn broken_inheritance_ignores_department_and_global_grants() {
 }
 
 #[test]
-fn confidential_requires_document_grant_even_for_admin() {
+fn restricted_requires_document_grant_even_for_admin() {
     let admin_role = ROLES[0];
     let mut admin = user(ALICE, &[OPS]);
     admin.roles.push(RoleHolding {
@@ -174,7 +173,7 @@ fn confidential_requires_document_grant_even_for_admin() {
         department_id: None,
     });
     let mut d = doc(DOCUMENTS[0], OPS, BOB);
-    d.is_confidential = true;
+    d.visibility = Visibility::Restricted;
     let g = [
         department_default(OPS),
         grant(Subject::Role(admin_role), Scope::Global, Permission::View),
@@ -186,8 +185,41 @@ fn confidential_requires_document_grant_even_for_admin() {
     ];
     assert!(!allowed(&admin, Permission::View, &d, &g));
     assert!(!allowed(&admin, Permission::ManagePermissions, &d, &g));
-    // Owner still sees their own confidential document.
+    // Owner still sees their own restricted document.
     assert!(allowed(&user(BOB, &[]), Permission::View, &d, &g));
+}
+
+#[test]
+fn county_wide_lets_every_active_account_view_only() {
+    let outsider = user(ALICE, &[HR]);
+    let mut d = doc(DOCUMENTS[0], OPS, BOB);
+    d.visibility = Visibility::CountyWide;
+    let g = [department_default(OPS)];
+    assert_eq!(
+        decide(
+            &Policy::default(),
+            &outsider,
+            Permission::View,
+            &d,
+            &g,
+            now()
+        ),
+        Decision::Allow(AllowReason::CountyWide)
+    );
+    for perm in [
+        Permission::Create,
+        Permission::Edit,
+        Permission::Delete,
+        Permission::Approve,
+        Permission::ManagePermissions,
+        Permission::Export,
+    ] {
+        assert!(!allowed(&outsider, perm, &d, &g), "{perm}");
+    }
+    // Review Focus 1: a deactivated account sees nothing, County-wide included.
+    let mut departed = outsider.clone();
+    departed.active = false;
+    assert!(!allowed(&departed, Permission::View, &d, &g));
 }
 
 #[test]
@@ -321,7 +353,9 @@ proptest! {
     #[test]
     fn deny_by_default(p in strategies::principal(), perm in strategies::permission(), mut d in strategies::document()) {
         d.owner_id = Uuid::from_u128(0xdead);
-        prop_assert!(!allowed(&p, perm, &d, &[]));
+        // Without grants, the only access is viewing a County-wide document.
+        let county_wide_view = perm == Permission::View && d.visibility == Visibility::CountyWide && p.active;
+        prop_assert_eq!(allowed(&p, perm, &d, &[]), county_wide_view);
     }
 
     #[test]
@@ -353,13 +387,29 @@ proptest! {
     }
 
     #[test]
-    fn confidential_documents_ignore_broad_grants(
+    fn restricted_documents_ignore_broad_grants(
         p in strategies::principal(), perm in strategies::permission(), mut d in strategies::document(),
         gs in strategies::grants(),
     ) {
-        d.is_confidential = true;
+        d.visibility = Visibility::Restricted;
         let doc_only: Vec<Grant> = gs.iter().filter(|g| matches!(g.scope, Scope::Document(_))).cloned().collect();
         prop_assert_eq!(allowed(&p, perm, &d, &gs), allowed(&p, perm, &d, &doc_only));
+    }
+
+    #[test]
+    fn county_wide_adds_view_and_nothing_else(
+        p in strategies::principal(), perm in strategies::permission(), mut d in strategies::document(),
+        gs in strategies::grants(),
+    ) {
+        d.visibility = Visibility::Department;
+        let as_department = allowed(&p, perm, &d, &gs);
+        d.visibility = Visibility::CountyWide;
+        let as_county_wide = allowed(&p, perm, &d, &gs);
+        if perm == Permission::View {
+            prop_assert_eq!(as_county_wide, p.active);
+        } else {
+            prop_assert_eq!(as_county_wide, as_department);
+        }
     }
 
     #[test]
@@ -369,7 +419,8 @@ proptest! {
     ) {
         d.owner_id = Uuid::from_u128(0xdead);
         let creates: Vec<Grant> = gs.into_iter().filter(|g| g.permission == Permission::Create).collect();
-        prop_assert!(!allowed(&p, perm, &d, &creates));
+        // Create grants change nothing compared with having no grants at all.
+        prop_assert_eq!(allowed(&p, perm, &d, &creates), allowed(&p, perm, &d, &[]));
     }
 
     #[test]

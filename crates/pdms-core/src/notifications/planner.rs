@@ -20,7 +20,7 @@ use super::rules::{self, DueEvent, Rule};
 use crate::Core;
 use crate::context::Ctx;
 use crate::documents::{self, DocumentStatus};
-use crate::error::CoreResult;
+use crate::error::{CoreError, CoreResult};
 use crate::schedule::{self, Trigger, TriggerKind};
 
 pub const EMAIL_JOB: &str = "notifications.email";
@@ -83,8 +83,7 @@ struct DocDates {
     document_type_id: Uuid,
     department_id: Uuid,
     owner_id: Uuid,
-    inherit_acl: bool,
-    is_confidential: bool,
+    visibility: String,
     status: DocumentStatus,
     next_review_date: Option<NaiveDate>,
     renewal_date: Option<NaiveDate>,
@@ -96,7 +95,7 @@ struct DocDates {
 async fn load_docs(conn: &mut PgConnection, only: Option<Uuid>) -> CoreResult<Vec<DocDates>> {
     Ok(sqlx::query_as!(
         DocDates,
-        r#"SELECT id, document_type_id, department_id, owner_id, inherit_acl, is_confidential,
+        r#"SELECT id, document_type_id, department_id, owner_id, visibility::text AS "visibility!",
                   status AS "status: DocumentStatus", next_review_date, renewal_date, expiration_date,
                   external_id, title
              FROM documents
@@ -461,8 +460,7 @@ impl Target {
             id: d.id,
             department_id: d.department_id,
             owner_id: d.owner_id,
-            inherit_acl: d.inherit_acl,
-            is_confidential: d.is_confidential,
+            visibility: d.visibility.parse().map_err(CoreError::internal)?,
         };
         Ok(Target {
             document_id: Some(d.id),

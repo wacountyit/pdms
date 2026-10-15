@@ -96,6 +96,7 @@ async fn draft(w: &World, type_key: &str) -> Uuid {
         &w.core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Equipment maintenance agreement".into(),
                 document_type_id: t,

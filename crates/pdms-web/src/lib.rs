@@ -203,7 +203,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/status", post(documents::change_status))
         .route("/{id}/owner", post(documents::transfer_owner))
-        .route("/{id}/access", post(documents::access_settings))
+        .route("/{id}/visibility", post(documents::set_visibility))
         .route("/{id}/retention", post(documents::retention))
         .route("/{id}/tags", post(documents::add_tag))
         .route("/{id}/tags/{tag}/remove", post(documents::remove_tag))

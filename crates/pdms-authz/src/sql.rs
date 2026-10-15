@@ -79,8 +79,7 @@ pub struct InvalidAlias(pub String);
 /// Build a boolean SQL expression that is true for rows of `documents` (aliased
 /// `doc_alias`) on which `principal` holds `perm`.
 ///
-/// The documents table must provide `id`, `department_id`, `owner_id`,
-/// `inherit_acl`, and `is_confidential`.
+/// The documents table must provide `id`, `department_id`, `owner_id`, and `visibility`.
 pub fn visible_documents_predicate(
     policy: &Policy,
     principal: &Principal,
@@ -104,6 +103,9 @@ pub fn visible_documents_predicate(
     let d = doc_alias;
     let user = || SqlParam::Uuid(principal.user_id);
     f.sql("(");
+    if perm == Permission::View {
+        f.sql(&format!("{d}.visibility = 'county_wide' OR "));
+    }
     if policy.owner_permissions.satisfies(perm) {
         f.sql(&format!("{d}.owner_id = ")).param(user()).sql(" OR ");
     }
@@ -128,7 +130,7 @@ pub fn visible_documents_predicate(
 WHERE held.role_id = acl.subject_role_id \
 AND (held.department_id IS NULL OR held.department_id = {d}.department_id))) \
 AND ((acl.scope = 'document' AND acl.scope_document_id = {d}.id) \
-OR ({d}.inherit_acl AND NOT {d}.is_confidential \
+OR ({d}.visibility <> 'restricted' \
 AND (acl.scope = 'global' OR (acl.scope = 'department' AND acl.scope_department_id = {d}.department_id))))))"
         ));
     Ok(f)
@@ -202,5 +204,34 @@ mod tests {
         )
         .unwrap();
         assert!(!f.to_numbered(1).0.contains("owner_id"));
+    }
+
+    #[test]
+    fn county_wide_clause_only_for_view() {
+        let view = visible_documents_predicate(
+            &Policy::default(),
+            &principal(true),
+            Permission::View,
+            Utc::now(),
+            "d",
+        )
+        .unwrap();
+        assert!(
+            view.to_numbered(1)
+                .0
+                .starts_with("(d.visibility = 'county_wide' OR ")
+        );
+        let edit = visible_documents_predicate(
+            &Policy::default(),
+            &principal(true),
+            Permission::Edit,
+            Utc::now(),
+            "d",
+        )
+        .unwrap();
+        let sql = edit.to_numbered(1).0;
+        assert!(!sql.contains("county_wide"));
+        assert!(sql.contains("d.visibility <> 'restricted'"));
+        assert!(!sql.contains("inherit_acl") && !sql.contains("is_confidential"));
     }
 }

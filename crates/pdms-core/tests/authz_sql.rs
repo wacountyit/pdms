@@ -76,20 +76,20 @@ async fn load_case(owner: &PgPool, grants: &[Grant], docs: &[DocumentAttrs]) {
         .unwrap();
     for d in docs {
         sqlx::query(
-            "INSERT INTO documents (id, department_id, owner_id, inherit_acl, is_confidential,
+            "INSERT INTO documents (id, department_id, owner_id, visibility,
                                     external_id, document_type_id, title)
-             VALUES ($1, $2, $3, $4, $5, $1::text, (SELECT id FROM document_types WHERE key = 'other'), 'Doc')
-             ON CONFLICT (id) DO UPDATE SET department_id = EXCLUDED.department_id, owner_id = EXCLUDED.owner_id,
-                inherit_acl = EXCLUDED.inherit_acl, is_confidential = EXCLUDED.is_confidential",
+             VALUES ($1, $2, $3, $4::text::document_visibility, $1::text,
+                     (SELECT id FROM document_types WHERE key = 'other'), 'Doc')
+             ON CONFLICT (id) DO UPDATE SET department_id = EXCLUDED.department_id,
+                owner_id = EXCLUDED.owner_id, visibility = EXCLUDED.visibility",
         )
-            .bind(d.id)
-            .bind(d.department_id)
-            .bind(d.owner_id)
-            .bind(d.inherit_acl)
-            .bind(d.is_confidential)
-            .execute(owner)
-            .await
-            .unwrap();
+        .bind(d.id)
+        .bind(d.department_id)
+        .bind(d.owner_id)
+        .bind(d.visibility.as_str())
+        .execute(owner)
+        .await
+        .unwrap();
     }
     for g in grants {
         let (u, gr, de, r) = match g.subject {

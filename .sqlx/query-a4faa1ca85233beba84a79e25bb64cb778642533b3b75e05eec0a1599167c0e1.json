@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, document_type_id, department_id, owner_id, inherit_acl, is_confidential,\n                  status AS \"status: DocumentStatus\", next_review_date, renewal_date, expiration_date,\n                  external_id, title\n             FROM documents\n            WHERE deleted_at IS NULL\n              AND status IN ('active', 'renewal_due', 'overdue', 'expired')\n              AND ($1::uuid IS NULL OR id = $1)",
+  "query": "SELECT id, document_type_id, department_id, owner_id, visibility::text AS \"visibility!\",\n                  status AS \"status: DocumentStatus\", next_review_date, renewal_date, expiration_date,\n                  external_id, title\n             FROM documents\n            WHERE deleted_at IS NULL\n              AND status IN ('active', 'renewal_due', 'overdue', 'expired')\n              AND ($1::uuid IS NULL OR id = $1)",
   "describe": {
     "columns": [
       {
@@ -49,28 +49,12 @@
       },
       {
         "ordinal": 4,
-        "name": "inherit_acl",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "inherit_acl"
-          }
-        }
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
-        "name": "is_confidential",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "is_confidential"
-          }
-        }
-      },
-      {
-        "ordinal": 6,
         "name": "status: DocumentStatus",
         "type_info": {
           "Custom": {
@@ -97,7 +81,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "next_review_date",
         "type_info": "Date",
         "origin": {
@@ -108,7 +92,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "renewal_date",
         "type_info": "Date",
         "origin": {
@@ -119,7 +103,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "expiration_date",
         "type_info": "Date",
         "origin": {
@@ -130,7 +114,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "external_id",
         "type_info": "Text",
         "origin": {
@@ -141,7 +125,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "title",
         "type_info": "Text",
         "origin": {
@@ -162,8 +146,7 @@
       false,
       false,
       false,
-      false,
-      false,
+      null,
       false,
       true,
       true,
@@ -172,5 +155,5 @@
       false
     ]
   },
-  "hash": "83b0961613a366c02bfa989b269b3a5cdfb53eb99053937fe5ff2f3bde8064c9"
+  "hash": "a4faa1ca85233beba84a79e25bb64cb778642533b3b75e05eec0a1599167c0e1"
 }

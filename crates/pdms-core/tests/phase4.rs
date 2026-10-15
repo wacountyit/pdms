@@ -123,6 +123,7 @@ async fn audit_scenario_from_upload_to_records_requests_export() {
         &core,
         &a,
         NewDocument {
+            visibility: Default::default(),
             metadata: meta.clone(),
             owner_id: user_a,
             status: DocumentStatus::Active,
@@ -352,6 +353,7 @@ async fn exports_follow_acls_and_capabilities() {
                 &core,
                 &system(),
                 NewDocument {
+                    visibility: Default::default(),
                     metadata: MetadataInput {
                         title: title.into(),
                         document_type_id: policy,
@@ -371,7 +373,7 @@ async fn exports_follow_acls_and_capabilities() {
     };
     let public = mk("Leave policy").await;
     let secret = mk("Investigation procedures").await;
-    documents::set_access_settings(&core, &system(), secret, true, true)
+    documents::set_visibility(&core, &system(), secret, pdms_authz::Visibility::Restricted)
         .await
         .unwrap();
     let o = as_user(&core, officer).await;
@@ -686,6 +688,7 @@ async fn webhooks_deliver_signed_events_the_service_user_may_see() {
             &core,
             &system(),
             NewDocument {
+                visibility: Default::default(),
                 metadata: MetadataInput {
                     title: title.into(),
                     document_type_id: policy,
@@ -759,6 +762,7 @@ async fn webhooks_deliver_signed_events_the_service_user_may_see() {
         &core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Not for the service user".into(),
                 document_type_id: policy,
@@ -794,6 +798,7 @@ async fn webhooks_deliver_signed_events_the_service_user_may_see() {
         &core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Another".into(),
                 document_type_id: policy,
@@ -886,6 +891,7 @@ async fn reports_respect_access_and_export_to_csv() {
             &core,
             &system(),
             NewDocument {
+                visibility: Default::default(),
                 metadata: MetadataInput {
                     title: title.into(),
                     document_type_id: policy,
@@ -989,6 +995,7 @@ async fn verify_integrity_finds_missing_and_altered_files() {
                 &core,
                 &system(),
                 NewDocument {
+                    visibility: Default::default(),
                     metadata: MetadataInput {
                         title: name.into(),
                         document_type_id: policy,

@@ -4,8 +4,8 @@
   <p class="muted"><code>{{ d.external_id }}</code> · {{ d.type_name }} · {{ d.department_name }}</p>
   <p>
     <span class="badge status-{{ status_class }}">{{ status_label }}</span>
-    {% if d.is_confidential %}<span class="badge confidential">Confidential</span>{% endif %}
-    {% if !d.inherit_acl %}<span class="badge">Inheritance off</span>{% endif %}
+    {% if d.visibility.as_str() == "restricted" %}<span class="badge confidential">Restricted</span>{% endif %}
+    {% if d.visibility.as_str() == "county_wide" %}<span class="badge">County-wide</span>{% endif %}
     {% if d.legal_hold %}<span class="badge hold">Legal hold</span>{% endif %}
   </p>
   <div class="toolbar">
@@ -195,11 +195,15 @@
 {% if can_manage %}
 <section aria-labelledby="access-h">
   <h2 id="access-h">Access</h2>
-  <form method="post" action="/documents/{{ d.id }}/access" class="stack">
+  <form method="post" action="/documents/{{ d.id }}/visibility" class="stack">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label class="check"><input type="checkbox" name="inherit_acl" value="true" {% if d.inherit_acl %}checked{% endif %}> Inherit department and organization access</label>
-    <label class="check"><input type="checkbox" name="is_confidential" value="true" {% if d.is_confidential %}checked{% endif %}> Confidential (only the owner and people granted access below can see it)</label>
-    <div><button type="submit">Save access settings</button></div>
+    <label for="visibility">Who can see it</label>
+    <select id="visibility" name="visibility">
+      <option value="department" {% if d.visibility.as_str() == "department" %}selected{% endif %}>Department: its department and anyone it is shared with</option>
+      <option value="county_wide" {% if d.visibility.as_str() == "county_wide" %}selected{% endif %}>County-wide: every county employee can view and download it</option>
+      <option value="restricted" {% if d.visibility.as_str() == "restricted" %}selected{% endif %}>Restricted: only the owner and people it is shared with</option>
+    </select>
+    <div><button type="submit">Save visibility</button></div>
   </form>
   <table>
     <caption>Shared with</caption>

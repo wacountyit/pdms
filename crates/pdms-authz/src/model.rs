@@ -294,8 +294,7 @@ pub struct DocumentAttrs {
     pub id: Uuid,
     pub department_id: Uuid,
     pub owner_id: Uuid,
-    pub inherit_acl: bool,
-    pub is_confidential: bool,
+    pub visibility: Visibility,
 }
 
 /// Organization-configurable policy knobs.

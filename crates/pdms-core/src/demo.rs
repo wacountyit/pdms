@@ -446,6 +446,7 @@ async fn seed_documents(
             core,
             ctx,
             NewDocument {
+                visibility: Default::default(),
                 metadata: s.meta,
                 owner_id: user(s.owner)?,
                 status: DocumentStatus::Active,
@@ -475,8 +476,8 @@ async fn seed_documents(
         day("2014-06-01"),
     )
     .await?;
-    // Make the investigation procedures confidential, and share the grant with Legal for review.
-    documents::set_access_settings(core, ctx, ids[3], true, true).await?;
+    // Restrict the investigation procedures, and share the grant with Legal for review.
+    documents::set_visibility(core, ctx, ids[3], pdms_authz::Visibility::Restricted).await?;
     documents::share(
         core,
         ctx,
@@ -551,6 +552,7 @@ async fn seed_workflow(
         core,
         &alice,
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Equipment Inspection Services Contract".into(),
                 description:

@@ -64,6 +64,7 @@ async fn doc(app: &App, dept: Uuid, owner: Uuid, title: &str, file: bool) -> Uui
         &app.core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: title.into(),
                 document_type_id: t,

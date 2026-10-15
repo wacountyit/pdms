@@ -12,7 +12,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum_extra::extract::{Form, Query};
 use chrono::{NaiveDate, Utc};
-use pdms_authz::{Capability, Permission, Subject};
+use pdms_authz::{Capability, Permission, Subject, Visibility};
 use pdms_core::directory::{self, Department, Group, Role, UserSummary};
 use pdms_core::documents::fields::{FieldDef, FieldType};
 use pdms_core::documents::search::{self, CustomFilter, DateField, DocumentFilter, SortField};
@@ -411,7 +411,7 @@ pub async fn list(
                 next_review: fmt_date(d.next_review_date),
                 renewal: fmt_date(d.renewal_date),
                 expiration: fmt_date(d.expiration_date),
-                confidential: d.is_confidential,
+                confidential: d.visibility == Visibility::Restricted,
                 tags: d
                     .tags
                     .0
@@ -615,6 +615,7 @@ pub async fn create(
             &state.core,
             &user.ctx,
             NewDocument {
+                visibility: Default::default(),
                 metadata,
                 owner_id,
                 status,
@@ -1164,27 +1165,22 @@ pub async fn transfer_owner(
 }
 
 #[derive(Deserialize)]
-pub struct AccessForm {
-    inherit_acl: Option<String>,
-    is_confidential: Option<String>,
+pub struct VisibilityForm {
+    #[serde(default)]
+    visibility: String,
 }
 
-pub async fn access_settings(
+pub async fn set_visibility(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
-    Form(f): Form<AccessForm>,
+    Form(f): Form<VisibilityForm>,
 ) -> AppResult<Response> {
-    let on = |v: &Option<String>| v.as_deref() == Some("true");
-    let r = documents::set_access_settings(
-        &state.core,
-        &user.ctx,
-        id,
-        on(&f.inherit_acl),
-        on(&f.is_confidential),
-    )
-    .await;
-    done(&state, &back(id), r, "Access settings saved.")
+    let r = match f.visibility.parse::<Visibility>() {
+        Ok(v) => documents::set_visibility(&state.core, &user.ctx, id, v).await,
+        Err(_) => Err(CoreError::validation("choose who can see the document")),
+    };
+    done(&state, &back(id), r, "Visibility saved.")
 }
 
 #[derive(Deserialize)]

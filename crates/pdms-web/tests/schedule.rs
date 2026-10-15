@@ -39,6 +39,7 @@ async fn doc(
         &app.core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: title.into(),
                 document_type_id: t,

@@ -54,6 +54,7 @@ async fn doc(core: &Core, dept: Uuid, owner: Uuid, m: MetadataInput) -> Uuid {
         core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 department_id: dept,
                 ..m
@@ -115,6 +116,7 @@ async fn ila_overdue_acceptance() {
         &core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: "Facilities Maintenance agreement".into(),
                 document_type_id: agreement,
@@ -511,7 +513,7 @@ async fn reminders_wait_for_the_send_hour_and_skip_people_without_access() {
         },
     )
     .await;
-    documents::set_access_settings(&core, &system(), id, true, true)
+    documents::set_visibility(&core, &system(), id, pdms_authz::Visibility::Restricted)
         .await
         .unwrap();
     rules::create(
@@ -743,7 +745,7 @@ async fn ics_feeds_follow_permissions_and_revocation() {
         },
     )
     .await;
-    documents::set_access_settings(&core, &system(), secret, true, true)
+    documents::set_visibility(&core, &system(), secret, pdms_authz::Visibility::Restricted)
         .await
         .unwrap();
     doc(

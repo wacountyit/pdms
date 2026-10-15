@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.blob_sha256 AS \"sha!\", b.media_type, b.size_bytes, d.external_id, d.title, d.department_id,\n                  d.owner_id, d.inherit_acl, d.is_confidential\n             FROM document_versions v\n             JOIN blobs b ON b.sha256 = v.blob_sha256\n             JOIN documents d ON d.id = v.document_id\n            WHERE v.document_id = $1 AND v.version_no = $2 AND d.deleted_at IS NULL",
+  "query": "SELECT v.blob_sha256 AS \"sha!\", b.media_type, b.size_bytes, d.external_id, d.title, d.department_id,\n                  d.owner_id, d.visibility::text AS \"visibility!\"\n             FROM document_versions v\n             JOIN blobs b ON b.sha256 = v.blob_sha256\n             JOIN documents d ON d.id = v.document_id\n            WHERE v.document_id = $1 AND v.version_no = $2 AND d.deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -82,25 +82,9 @@
       },
       {
         "ordinal": 7,
-        "name": "inherit_acl",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "inherit_acl"
-          }
-        }
-      },
-      {
-        "ordinal": 8,
-        "name": "is_confidential",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "is_confidential"
-          }
-        }
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -117,9 +101,8 @@
       false,
       false,
       false,
-      false,
-      false
+      null
     ]
   },
-  "hash": "f5b352d9b94a5ba6647f1fae8323b6c55e6b7d3635bb49d7e83698728f7939d9"
+  "hash": "ca3ccddf04f44d2fa6b421b9395255056eed0dc82737d2f67563fd980d55c1b9"
 }

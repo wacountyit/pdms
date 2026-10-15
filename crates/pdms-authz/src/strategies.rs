@@ -9,7 +9,9 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use proptest::prelude::*;
 use uuid::Uuid;
 
-use crate::model::{DocumentAttrs, Grant, Permission, Principal, RoleHolding, Scope, Subject};
+use crate::model::{
+    DocumentAttrs, Grant, Permission, Principal, RoleHolding, Scope, Subject, Visibility,
+};
 
 pub const USERS: [Uuid; 3] = [
     Uuid::from_u128(0x1001),
@@ -129,21 +131,25 @@ pub fn principal() -> impl Strategy<Value = Principal> {
         })
 }
 
+pub fn visibility() -> impl Strategy<Value = Visibility> {
+    prop_oneof![
+        6 => Just(Visibility::Department),
+        2 => Just(Visibility::CountyWide),
+        2 => Just(Visibility::Restricted),
+    ]
+}
+
 pub fn document() -> impl Strategy<Value = DocumentAttrs> {
     (
         pick(DOCUMENTS),
         pick(DEPARTMENTS),
         pick(USERS),
-        prop::bool::weighted(0.8),
-        prop::bool::weighted(0.2),
+        visibility(),
     )
-        .prop_map(
-            |(id, department_id, owner_id, inherit_acl, is_confidential)| DocumentAttrs {
-                id,
-                department_id,
-                owner_id,
-                inherit_acl,
-                is_confidential,
-            },
-        )
+        .prop_map(|(id, department_id, owner_id, visibility)| DocumentAttrs {
+            id,
+            department_id,
+            owner_id,
+            visibility,
+        })
 }

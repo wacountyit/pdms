@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, department_id, owner_id, inherit_acl, is_confidential, external_id, title\n           FROM documents WHERE id = $1 AND deleted_at IS NULL",
+  "query": "SELECT id, department_id, owner_id, visibility::text AS \"visibility!\", external_id, title\n             FROM documents WHERE id = $1 AND deleted_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -38,28 +38,12 @@
       },
       {
         "ordinal": 3,
-        "name": "inherit_acl",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "inherit_acl"
-          }
-        }
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
-        "name": "is_confidential",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "documents",
-            "name": "is_confidential"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
         "name": "external_id",
         "type_info": "Text",
         "origin": {
@@ -70,7 +54,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "title",
         "type_info": "Text",
         "origin": {
@@ -90,11 +74,10 @@
       false,
       false,
       false,
-      false,
-      false,
+      null,
       false,
       false
     ]
   },
-  "hash": "420a9eaa59d82ff5ad32a82fcb657f55f26df1251d59dd0ef51cc5c1f375a159"
+  "hash": "24424cb19f72befdad85e32e53c531282f0afcdfb5e82e0667e5a4f2126eb1b9"
 }

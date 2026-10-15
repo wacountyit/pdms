@@ -56,6 +56,7 @@ async fn new_doc(
         core,
         &system(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: title.into(),
                 document_type_id: t,
@@ -785,6 +786,7 @@ async fn outlook_events_follow_dates_through_graph() {
                 &core,
                 &system(),
                 NewDocument {
+                    visibility: Default::default(),
                     metadata: MetadataInput {
                         title: title.into(),
                         document_type_id: t,
@@ -806,7 +808,7 @@ async fn outlook_events_follow_dates_through_graph() {
     let asphalt = mk(ops, "Asphalt", today + Duration::days(40)).await;
     let _copier = mk(hr, "Copier lease", today + Duration::days(50)).await;
     let secret = mk(hr, "Settlement", today + Duration::days(60)).await;
-    documents::set_access_settings(&core, &system(), secret, true, true)
+    documents::set_visibility(&core, &system(), secret, pdms_authz::Visibility::Restricted)
         .await
         .unwrap();
     let _far = mk(hr, "Far future", today + Duration::days(5000)).await;

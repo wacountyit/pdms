@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use pdms_audit::{AuditEvent, AuditValue, Category};
-use pdms_authz::{Capability, Permission, PermissionSet, Scope, Subject};
+use pdms_authz::{Capability, Permission, PermissionSet, Scope, Subject, Visibility};
 use pdms_storage::{BlobHash, ByteStream};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -95,8 +95,7 @@ pub struct Document {
     pub expiration_date: Option<NaiveDate>,
     pub review_interval_months: Option<i32>,
     pub custom_fields: Value,
-    pub inherit_acl: bool,
-    pub is_confidential: bool,
+    pub visibility: Visibility,
     pub legal_hold: bool,
     pub retention_policy_id: Option<Uuid>,
     pub retention_policy_name: Option<String>,
@@ -199,7 +198,7 @@ pub(crate) async fn fetch(conn: &mut PgConnection, id: Uuid) -> CoreResult<Optio
                   d.title, d.description, d.status AS "status: DocumentStatus",
                   d.execution_date, d.effective_date, d.last_review_date, d.next_review_date,
                   d.renewal_date, d.expiration_date, d.review_interval_months, d.custom_fields,
-                  d.inherit_acl, d.is_confidential, d.legal_hold, d.retention_policy_id,
+                  d.visibility::text AS "visibility!", d.legal_hold, d.retention_policy_id,
                   coalesce(dr.name, tr.name) AS "retention_policy_name?",
                   d.current_version, d.archived_at, d.deleted_at, d.row_version,
                   c.display_name AS "created_by_name?", d.created_at, d.updated_at
@@ -245,8 +244,7 @@ pub(crate) async fn fetch(conn: &mut PgConnection, id: Uuid) -> CoreResult<Optio
         expiration_date: r.expiration_date,
         review_interval_months: r.review_interval_months,
         custom_fields: r.custom_fields,
-        inherit_acl: r.inherit_acl,
-        is_confidential: r.is_confidential,
+        visibility: r.visibility.parse().map_err(CoreError::internal)?,
         legal_hold: r.legal_hold,
         retention_policy_id: r.retention_policy_id,
         retention_policy_name: r.retention_policy_name,
@@ -533,8 +531,7 @@ fn snapshot(d: &Document) -> Value {
         "review_interval_months": d.review_interval_months,
         "custom_fields": d.custom_fields,
         "tags": d.tags.iter().map(|t| t.name.clone()).collect::<Vec<_>>(),
-        "is_confidential": d.is_confidential,
-        "inherit_acl": d.inherit_acl,
+        "visibility": d.visibility.as_str(),
     })
 }
 
@@ -713,6 +710,8 @@ pub struct NewDocument {
     pub owner_id: Uuid,
     /// `Draft` or `Active`.
     pub status: DocumentStatus,
+    /// Who can see it (D-085); chosen at upload.
+    pub visibility: Visibility,
     pub tags: Vec<String>,
     pub file: Option<Upload>,
     /// Kind of the first file (normally `Initial`).
@@ -777,8 +776,8 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         "INSERT INTO documents (id, external_id, document_type_id, department_id, owner_id, title, description,
                                 status, execution_date, effective_date, last_review_date, next_review_date,
                                 renewal_date, expiration_date, review_interval_months, custom_fields,
-                                search_extra, created_by, archived_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NULL)",
+                                search_extra, created_by, visibility, archived_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::text::document_visibility, NULL)",
         id,
         external_id,
         meta.document_type_id,
@@ -797,6 +796,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         meta.custom_fields,
         search_extra(&defs, &meta.custom_fields),
         ctx.user_id(),
+        new.visibility.as_str(),
     )
     .execute(&mut *tx)
     .await?;
@@ -847,8 +847,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
             id,
             department_id: doc.department_id,
             owner_id: doc.owner_id,
-            inherit_acl: true,
-            is_confidential: false,
+            visibility: new.visibility,
         },
         external_id: doc.external_id.clone(),
         title: doc.title.clone(),
@@ -857,6 +856,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         .event(ctx, Category::Content, "document.created")
         .change("owner", AuditValue::Null, names.get(&new.owner_id).cloned())
         .change("status", AuditValue::Null, new.status.as_str())
+        .change("visibility", AuditValue::Null, new.visibility.as_str())
         .change(
             "tags",
             AuditValue::Null,
@@ -1104,25 +1104,19 @@ pub async fn transfer_owner(
     Ok(())
 }
 
-/// Inheritance and confidentiality (requires `manage_permissions`).
-pub async fn set_access_settings(
-    core: &Core,
-    ctx: &Ctx,
-    id: Uuid,
-    inherit_acl: bool,
-    is_confidential: bool,
-) -> CoreResult<()> {
+/// Who can see the document without an explicit share (D-085).
+/// Requires `manage_permissions`.
+pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) -> CoreResult<()> {
     let doc_ref = access::authorize(core, ctx, id, Permission::ManagePermissions).await?;
-    let a = &doc_ref.attrs;
-    if a.inherit_acl == inherit_acl && a.is_confidential == is_confidential {
+    let from = doc_ref.attrs.visibility;
+    if from == to {
         return Ok(());
     }
     let mut tx = core.db.begin().await?;
     sqlx::query!(
-        "UPDATE documents SET inherit_acl = $2, is_confidential = $3, updated_at = now() WHERE id = $1",
+        "UPDATE documents SET visibility = $2::text::document_visibility, updated_at = now() WHERE id = $1",
         id,
-        inherit_acl,
-        is_confidential
+        to.as_str()
     )
     .execute(&mut *tx)
     .await?;
@@ -1131,13 +1125,8 @@ pub async fn set_access_settings(
         &mut tx,
         vec![
             doc_ref
-                .event(
-                    ctx,
-                    Category::Permission,
-                    "document.access_settings_changed",
-                )
-                .change("inherit_acl", a.inherit_acl, inherit_acl)
-                .change("is_confidential", a.is_confidential, is_confidential),
+                .event(ctx, Category::Permission, "document.visibility_changed")
+                .change("visibility", from.as_str(), to.as_str()),
         ],
     )
     .await?;

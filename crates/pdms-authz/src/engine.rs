@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::capability::{Capability, has_capability};
 use crate::model::{
-    Assignee, DocumentAttrs, Grant, Permission, Policy, PositionAttrs, Principal, Scope,
+    Assignee, DocumentAttrs, Grant, Permission, Policy, PositionAttrs, Principal, Scope, Visibility,
 };
 
 /// Why access was allowed. Useful for explanations in the UI and access reviews.
@@ -13,6 +13,8 @@ use crate::model::{
 pub enum AllowReason {
     Owner,
     Grant(Uuid),
+    /// Any active account may view a County-wide document.
+    CountyWide,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -38,10 +40,10 @@ impl Decision {
 
 /// Whether a grant's scope covers the document.
 ///
-/// Department and global grants reach a document only when it inherits ACLs and
-/// is not confidential; document grants always apply.
+/// Department and global grants reach a document unless it is Restricted;
+/// document grants always apply.
 pub fn scope_covers(scope: Scope, doc: &DocumentAttrs) -> bool {
-    let inherits = doc.inherit_acl && !doc.is_confidential;
+    let inherits = doc.visibility.inherits_broad_grants();
     match scope {
         Scope::Document(id) => id == doc.id,
         Scope::Department(id) => inherits && id == doc.department_id,
@@ -70,6 +72,9 @@ pub fn decide(
     }
     if doc.owner_id == principal.user_id && policy.owner_permissions.satisfies(perm) {
         return Decision::Allow(AllowReason::Owner);
+    }
+    if perm == Permission::View && doc.visibility == Visibility::CountyWide {
+        return Decision::Allow(AllowReason::CountyWide);
     }
     grants
         .iter()

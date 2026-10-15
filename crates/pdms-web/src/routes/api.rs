@@ -678,7 +678,7 @@ pub async fn get_document(
         department_id: d.department_id,
         owner_id: d.owner_id,
         document_type_id: d.document_type_id,
-        is_confidential: d.is_confidential,
+        is_confidential: d.visibility == pdms_authz::Visibility::Restricted,
         legal_hold: d.legal_hold,
         current_version: d.current_version,
         created_at: d.created_at,
@@ -869,6 +869,7 @@ pub async fn create_document(
         &state.core,
         api.ctx(),
         NewDocument {
+            visibility: Default::default(),
             metadata: MetadataInput {
                 title: b.title,
                 description: b.description,
