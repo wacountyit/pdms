@@ -5,9 +5,13 @@
 //!
 //! - Reading comments needs `view` on the document; writing needs `view`
 //!   (or `edit` when `[comments] viewers_can_comment = false`).
-//! - Authors edit their own comments. Authors, and people who manage the
-//!   document's permissions, delete them. Every version of the text is kept
-//!   in `comment_revisions` (immutable); a deleted comment shows as deleted.
+//! - On County-wide documents only the document's owner and PADM
+//!   administrators may comment or reply (D-091); everyone who can view still
+//!   reads. Refused attempts are audited (`comment.post_denied`).
+//! - Authors edit their own comments (while they may still comment). Only a
+//!   comment's author deletes it; nobody else can, administrators included.
+//!   Every version of the text is kept in `comment_revisions` (immutable); a
+//!   deleted comment shows as deleted.
 //! - Prior versions are shown to the author, to those who manage the
 //!   document's permissions, and to auditors.
 //! - `@someone@example.org` or `@someone` (the part of a user's email before
@@ -134,19 +138,67 @@ fn clean(body: &str) -> CoreResult<String> {
     Ok(body)
 }
 
-async fn can_write(core: &Core, ctx: &Ctx, document_id: Uuid) -> CoreResult<DocRef> {
-    let perm = if core.config.comments.viewers_can_comment {
+fn base_permission(core: &Core) -> Permission {
+    if core.config.comments.viewers_can_comment {
         Permission::View
     } else {
         Permission::Edit
+    }
+}
+
+/// Rule: on County-wide documents only the owner and administrators comment.
+fn county_wide_allows(ctx: &Ctx, doc: &DocRef) -> bool {
+    if doc.attrs.visibility != pdms_authz::Visibility::CountyWide {
+        return true;
+    }
+    match ctx.principal() {
+        None => ctx.is_system(),
+        Some(p) => p.user_id == doc.attrs.owner_id || p.has_org_role(pdms_authz::role_keys::ADMIN),
+    }
+}
+
+/// Authorize writing a comment; a refusal by the County-wide rule is audited
+/// as `denied_action` on `object_id`.
+async fn can_write(
+    core: &Core,
+    ctx: &Ctx,
+    document_id: Uuid,
+    denied_action: &str,
+    object_id: Uuid,
+) -> CoreResult<DocRef> {
+    let doc = access::authorize(core, ctx, document_id, base_permission(core)).await?;
+    if !county_wide_allows(ctx, &doc) {
+        pdms_audit::record(
+            &core.db,
+            vec![
+                event(ctx, &doc, denied_action, object_id)
+                    .outcome(pdms_audit::Outcome::Denied)
+                    .context("reason", "county_wide_owner_or_admin_only"),
+            ],
+        )
+        .await?;
+        return Err(CoreError::Forbidden(None));
+    }
+    Ok(doc)
+}
+
+/// Whether the caller may post on this document now (no audit entry; for showing or hiding forms).
+pub async fn can_comment(core: &Core, ctx: &Ctx, document_id: Uuid) -> CoreResult<bool> {
+    if !access::can(core, ctx, document_id, base_permission(core)).await? {
+        return Ok(false);
+    }
+    let Some(doc) = access::load(core, document_id).await? else {
+        return Ok(false);
     };
-    access::authorize(core, ctx, document_id, perm).await
+    Ok(county_wide_allows(ctx, &doc))
 }
 
 /// A document's comments as threads, oldest first (requires `view`).
 pub async fn list(core: &Core, ctx: &Ctx, document_id: Uuid) -> CoreResult<Vec<Thread>> {
     let doc = access::authorize(core, ctx, document_id, Permission::View).await?;
     let moderator = access::can(core, ctx, document_id, Permission::ManagePermissions).await?;
+    let may_write = access::can(core, ctx, document_id, base_permission(core)).await?
+        && county_wide_allows(ctx, &doc);
     let auditor = ctx.can(Capability::ViewAudit);
     let me = ctx.user_id();
     let rows = sqlx::query!(
@@ -185,8 +237,8 @@ pub async fn list(core: &Core, ctx: &Ctx, document_id: Uuid) -> CoreResult<Vec<T
                     })
                     .collect(),
                 body: if deleted { String::new() } else { r.body },
-                can_edit: mine && !deleted,
-                can_delete: (mine || moderator) && !deleted,
+                can_edit: mine && !deleted && may_write,
+                can_delete: mine && !deleted,
                 can_see_history: (mine || moderator || auditor) && r.revisions > 1
                     || (deleted && (mine || moderator || auditor)),
                 id: r.id,
@@ -283,7 +335,7 @@ pub async fn post(
     body: &str,
 ) -> CoreResult<Uuid> {
     let author = ctx.user_id().ok_or(CoreError::Unauthenticated)?;
-    let doc = can_write(core, ctx, document_id).await?;
+    let doc = can_write(core, ctx, document_id, "comment.post_denied", document_id).await?;
     let body = clean(body)?;
     let mut tx = core.db.begin().await?;
     let parent_author = match parent {
@@ -412,7 +464,7 @@ pub async fn edit(core: &Core, ctx: &Ctx, comment_id: Uuid, body: &str) -> CoreR
     let mut conn = core.db.acquire().await?;
     let (doc_id, author, _, _, _) = load_one(&mut conn, comment_id).await?;
     drop(conn);
-    let doc = can_write(core, ctx, doc_id).await?;
+    let doc = can_write(core, ctx, doc_id, "comment.edit_denied", comment_id).await?;
     let mut tx = core.db.begin().await?;
     let (_, _, before, deleted, old_mentions) = load_one(&mut tx, comment_id).await?;
     if author != me {
@@ -494,16 +546,16 @@ pub async fn edit(core: &Core, ctx: &Ctx, comment_id: Uuid, body: &str) -> CoreR
     Ok(())
 }
 
-/// Delete a comment (its author, or someone who manages the document's
-/// permissions). The text stays in the history; the thread shows it as deleted.
+/// Delete a comment. Only its author may (D-091): administrators, the
+/// document's owner, and permission managers may not. The text stays in the
+/// history; the thread shows it as deleted.
 pub async fn delete(core: &Core, ctx: &Ctx, comment_id: Uuid) -> CoreResult<()> {
     let me = ctx.user_id().ok_or(CoreError::Unauthenticated)?;
     let mut conn = core.db.acquire().await?;
     let (doc_id, author, _, _, _) = load_one(&mut conn, comment_id).await?;
     drop(conn);
     let doc = access::authorize(core, ctx, doc_id, Permission::View).await?;
-    let moderator = access::can(core, ctx, doc_id, Permission::ManagePermissions).await?;
-    if author != me && !moderator {
+    if author != me {
         pdms_audit::record(
             &core.db,
             vec![
@@ -528,11 +580,7 @@ pub async fn delete(core: &Core, ctx: &Ctx, comment_id: Uuid) -> CoreResult<()> 
     .await?;
     pdms_audit::append(
         &mut tx,
-        vec![
-            event(ctx, &doc, "comment.deleted", comment_id)
-                .context("body", body)
-                .context("by_moderator", author != me),
-        ],
+        vec![event(ctx, &doc, "comment.deleted", comment_id).context("body", body)],
     )
     .await?;
     tx.commit().await?;

@@ -251,3 +251,58 @@ async fn outlook_and_ocr_page_is_for_integration_managers() {
     s.login("staff@x.org", &staff_secret).await;
     assert_eq!(s.get("/admin/outlook").await.status, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn county_wide_document_page_hides_comment_forms_from_non_owners() {
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "OPS", "Operations")
+        .await
+        .unwrap();
+    let (owner, owner_secret) = user(&app.core, "owner@x.org", Some(dept), None).await;
+    let (_, col_secret) = user(&app.core, "col@x.org", Some(dept), None).await;
+    let t = pdms_core::documents::types::type_by_key(&app.core.db, "partnership_agreement")
+        .await
+        .unwrap()
+        .id;
+    let doc = pdms_core::documents::create(
+        &app.core,
+        &system(),
+        pdms_core::documents::NewDocument {
+            visibility: pdms_authz::Visibility::CountyWide,
+            metadata: pdms_core::documents::MetadataInput {
+                title: "Public notice".into(),
+                document_type_id: t,
+                department_id: dept,
+                ..Default::default()
+            },
+            owner_id: owner,
+            status: pdms_core::documents::DocumentStatus::Active,
+            tags: vec![],
+            file: None,
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    let form = format!(r#"action="/documents/{doc}/comments""#);
+    let sentence = "Only the owner and administrators can comment on County-wide documents.";
+
+    let mut o = Browser::new(&app);
+    o.login("owner@x.org", &owner_secret).await;
+    let page = o.get(&format!("/documents/{doc}")).await;
+    assert!(page.body.contains(&form) && !page.body.contains(sentence));
+
+    let mut c = Browser::new(&app);
+    c.login("col@x.org", &col_secret).await;
+    let page = c.get(&format!("/documents/{doc}")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains(sentence), "{}", page.body);
+    assert!(!page.body.contains(&form));
+    let r = c
+        .post(
+            &format!("/documents/{doc}/comments"),
+            &[("_csrf", page.csrf().as_str()), ("body", "hello")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+}

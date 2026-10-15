@@ -131,15 +131,13 @@ Every change is recorded in the audit log with before and after values.
 - **Restricted documents** ignore organization-wide and department grants;
   they need explicit per-document grants (set on the document page).
 - **County-wide documents** may be viewed and downloaded by every active
-  account; nothing else (no edit, approve, or export). Current side effects,
-  which may change (see ROADMAP §0.3): (1) their review, renewal, and
-  expiration dates appear on every employee's dashboard, calendar, and
-  "everything you can see" ICS/Outlook feed, because those views list
-  everything a person can view; (2) with the default
-  `[comments] viewers_can_comment = true`, every county employee can comment
-  on (and @mention people from) a County-wide document, and only a comment's
-  author or someone with `manage_permissions` can delete comments, so an owner
-  without `manage_permissions` cannot moderate; (3) webhook service accounts
+  account; nothing else (no edit, approve, or export). Side effects: (1) their
+  review, renewal, and expiration dates appear on every employee's
+  dashboard, calendar, and "everything you can see" ICS/Outlook feed, because
+  those views list everything a person can view (decided, D-090); (2) only
+  the document's owner and PADM administrators can comment on them, though
+  everyone who can see them can read the comments, and only a comment's
+  author can delete it (decided, D-091); (3) webhook service accounts
   count as active accounts, so they receive events about County-wide documents.
 - **Changes apply immediately.** Removing a grant, role, or membership affects
   the user's very next request. Disabling a user signs them out everywhere.
@@ -525,13 +523,16 @@ severity.
 
 **Comments.** Every document has a **Comments** section. Anyone who can see
 the document can comment and reply (set `[comments] viewers_can_comment =
-false` to require edit access). Mention people with `@` and their email
+false` to require edit access), except on County-wide documents, where only
+the owner and administrators can comment (everyone who can see it still reads
+the comments). Mention people with `@` and their email
 address, or the part before the `@` when it is unique (`@carol`); they are
 notified if they can see the document. Replies notify the person replied to.
-- Authors can edit their comments; the earlier text is kept and shown under
+- Authors can edit their comments (while they may still comment); the earlier text is kept and shown under
   **History** to the author, the document's permission managers, and auditors.
-- Authors and permission managers can delete a comment; it shows as deleted,
-  and its text stays in the history and the audit log.
+- Only the author can delete a comment, not administrators, owners, or
+  permission managers. It shows as deleted, and its text stays in the history
+  and the audit log.
 
 **Text in files and dates found.** When a file is uploaded, PDMS reads its
 text in the background: text in ordinary PDFs, Word (`.docx`), and text files

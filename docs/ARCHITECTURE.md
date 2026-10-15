@@ -559,14 +559,16 @@ ending in `verify-integrity`.
 
 **Comments (`comments`).** One level of threading (comment, replies).
 Reading needs `view`; writing needs `view` (or `edit` when
-`[comments] viewers_can_comment = false`). `@email` or `@local-part` (when
+`[comments] viewers_can_comment = false`), and on County-wide documents only
+the owner and administrators may write (D-091; refusals audited as
+`comment.post_denied`). `@email` or `@local-part` (when
 unique) mentions resolve to active users; mentioned people who can view the
 document get an action notice (in-app and email), and replies notify the
 parent's author. Every version of the text is stored in `comment_revisions`
-(trigger-enforced immutable); edits by the author only; deletion by the
-author or anyone with `manage_permissions` is a soft delete. Earlier versions
+(trigger-enforced immutable); edits by the author only (while they may still
+comment); deletion by the author only (D-091) is a soft delete. Earlier versions
 are visible to the author, permission managers, and auditors. All actions are
-audited with the text (`comment.created/replied/edited/deleted`, denials too)
+audited with the text (`comment.created/replied/edited/deleted`, denials too; `*_denied` is not published)
 and published to webhooks.
 
 **Text and date suggestions (`ocr`).** Appending a file version queues

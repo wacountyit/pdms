@@ -53,5 +53,7 @@
     <span id="new-comment-help" class="help">Mention someone with @ and their email address (or the part before the @). They are notified if they can see this document. Comments are kept in the record: edits keep the earlier text.</span>
     <div><button type="submit">Post comment</button></div>
   </form>
+  {% else if d.visibility.as_str() == "county_wide" %}
+  <p class="muted">Only the owner and administrators can comment on County-wide documents.</p>
   {% endif %}
 </section>

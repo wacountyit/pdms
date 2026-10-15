@@ -195,12 +195,16 @@ async fn comments_thread_mention_and_keep_every_revision() {
     let a = as_user(&core, admin).await;
     assert_eq!(comments::history(&core, &a, reply).await.unwrap().len(), 2);
 
-    // Deleting: authors and permission managers; the text stays in the history.
+    // Deleting: authors only; the text stays in the history.
     assert!(matches!(
         comments::delete(&core, &as_user(&core, colleague).await, c1).await,
         Err(CoreError::Forbidden(_))
     ));
-    comments::delete(&core, &a, c1).await.unwrap();
+    assert!(matches!(
+        comments::delete(&core, &a, c1).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    comments::delete(&core, &o, c1).await.unwrap();
     let threads = comments::list(&core, &o, doc).await.unwrap();
     assert!(threads[0].comment.deleted_at.is_some() && threads[0].comment.body.is_empty());
     assert_eq!(threads[0].replies.len(), 1, "replies stay");
@@ -238,6 +242,154 @@ async fn comments_thread_mention_and_keep_every_revision() {
     assert!(!pdms_core::integrations::is_published(
         "comment.edit_denied"
     ));
+    assert!(!pdms_core::integrations::is_published(
+        "comment.post_denied"
+    ));
+}
+
+async fn make_admin(core: &Core, email: &str) -> Uuid {
+    let admin = directory::create_user(&core.db, &system(), email, email, None)
+        .await
+        .unwrap();
+    let r = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    directory::assign_role(&core.db, &system(), admin, r, None)
+        .await
+        .unwrap();
+    admin
+}
+
+#[tokio::test]
+async fn county_wide_comments_are_owner_and_admin_only() {
+    let (core, _db) = core().await;
+    let (owner, dept) = user_in_new_department(&core, "OPS", "owner@x.org").await;
+    let colleague = directory::create_user(&core.db, &system(), "C", "c@x.org", Some(dept))
+        .await
+        .unwrap();
+    let (outsider, _) = user_in_new_department(&core, "HR", "outsider@x.org").await;
+    let admin = make_admin(&core, "admin@x.org").await;
+    let o = as_user(&core, owner).await;
+    let a = as_user(&core, admin).await;
+    let c = as_user(&core, colleague).await;
+    let x = as_user(&core, outsider).await;
+
+    // Department document: the colleague comments, as before.
+    let doc = new_doc(&core, dept, owner, "Dept doc", None).await;
+    assert!(comments::can_comment(&core, &c, doc).await.unwrap());
+    let earlier = comments::post(&core, &c, doc, None, "from a colleague")
+        .await
+        .unwrap();
+
+    // It becomes County-wide.
+    documents::set_visibility(&core, &o, doc, pdms_authz::Visibility::CountyWide)
+        .await
+        .unwrap();
+    for (who, allowed) in [(&o, true), (&a, true), (&c, false), (&x, false)] {
+        assert_eq!(
+            comments::can_comment(&core, who, doc).await.unwrap(),
+            allowed
+        );
+    }
+    let by_owner = comments::post(&core, &o, doc, None, "owner note")
+        .await
+        .unwrap();
+    comments::post(&core, &a, doc, Some(by_owner), "admin reply")
+        .await
+        .unwrap();
+    for who in [&c, &x] {
+        assert!(matches!(
+            comments::post(&core, who, doc, None, "hello").await,
+            Err(CoreError::Forbidden(_))
+        ));
+        assert!(matches!(
+            comments::post(&core, who, doc, Some(by_owner), "reply").await,
+            Err(CoreError::Forbidden(_))
+        ));
+        assert_eq!(comments::list(&core, who, doc).await.unwrap().len(), 2);
+    }
+    let audit = audit_actions(&core).await;
+    assert!(audit.iter().any(|x| x == "comment.post_denied"));
+
+    // The colleague's earlier comment: can delete, can no longer edit.
+    let listed = comments::list(&core, &c, doc).await.unwrap();
+    let mine = listed.iter().find(|t| t.comment.id == earlier).unwrap();
+    assert!(mine.comment.can_delete && !mine.comment.can_edit);
+    assert!(matches!(
+        comments::edit(&core, &c, earlier, "changed").await,
+        Err(CoreError::Forbidden(_))
+    ));
+    assert!(
+        audit_actions(&core)
+            .await
+            .iter()
+            .any(|x| x == "comment.edit_denied")
+    );
+    // The owner can still edit their own.
+    let listed = comments::list(&core, &o, doc).await.unwrap();
+    assert!(
+        listed
+            .iter()
+            .find(|t| t.comment.id == by_owner)
+            .unwrap()
+            .comment
+            .can_edit
+    );
+    comments::delete(&core, &c, earlier).await.unwrap();
+
+    // Back to Department: the colleague may comment again.
+    documents::set_visibility(&core, &o, doc, pdms_authz::Visibility::Department)
+        .await
+        .unwrap();
+    comments::post(&core, &c, doc, None, "back again")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn only_authors_delete_comments() {
+    let (core, _db) = core().await;
+    let (owner, dept) = user_in_new_department(&core, "OPS", "owner@x.org").await;
+    let author = directory::create_user(&core.db, &system(), "A", "a@x.org", Some(dept))
+        .await
+        .unwrap();
+    let manager = directory::create_user(&core.db, &system(), "M", "m@x.org", Some(dept))
+        .await
+        .unwrap();
+    let admin = make_admin(&core, "admin@x.org").await;
+    let doc = new_doc(&core, dept, owner, "Doc", None).await;
+    acl::grant(
+        &core.db,
+        &system(),
+        Subject::User(manager),
+        Scope::Department(dept),
+        Permission::ManagePermissions,
+        None,
+        "t",
+    )
+    .await
+    .unwrap();
+    let au = as_user(&core, author).await;
+    let c = comments::post(&core, &au, doc, None, "mine").await.unwrap();
+    for who in [admin, owner, manager] {
+        let ctx = as_user(&core, who).await;
+        assert!(matches!(
+            comments::delete(&core, &ctx, c).await,
+            Err(CoreError::Forbidden(_))
+        ));
+        let t = comments::list(&core, &ctx, doc).await.unwrap();
+        assert!(!t[0].comment.can_delete);
+    }
+    assert!(
+        comments::list(&core, &au, doc).await.unwrap()[0]
+            .comment
+            .can_delete
+    );
+    assert!(
+        audit_actions(&core)
+            .await
+            .iter()
+            .any(|x| x == "comment.delete_denied")
+    );
+    comments::delete(&core, &au, c).await.unwrap();
 }
 
 #[tokio::test]

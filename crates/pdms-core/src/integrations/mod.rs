@@ -66,6 +66,7 @@ const NOT_PUBLISHED: &[&str] = &[
     "workflow.decision_denied",
     "workflow.comment_denied",
     "workflow.cancel_denied",
+    "comment.post_denied",
     "comment.edit_denied",
     "comment.delete_denied",
     "comment.history_denied",

@@ -127,11 +127,7 @@ pub async fn collab_view(
     let core = &state.core;
     let threads = comments::list(core, &user.ctx, document_id).await?;
     let count = threads.iter().map(|t| 1 + t.replies.len()).sum();
-    let can_comment = if core.config.comments.viewers_can_comment {
-        true
-    } else {
-        can_edit
-    };
+    let can_comment = comments::can_comment(core, &user.ctx, document_id).await?;
     let text = ocr::latest_text(core, &user.ctx, document_id).await?;
     let suggestions: Vec<SuggestionView> = ocr::suggestions(core, &user.ctx, document_id)
         .await?
