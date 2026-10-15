@@ -455,3 +455,29 @@ fn step_assignees_match_users_and_department_scoped_roles() {
         "role held for another department"
     );
 }
+
+#[test]
+fn visibility_round_trips_labels_and_orders() {
+    for v in Visibility::ALL {
+        assert_eq!(v.as_str().parse::<Visibility>().unwrap(), v);
+        assert_eq!(Visibility::try_from(v.as_str().to_owned()).unwrap(), v);
+        assert_eq!(v.to_string(), v.as_str());
+    }
+    assert_eq!(Visibility::default(), Visibility::Department);
+    assert_eq!(
+        Visibility::ALL.map(Visibility::label),
+        ["Department", "County-wide", "Restricted"]
+    );
+    for bad in ["public", "County-wide", "", "RESTRICTED"] {
+        assert!(bad.parse::<Visibility>().is_err(), "{bad:?}");
+    }
+    // Restrictiveness: County-wide < Department < Restricted.
+    assert!(Visibility::Restricted.is_tighter_than(Visibility::Department));
+    assert!(Visibility::Department.is_tighter_than(Visibility::CountyWide));
+    assert!(Visibility::Restricted.is_tighter_than(Visibility::CountyWide));
+    assert!(!Visibility::CountyWide.is_tighter_than(Visibility::Department));
+    assert!(!Visibility::Department.is_tighter_than(Visibility::Department));
+    assert!(Visibility::Department.inherits_broad_grants());
+    assert!(Visibility::CountyWide.inherits_broad_grants());
+    assert!(!Visibility::Restricted.inherits_broad_grants());
+}

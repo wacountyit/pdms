@@ -121,6 +121,92 @@ impl fmt::Debug for PermissionSet {
     }
 }
 
+/// Who can see a document without an explicit share (D-085).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Visibility {
+    /// Department and organization-wide grants apply. The default.
+    #[default]
+    Department,
+    /// As `Department`, and every active account may also view it.
+    CountyWide,
+    /// Only document-scope grants and the owner rule apply.
+    Restricted,
+}
+
+impl Visibility {
+    pub const ALL: [Visibility; 3] = [
+        Visibility::Department,
+        Visibility::CountyWide,
+        Visibility::Restricted,
+    ];
+
+    /// Value of the `document_visibility` Postgres enum.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Visibility::Department => "department",
+            Visibility::CountyWide => "county_wide",
+            Visibility::Restricted => "restricted",
+        }
+    }
+
+    /// What people see in the interface.
+    pub fn label(self) -> &'static str {
+        match self {
+            Visibility::Department => "Department",
+            Visibility::CountyWide => "County-wide",
+            Visibility::Restricted => "Restricted",
+        }
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Visibility::CountyWide => 0,
+            Visibility::Department => 1,
+            Visibility::Restricted => 2,
+        }
+    }
+
+    /// Whether `self` lets fewer people see the document than `other`.
+    pub fn is_tighter_than(self, other: Visibility) -> bool {
+        self.rank() > other.rank()
+    }
+
+    /// Whether department- and global-scope grants reach the document.
+    pub fn inherits_broad_grants(self) -> bool {
+        self != Visibility::Restricted
+    }
+}
+
+impl fmt::Display for Visibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("unknown visibility: {0}")]
+pub struct UnknownVisibility(pub String);
+
+impl FromStr for Visibility {
+    type Err = UnknownVisibility;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Visibility::ALL
+            .into_iter()
+            .find(|v| v.as_str() == s)
+            .ok_or_else(|| UnknownVisibility(s.to_owned()))
+    }
+}
+
+impl TryFrom<String> for Visibility {
+    type Error = UnknownVisibility;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
 /// Who a grant is given to.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", content = "id", rename_all = "snake_case")]

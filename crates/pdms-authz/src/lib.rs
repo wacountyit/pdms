@@ -22,6 +22,6 @@ pub use engine::{
 };
 pub use model::{
     Assignee, DocumentAttrs, Grant, Permission, PermissionSet, Policy, PositionAttrs, Principal,
-    RoleHolding, Scope, Subject, UnknownPermission,
+    RoleHolding, Scope, Subject, UnknownPermission, UnknownVisibility, Visibility,
 };
 pub use sql::{InvalidAlias, SqlFragment, SqlParam, SqlPart, visible_documents_predicate};
