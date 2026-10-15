@@ -159,23 +159,24 @@ All login, logout, failed login, and lockout events are audited.
 
 ### Decision rule
 
-`allowed(principal, perm, document)` is true iff the principal is active and either:
+`allowed(principal, perm, document)` is true iff the principal is active and any of:
 
 1. the principal is the document's primary owner and `perm` is in the
-   configured owner set (default `view`, `edit`); or
+   configured owner set (default `view`, `edit`);
 2. some unexpired grant has a matching permission, its subject matches the
    principal, and its scope matches the document:
    - `document` scope: same document. Always applies.
    - `department` scope: same department, **and** the document is not Restricted.
    - `global` scope: the document is not Restricted.
    - A role subject matches if the principal holds that role org-wide or for
-     the document's department.
+     the document's department; or
+3. `perm` is `view` and the document is County-wide.
 
 So:
 
 - **Read-only default:** creating a department also creates a grant
   (department members → `view` on that department). A new user can view their
-  department's documents and nothing else.
+  department's documents, plus County-wide documents, and nothing else.
 - **Visibility (D-085):** every document is *Department* (default), *County-wide*
   (additionally, every active account may **view** it; nothing else), or
   *Restricted* (department and global grants never apply, so it needs explicit

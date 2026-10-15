@@ -122,7 +122,7 @@ Every change is recorded in the audit log with before and after values.
 
 - **Read-only by default.** Creating a department also grants its members
   *view* on that department's documents. A new user in a department can read
-  that department's documents and nothing else.
+  that department's documents, plus County-wide documents, and nothing else.
 - **Grants add access.** A grant gives a *subject* (a user, group, every member
   of a department, or holders of a role) a *permission* (`view`, `create`,
   `edit`, `delete`, `approve`, `manage_permissions`, `export`) on a *scope*
@@ -130,6 +130,17 @@ Every change is recorded in the audit log with before and after values.
   permission except `create` includes `view`. Grants can expire.
 - **Restricted documents** ignore organization-wide and department grants;
   they need explicit per-document grants (set on the document page).
+- **County-wide documents** may be viewed and downloaded by every active
+  account; nothing else (no edit, approve, or export). Current side effects,
+  which may change (see ROADMAP §0.3): (1) their review, renewal, and
+  expiration dates appear on every employee's dashboard, calendar, and
+  "everything you can see" ICS/Outlook feed, because those views list
+  everything a person can view; (2) with the default
+  `[comments] viewers_can_comment = true`, every county employee can comment
+  on (and @mention people from) a County-wide document, and only a comment's
+  author or someone with `manage_permissions` can delete comments, so an owner
+  without `manage_permissions` cannot moderate; (3) webhook service accounts
+  count as active accounts, so they receive events about County-wide documents.
 - **Changes apply immediately.** Removing a grant, role, or membership affects
   the user's very next request. Disabling a user signs them out everywhere.
 
@@ -177,7 +188,8 @@ search by words in the title, ID, description, tags, or field values, and
 filter by type, department, status, tags (any or all), a date range, or a
 custom field. The list can be sorted and exported to CSV; the export includes
 only documents you have `export` permission on, and is recorded in the audit
-log.
+log. The export's former "Confidential" yes/no column is now a "Visibility"
+column (Department / County-wide / Restricted).
 
 **New document** appears for people who may create documents in at least one
 department.

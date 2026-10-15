@@ -628,7 +628,7 @@ unique permissions poorly. PADM grants each department folder to that
 department's people individually, because Entra groups are not available
 (D-086).
 
-### D-085 Three visibility levels replace "confidential" and "inherit permissions" — Accepted (design, not built)
+### D-085 Three visibility levels replace "confidential" and "inherit permissions" — Accepted (visibility built in P1; SharePoint folder moves pending P3)
 Each document has one of three visibility levels:
 
 - **Department** (default): its department, plus anyone it is explicitly

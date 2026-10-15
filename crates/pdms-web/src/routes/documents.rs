@@ -489,7 +489,7 @@ fn visibility_options() -> Vec<(&'static str, &'static str, &'static str)> {
         .into_iter()
         .map(|v| {
             let help = match v {
-                Visibility::Department => "its department and anyone you share it with",
+                Visibility::Department => "its department, organization-wide roles such as administrators, and anyone you share it with",
                 Visibility::CountyWide => "every county employee can view and download it",
                 Visibility::Restricted => "only the owner and people it is shared with",
             };

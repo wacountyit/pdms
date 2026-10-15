@@ -78,7 +78,7 @@ PDMS_AUTH__LOCAL__REQUIRE_TOTP=false cargo run -p pdms -- serve --with-worker
 
 The demo includes sample documents: an partnership agreement with its 2013 original
 and 2014 amendment (signed by the presiding officer, waiting on the partner), a
-contract, policies (one confidential), a grant agreement, and a equipment inspection
+contract, policies (one Restricted, one County-wide), a grant agreement, and a equipment inspection
 contract in review waiting for legal counsel. Three boards show an overdue
 reappointment decision, a holdover, a vacancy, and appointment history.
 Demo users (password `demo-password-change-me`): `admin@example.org`,

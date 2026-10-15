@@ -72,6 +72,7 @@ Work through these in order unless noted. Each one gets its own spec and plan.
 | # | Sub-project | Scope | Status | Spec / plan |
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
+| 1b | **Visibility follow-ups** (decide before go-live) | (1) Should County-wide documents appear on everyone's dashboard, calendar, and feeds, or only for people who can see them some other way? (2) Who may comment on County-wide documents, and should owners be able to moderate? | Not started | final P1 review |
 | 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility), P3 (storage), P4 (access, change detection, operations) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Planned**: spec approved; plan P2 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
@@ -128,9 +129,10 @@ Denied access attempts**.
 **Sign-in and access**
 - [ ] Entra sign-in creates the user with the right departments and roles from group mappings; removing someone from a group changes their access at next sign-in.
 - [ ] Break-glass administrator signs in with password + authenticator code; five wrong passwords lock it temporarily.
-- [ ] A new staff member sees only their department's documents (search, calendar, dashboard, ICS feed, API, direct links all agree).
+- [ ] A new staff member sees only their department's documents plus County-wide ones (search, calendar, dashboard, ICS feed, API, direct links all agree).
+- [ ] A County-wide document is visible to every active account; changing it to Restricted hides it on the next click.
 - [ ] Sharing one document with another department exposes only that document; revoking a grant takes effect on the next click.
-- [ ] Confidential documents are invisible to everyone without an explicit grant, including administrators, exports, and Outlook.
+- [ ] Restricted documents are invisible to everyone without an explicit grant, including administrators, exports, and Outlook.
 
 **Documents**
 - [ ] Create each document type with its custom fields; upload PDFs, Word files, scans, images; uploads of other file types are refused.
