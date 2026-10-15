@@ -503,3 +503,89 @@ async fn token_webhook_export_and_report_pages() {
     // Someone else cannot download it.
     assert_eq!(s.get(&link).await.status, StatusCode::FORBIDDEN);
 }
+
+/// An HR department whose members may create and edit; returns (dept, user).
+async fn hr_editor(app: &App) -> (Uuid, Uuid) {
+    let hr = directory::create_department(&app.core.db, &system(), "HR", "HR")
+        .await
+        .unwrap();
+    for p in [Permission::Create, Permission::Edit] {
+        acl::grant(
+            &app.core.db,
+            &system(),
+            Subject::Department(hr),
+            Scope::Department(hr),
+            p,
+            None,
+            "t",
+        )
+        .await
+        .unwrap();
+    }
+    let (uid, _) = user(&app.core, "alice@x.org", Some(hr), None).await;
+    (hr, uid)
+}
+
+#[tokio::test]
+async fn api_reports_and_accepts_visibility() {
+    let app = app().await;
+    let (hr, alice) = hr_editor(&app).await;
+    let t = token(&app, alice, &["documents:read", "documents:write"]).await;
+    let mut b = Browser::new(&app);
+    let body = format!(
+        r#"{{"title":"Leave policy","document_type":"policy","department_id":"{hr}","status":"active","visibility":"county_wide"}}"#
+    );
+    let r = call(&mut b, "POST", "/api/v1/documents", Some(&t), Some(&body)).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+    let id = json(&r)["id"].as_str().unwrap().to_owned();
+    let d = json(
+        &call(
+            &mut b,
+            "GET",
+            &format!("/api/v1/documents/{id}"),
+            Some(&t),
+            None,
+        )
+        .await,
+    );
+    assert_eq!(d["visibility"], "county_wide");
+    assert_eq!(d["is_confidential"], false);
+    let list = json(&call(&mut b, "GET", "/api/v1/documents", Some(&t), None).await);
+    assert_eq!(list["items"][0]["visibility"], "county_wide");
+
+    // Someone in another department sees it through the API too.
+    let ops = directory::create_department(&app.core.db, &system(), "OPS", "OPS")
+        .await
+        .unwrap();
+    let (bob, _) = user(&app.core, "bob@x.org", Some(ops), None).await;
+    let tb = token(&app, bob, &["documents:read"]).await;
+    let theirs = json(&call(&mut b, "GET", "/api/v1/documents", Some(&tb), None).await);
+    assert_eq!(theirs["total"], 1);
+    assert_eq!(theirs["items"][0]["title"], "Leave policy");
+}
+
+#[tokio::test]
+async fn api_rejects_unknown_visibility() {
+    let app = app().await;
+    let (hr, alice) = hr_editor(&app).await;
+    let t = token(&app, alice, &["documents:write"]).await;
+    let mut b = Browser::new(&app);
+    for bad in ["public", "", "County-wide"] {
+        let body = format!(
+            r#"{{"title":"X","document_type":"policy","department_id":"{hr}","visibility":"{bad}"}}"#
+        );
+        let r = call(&mut b, "POST", "/api/v1/documents", Some(&t), Some(&body)).await;
+        assert_eq!(
+            r.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{bad:?}: {}",
+            r.body
+        );
+        assert!(r.body.contains("visibility"), "{bad:?}: {}", r.body);
+    }
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM documents")
+        .fetch_one(&app.core.db)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}

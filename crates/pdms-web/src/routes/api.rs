@@ -256,6 +256,8 @@ pub struct DocumentSummaryOut {
     pub owner: String,
     /// `draft`, `in_review`, `active`, `renewal_due`, `overdue`, `expired`, `superseded`, `archived`.
     pub status: String,
+    /// `department`, `county_wide` (every county account may view), or `restricted`.
+    pub visibility: String,
     pub execution_date: Option<NaiveDate>,
     pub effective_date: Option<NaiveDate>,
     pub last_review_date: Option<NaiveDate>,
@@ -286,6 +288,7 @@ pub struct DocumentOut {
     pub department_id: Uuid,
     pub owner_id: Uuid,
     pub document_type_id: Uuid,
+    /// Deprecated: true when visibility is restricted.
     pub is_confidential: bool,
     pub legal_hold: bool,
     pub current_version: i32,
@@ -436,6 +439,9 @@ pub struct CreateDocumentIn {
     /// `draft` (default) or `active`.
     #[serde(default)]
     pub status: Option<String>,
+    /// `department` (default), `county_wide`, or `restricted`.
+    #[serde(default)]
+    pub visibility: Option<String>,
     pub execution_date: Option<NaiveDate>,
     pub effective_date: Option<NaiveDate>,
     pub last_review_date: Option<NaiveDate>,
@@ -530,6 +536,7 @@ fn summary_out(state: &AppState, d: search::DocumentSummary) -> DocumentSummaryO
         department: d.department_name,
         owner: d.owner_name,
         status: d.status.as_str().to_owned(),
+        visibility: d.visibility.as_str().to_owned(),
         execution_date: d.execution_date,
         effective_date: d.effective_date,
         last_review_date: d.last_review_date,
@@ -663,6 +670,7 @@ pub async fn get_document(
             department: d.department_name.clone(),
             owner: d.owner_name.clone(),
             status: d.status.as_str().to_owned(),
+            visibility: d.visibility.as_str().to_owned(),
             execution_date: d.execution_date,
             effective_date: d.effective_date,
             last_review_date: d.last_review_date,
@@ -865,11 +873,17 @@ pub async fn create_document(
         "active" => DocumentStatus::Active,
         _ => return Err(CoreError::validation("status must be draft or active").into()),
     };
+    let visibility = match b.visibility.as_deref() {
+        None => pdms_authz::Visibility::Department,
+        Some(v) => v.parse().map_err(|_| {
+            CoreError::validation("visibility must be department, county_wide, or restricted")
+        })?,
+    };
     let id = documents::create(
         &state.core,
         api.ctx(),
         NewDocument {
-            visibility: Default::default(),
+            visibility,
             metadata: MetadataInput {
                 title: b.title,
                 description: b.description,
