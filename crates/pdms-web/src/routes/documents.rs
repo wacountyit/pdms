@@ -360,7 +360,7 @@ pub struct Row {
     pub next_review: String,
     pub renewal: String,
     pub expiration: String,
-    pub confidential: bool,
+    pub visibility: &'static str,
     pub tags: Vec<(String, String)>,
 }
 
@@ -411,7 +411,7 @@ pub async fn list(
                 next_review: fmt_date(d.next_review_date),
                 renewal: fmt_date(d.renewal_date),
                 expiration: fmt_date(d.expiration_date),
-                confidential: d.visibility == Visibility::Restricted,
+                visibility: d.visibility.label(),
                 tags: d
                     .tags
                     .0
@@ -480,6 +480,30 @@ struct NewPage {
     users: Vec<UserSummary>,
     fields: Vec<FieldInput>,
     max_upload_mb: u64,
+    visibility_options: Vec<(&'static str, &'static str, &'static str)>,
+}
+
+/// (value, label, explanation) for the visibility choices, in display order.
+fn visibility_options() -> Vec<(&'static str, &'static str, &'static str)> {
+    Visibility::ALL
+        .into_iter()
+        .map(|v| {
+            let help = match v {
+                Visibility::Department => "its department and anyone you share it with",
+                Visibility::CountyWide => "every county employee can view and download it",
+                Visibility::Restricted => "only the owner and people it is shared with",
+            };
+            (v.as_str(), v.label(), help)
+        })
+        .collect()
+}
+
+fn parse_visibility(s: &str) -> CoreResult<Visibility> {
+    if s.is_empty() {
+        return Ok(Visibility::Department);
+    }
+    s.parse()
+        .map_err(|_| CoreError::validation("choose who can see the document"))
 }
 
 async fn render_new(
@@ -521,6 +545,7 @@ async fn render_new(
         form,
         error,
         max_upload_mb: state.core.config.storage.max_upload_bytes / (1024 * 1024),
+        visibility_options: visibility_options(),
     };
     Ok((status, Html(page.render()?)).into_response())
 }
@@ -605,6 +630,7 @@ pub async fn create(
             "draft" => DocumentStatus::Draft,
             _ => DocumentStatus::Active,
         };
+        let visibility = parse_visibility(form.v("visibility"))?;
         let tags: Vec<String> = form
             .v("tags")
             .split(',')
@@ -615,7 +641,7 @@ pub async fn create(
             &state.core,
             &user.ctx,
             NewDocument {
-                visibility: Default::default(),
+                visibility,
                 metadata,
                 owner_id,
                 status,
@@ -678,6 +704,8 @@ pub struct GrantRow {
 #[template(path = "documents/show.html")]
 struct ShowPage {
     l: Layout,
+    visibility_options: Vec<(&'static str, &'static str, &'static str)>,
+    can_set_visibility: bool,
     d: documents::Document,
     status_class: &'static str,
     status_label: &'static str,
@@ -873,6 +901,8 @@ pub async fn show(
         .await?;
     let collab = crate::routes::collab::collab_view(&state, &user, id, can_edit).await?;
     let page = ShowPage {
+        visibility_options: visibility_options(),
+        can_set_visibility: is_owner || can_manage,
         l: Layout::new(&state, &user, flash, &d.title, "documents"),
         status_class: d.status.as_str(),
         status_label: d.status.label(),

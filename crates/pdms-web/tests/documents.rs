@@ -447,3 +447,92 @@ async fn document_admin_pages_need_their_capabilities() {
         );
     }
 }
+
+#[tokio::test]
+async fn owner_publishes_county_wide_then_restricts_through_the_pages() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "HR", "alice@x.org").await;
+    let mut a = Browser::new(&app);
+    a.login("alice@x.org", &secret).await;
+    let csrf = a.get("/documents/new").await.csrf();
+    let t = type_id(&app, "policy").await;
+    let (d, o) = (dept.to_string(), uid.to_string());
+    let doc = a
+        .multipart(
+            "/documents",
+            &[
+                ("_csrf", csrf.as_str()),
+                ("title", "Leave policy"),
+                ("document_type_id", t.as_str()),
+                ("department_id", d.as_str()),
+                ("owner_id", o.as_str()),
+                ("status", "active"),
+                ("visibility", "county_wide"),
+            ],
+            Some(("leave.pdf", &pdf("leave"))),
+        )
+        .await
+        .location()
+        .to_owned();
+
+    let ops = directory::create_department(&app.core.db, &system(), "OPS", "OPS")
+        .await
+        .unwrap();
+    let (_, bob_secret) = user(&app.core, "bob@x.org", Some(ops), None).await;
+    let mut b = Browser::new(&app);
+    b.login("bob@x.org", &bob_secret).await;
+    let list = b.get("/documents").await;
+    assert!(list.body.contains("Leave policy") && list.body.contains("County-wide"));
+    assert_eq!(
+        b.get(&format!("{doc}/download")).await.status,
+        StatusCode::OK
+    );
+
+    // The owner sees the form on the document page and restricts it.
+    let page = a.get(&doc).await;
+    assert!(page.body.contains(&format!("action=\"{doc}/visibility\"")));
+    let csrf = page.csrf();
+    a.post(
+        &format!("{doc}/visibility"),
+        &[("_csrf", csrf.as_str()), ("visibility", "restricted")],
+    )
+    .await;
+    assert_eq!(b.get(&doc).await.status, StatusCode::FORBIDDEN);
+    assert!(
+        actions(&app.core)
+            .await
+            .contains(&"document.visibility_changed".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn unknown_visibility_value_is_rejected() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "HR", "alice@x.org").await;
+    let mut a = Browser::new(&app);
+    a.login("alice@x.org", &secret).await;
+    let csrf = a.get("/documents/new").await.csrf();
+    let t = type_id(&app, "policy").await;
+    let (d, o) = (dept.to_string(), uid.to_string());
+    let r = a
+        .multipart(
+            "/documents",
+            &[
+                ("_csrf", csrf.as_str()),
+                ("title", "Leave policy"),
+                ("document_type_id", t.as_str()),
+                ("department_id", d.as_str()),
+                ("owner_id", o.as_str()),
+                ("visibility", "public"),
+            ],
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(r.body.contains("choose who can see the document"));
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM documents")
+        .fetch_one(&app.core.db)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "nothing created");
+}

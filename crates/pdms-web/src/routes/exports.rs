@@ -38,7 +38,7 @@ pub struct Candidate {
     pub title: String,
     pub department: String,
     pub status: &'static str,
-    pub confidential: bool,
+    pub visibility: &'static str,
 }
 
 #[derive(Template)]
@@ -88,7 +88,7 @@ pub async fn page(
                 title: d.title,
                 department: d.department_name,
                 status: d.status.label(),
-                confidential: d.visibility == pdms_authz::Visibility::Restricted,
+                visibility: d.visibility.label(),
             })
             .collect()
     } else {

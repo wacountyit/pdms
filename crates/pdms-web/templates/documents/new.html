@@ -26,6 +26,14 @@
       </select>
     </div>
   </div>
+  <fieldset>
+    <legend>Who can see it</legend>
+    {% for v in visibility_options %}
+    <label class="check"><input type="radio" name="visibility" value="{{ v.0 }}"
+      {% if form.v("visibility") == v.0 || (form.v("visibility") == "" && v.0 == "department") %}checked{% endif %}>
+      <strong>{{ v.1 }}</strong>: {{ v.2 }}</label>
+    {% endfor %}
+  </fieldset>
   <div class="field">
     <label for="tags">Tags</label>
     <input id="tags" name="tags" value="{{ form.v("tags") }}" aria-describedby="tags-help">

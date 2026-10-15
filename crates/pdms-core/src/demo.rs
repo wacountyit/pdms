@@ -410,7 +410,7 @@ async fn seed_documents(
         Spec {
             meta: MetadataInput {
                 title: "Workplace Investigation Procedures".into(),
-                description: "Confidential: visible only to the owner and people it is shared with.".into(),
+                description: "Restricted: visible only to the owner and people it is shared with.".into(),
                 document_type_id: policy,
                 department_id: dept("HR")?,
                 next_review_date: rel(60),

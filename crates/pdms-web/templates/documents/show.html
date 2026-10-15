@@ -192,19 +192,25 @@
   {% endif %}
 </section>
 
-{% if can_manage %}
-<section aria-labelledby="access-h">
-  <h2 id="access-h">Access</h2>
+{% if can_set_visibility %}
+<section aria-labelledby="visibility-h">
+  <h2 id="visibility-h">Who can see it</h2>
   <form method="post" action="/documents/{{ d.id }}/visibility" class="stack">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="visibility">Who can see it</label>
+    <label for="visibility" class="visually-hidden">Visibility</label>
     <select id="visibility" name="visibility">
-      <option value="department" {% if d.visibility.as_str() == "department" %}selected{% endif %}>Department: its department and anyone it is shared with</option>
-      <option value="county_wide" {% if d.visibility.as_str() == "county_wide" %}selected{% endif %}>County-wide: every county employee can view and download it</option>
-      <option value="restricted" {% if d.visibility.as_str() == "restricted" %}selected{% endif %}>Restricted: only the owner and people it is shared with</option>
+      {% for v in visibility_options %}
+      <option value="{{ v.0 }}" {% if d.visibility.as_str() == v.0 %}selected{% endif %}>{{ v.1 }}: {{ v.2 }}</option>
+      {% endfor %}
     </select>
     <div><button type="submit">Save visibility</button></div>
   </form>
+</section>
+{% endif %}
+
+{% if can_manage %}
+<section aria-labelledby="access-h">
+  <h2 id="access-h">Access</h2>
   <table>
     <caption>Shared with</caption>
     <thead><tr><th scope="col">Who</th><th scope="col">Permission</th><th scope="col">Expires</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<p>Export documents for a records request as a ZIP package: the files, the metadata you choose, optionally each document's audit history, a manifest, and a SHA-256 checksum for every file. Only documents you may <em>export</em> can be included (confidential documents need an explicit grant). Building and downloading packages are recorded in the audit log and on each document's history.</p>
+<p>Export documents for a records request as a ZIP package: the files, the metadata you choose, optionally each document's audit history, a manifest, and a SHA-256 checksum for every file. Only documents you may <em>export</em> can be included (Restricted documents need an explicit grant). Building and downloading packages are recorded in the audit log and on each document's history.</p>
 
 {% if can_build %}
 <section aria-labelledby="new-h">
@@ -18,7 +18,7 @@
     <thead><tr><th scope="col"><span class="visually-hidden">Include</span></th><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Status</th></tr></thead>
     <tbody>
     {% for c in candidates %}
-      <tr><td><input type="checkbox" name="document" value="{{ c.id }}" id="d-{{ c.id }}"></td><td><code>{{ c.external_id }}</code></td><td><label for="d-{{ c.id }}">{{ c.title }}</label>{% if c.confidential %} <span class="badge confidential">Confidential</span>{% endif %}</td><td>{{ c.department }}</td><td>{{ c.status }}</td></tr>
+      <tr><td><input type="checkbox" name="document" value="{{ c.id }}" id="d-{{ c.id }}"></td><td><code>{{ c.external_id }}</code></td><td><label for="d-{{ c.id }}">{{ c.title }}</label>{% if c.visibility != "Department" %} <span class="badge{% if c.visibility == "Restricted" %} confidential{% endif %}">{{ c.visibility }}</span>{% endif %}</td><td>{{ c.department }}</td><td>{{ c.status }}</td></tr>
     {% else %}<tr><td colspan="5">No documents match.</td></tr>{% endfor %}
     </tbody>
   </table></div>

@@ -57,7 +57,7 @@
   {% for r in rows %}
     <tr>
       <td><code>{{ r.external_id }}</code></td>
-      <td><a href="/documents/{{ r.id }}">{{ r.title }}</a>{% if r.confidential %} <span class="badge confidential">Confidential</span>{% endif %}
+      <td><a href="/documents/{{ r.id }}">{{ r.title }}</a>{% if r.visibility != "Department" %} <span class="badge{% if r.visibility == "Restricted" %} confidential{% endif %}">{{ r.visibility }}</span>{% endif %}
         {% if !r.tags.is_empty() %}<div class="tags">{% for t in r.tags %}<span class="{{ t.0 }}">{{ t.1 }}</span>{% endfor %}</div>{% endif %}</td>
       <td>{{ r.type_name }}</td><td>{{ r.department_name }}</td><td>{{ r.owner_name }}</td>
       <td><span class="badge status-{{ r.status }}">{{ r.status_label }}</span></td>

@@ -6,7 +6,7 @@
   {% else %}
   <label for="g-scope">Applies to</label>
   <select id="g-scope" name="scope" required>
-    <option value="global">All non-confidential documents</option>
+    <option value="global">All documents except Restricted ones</option>
     {% for d in departments %}<option value="department:{{ d.id }}">{{ d.name }} documents</option>{% endfor %}
   </select>
   {% endif %}
