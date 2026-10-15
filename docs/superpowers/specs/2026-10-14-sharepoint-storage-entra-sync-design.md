@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-10-14 |
-| Status | Draft for review |
+| Status | Approved 2026-10-14. Plans: [index](../plans/2026-10-14-padm-sharepoint-entra-index.md) (where the plans refine this spec, the index records it) |
 | Covers | Sub-project 1 (SharePoint document storage) and sub-project 2 (Entra user sync) |
 | Codebase | `pdms` (the product is referred to as PADM below) |
 

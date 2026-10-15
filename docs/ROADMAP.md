@@ -37,7 +37,9 @@ images are still named `pdms`.
   go-live (§3).
 - **Design spec for sub-projects 1 and 2:**
   [2026-10-14-sharepoint-storage-entra-sync-design.md](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md).
-  It is written and waiting for the owner's review.
+  It was approved on 2026-10-14. Step-by-step implementation plans P1–P4 were
+  written on 2026-10-15; start with the
+  [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md).
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -69,8 +71,8 @@ Work through these in order unless noted. Each one gets its own spec and plan.
 
 | # | Sub-project | Scope | Status | Spec / plan |
 |---|---|---|---|---|
-| 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Designing**: spec written, awaiting owner review | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md) |
-| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Designing**: same spec | same spec |
+| 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility), P3 (storage), P4 (access, change detection, operations) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
+| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Planned**: spec approved; plan P2 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5 | **UI redesign** | Every page | Not started; needs a spec. Do after 1–3 so it covers the final features | — |
