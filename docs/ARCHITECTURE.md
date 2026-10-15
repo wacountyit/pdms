@@ -566,10 +566,10 @@ unique) mentions resolve to active users; mentioned people who can view the
 document get an action notice (in-app and email), and replies notify the
 parent's author. Every version of the text is stored in `comment_revisions`
 (trigger-enforced immutable); edits by the author only (while they may still
-comment); deletion by the author only (D-091) is a soft delete. Earlier versions
-are visible to the author, permission managers, and auditors. All actions are
-audited with the text (`comment.created/replied/edited/deleted`, denials too; `*_denied` is not published)
-and published to webhooks.
+comment); deletion by the author only (D-091) is a soft delete. Earlier
+versions are visible to the author, permission managers, and auditors. All
+actions are audited with the text (`comment.created/replied/edited/deleted`,
+denials too) and published to webhooks, except the `*_denied` actions.
 
 **Text and date suggestions (`ocr`).** Appending a file version queues
 `documents.extract_text` in the same transaction. The job reads embedded PDF
@@ -597,7 +597,8 @@ them with `graph_calendar_links` by content hash, and creates, updates
 or deletes. Runs with changes or errors are audited.
 
 **Tests.** Core: comments (threads, mentions with visibility filtering and
-ambiguity, edits with revisions, moderator delete, history access, immutable
+ambiguity, edits with revisions, authors-only delete, County-wide documents limited
+to owner and admin comments, history access, immutable
 revisions at the database, edit-required mode); extraction of digital PDF,
 copier-OCR'd PDF, Word, and image files; suggestions never applied until
 accepted; accept/dismiss authorization and audit; OCR retry when unavailable;

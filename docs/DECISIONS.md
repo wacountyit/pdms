@@ -5,7 +5,8 @@ plan and accepted on 2026-10-13. D-014 to D-025 were made while building
 Phase 0, D-026 to D-040 while building Phase 1, and D-041 onward while
 building Phases 2–5. D-081 to D-089 were decided on 2026-10-14, when the
 county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
-§0. D-090 and D-091 were decided on 2026-10-15 (visibility follow-ups). Entries marked "design, not built" or "not done" are agreed but not yet
+§0. D-090 and D-091 were decided on 2026-10-15 (visibility follow-ups).
+Entries marked "design, not built" or "not done" are agreed but not yet
 implemented.
 
 ### D-001 Single binary, separate server and worker processes — Accepted
@@ -709,9 +710,9 @@ may view, County-wide ones included. Decided by the owner.
 ### D-091 County-wide comments are owner/admin only; only authors delete comments — Accepted (2026-10-15)
 On a County-wide document only the owner and PADM administrators (the
 org-wide `admin` role) may comment or reply; everyone who can view still
-reads the comments. On every document only a comment's author may delete it,
-and the author may edit it only while still allowed to comment: not
-administrators, owners, or `manage_permissions` holders. Reason: checks and
+reads the comments. On every document only a comment's author may delete it
+(not administrators, owners, or `manage_permissions` holders), and the author
+may edit it only while still allowed to comment. Reason: checks and
 balances. No one can remove someone else's words, and soft-deleted text stays
 in the history and the audit log. Refused attempts are audited
 (`comment.post_denied`, `comment.edit_denied`, `comment.delete_denied`) and

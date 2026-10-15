@@ -267,10 +267,19 @@ async fn county_wide_comments_are_owner_and_admin_only() {
         .unwrap();
     let (outsider, _) = user_in_new_department(&core, "HR", "outsider@x.org").await;
     let admin = make_admin(&core, "admin@x.org").await;
+    // An admin role scoped to one department is not a PADM administrator.
+    let dept_admin = directory::create_user(&core.db, &system(), "DA", "da@x.org", Some(dept))
+        .await
+        .unwrap();
+    let admin_role = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    directory::assign_role(&core.db, &system(), dept_admin, admin_role, Some(dept))
+        .await
+        .unwrap();
     let o = as_user(&core, owner).await;
     let a = as_user(&core, admin).await;
     let c = as_user(&core, colleague).await;
     let x = as_user(&core, outsider).await;
+    let da = as_user(&core, dept_admin).await;
 
     // Department document: the colleague comments, as before.
     let doc = new_doc(&core, dept, owner, "Dept doc", None).await;
@@ -283,7 +292,13 @@ async fn county_wide_comments_are_owner_and_admin_only() {
     documents::set_visibility(&core, &o, doc, pdms_authz::Visibility::CountyWide)
         .await
         .unwrap();
-    for (who, allowed) in [(&o, true), (&a, true), (&c, false), (&x, false)] {
+    for (who, allowed) in [
+        (&o, true),
+        (&a, true),
+        (&c, false),
+        (&x, false),
+        (&da, false),
+    ] {
         assert_eq!(
             comments::can_comment(&core, who, doc).await.unwrap(),
             allowed
@@ -295,6 +310,10 @@ async fn county_wide_comments_are_owner_and_admin_only() {
     comments::post(&core, &a, doc, Some(by_owner), "admin reply")
         .await
         .unwrap();
+    assert!(matches!(
+        comments::post(&core, &da, doc, None, "scoped admin").await,
+        Err(CoreError::Forbidden(_))
+    ));
     for who in [&c, &x] {
         assert!(matches!(
             comments::post(&core, who, doc, None, "hello").await,
@@ -308,6 +327,29 @@ async fn county_wide_comments_are_owner_and_admin_only() {
     }
     let audit = audit_actions(&core).await;
     assert!(audit.iter().any(|x| x == "comment.post_denied"));
+    // Refused posts: outcome, reason, no comment_id; refused replies carry parent_id.
+    let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
+        "SELECT outcome::text, context FROM audit_log WHERE action = 'comment.post_denied' ORDER BY seq",
+    )
+    .fetch_all(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 5, "colleague x2, outsider x2, scoped admin x1");
+    for (outcome, ctxt) in &rows {
+        assert_eq!(outcome, "denied");
+        assert_eq!(ctxt["reason"], "county_wide_owner_or_admin_only");
+        assert!(ctxt.get("comment_id").is_none(), "{ctxt}");
+    }
+    let replies = rows
+        .iter()
+        .filter(|(_, c)| c.get("parent_id").is_some())
+        .count();
+    assert_eq!(replies, 2);
+    assert!(
+        rows.iter()
+            .filter(|(_, c)| c.get("parent_id").is_some())
+            .all(|(_, c)| c["parent_id"] == by_owner.to_string())
+    );
 
     // The colleague's earlier comment: can delete, can no longer edit.
     let listed = comments::list(&core, &c, doc).await.unwrap();
@@ -356,11 +398,11 @@ async fn only_authors_delete_comments() {
         .unwrap();
     let admin = make_admin(&core, "admin@x.org").await;
     let doc = new_doc(&core, dept, owner, "Doc", None).await;
-    acl::grant(
-        &core.db,
+    documents::share(
+        &core,
         &system(),
+        doc,
         Subject::User(manager),
-        Scope::Department(dept),
         Permission::ManagePermissions,
         None,
         "t",
@@ -369,6 +411,18 @@ async fn only_authors_delete_comments() {
     .unwrap();
     let au = as_user(&core, author).await;
     let c = comments::post(&core, &au, doc, None, "mine").await.unwrap();
+    // Prove the grant applies: managers may read earlier versions.
+    comments::edit(&core, &au, c, "mine, edited").await.unwrap();
+    let mgr = as_user(&core, manager).await;
+    assert!(
+        comments::history(&core, &mgr, c).await.is_ok(),
+        "the manager holds manage_permissions"
+    );
+    assert!(
+        comments::list(&core, &mgr, doc).await.unwrap()[0]
+            .comment
+            .can_see_history
+    );
     for who in [admin, owner, manager] {
         let ctx = as_user(&core, who).await;
         assert!(matches!(

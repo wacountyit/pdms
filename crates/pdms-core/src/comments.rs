@@ -158,25 +158,29 @@ fn county_wide_allows(ctx: &Ctx, doc: &DocRef) -> bool {
 }
 
 /// Authorize writing a comment; a refusal by the County-wide rule is audited
-/// as `denied_action` on `object_id`.
+/// as `denied_action`. `comment_id` is set only when an existing comment is
+/// involved (an edit); `parent_id` only for a reply.
 async fn can_write(
     core: &Core,
     ctx: &Ctx,
     document_id: Uuid,
     denied_action: &str,
-    object_id: Uuid,
+    comment_id: Option<Uuid>,
+    parent_id: Option<Uuid>,
 ) -> CoreResult<DocRef> {
     let doc = access::authorize(core, ctx, document_id, base_permission(core)).await?;
     if !county_wide_allows(ctx, &doc) {
-        pdms_audit::record(
-            &core.db,
-            vec![
-                event(ctx, &doc, denied_action, object_id)
-                    .outcome(pdms_audit::Outcome::Denied)
-                    .context("reason", "county_wide_owner_or_admin_only"),
-            ],
-        )
-        .await?;
+        let mut e = doc
+            .event(ctx, Category::Content, denied_action)
+            .outcome(pdms_audit::Outcome::Denied)
+            .context("reason", "county_wide_owner_or_admin_only");
+        if let Some(c) = comment_id {
+            e = e.context("comment_id", c);
+        }
+        if let Some(p) = parent_id {
+            e = e.context("parent_id", p);
+        }
+        pdms_audit::record(&core.db, vec![e]).await?;
         return Err(CoreError::Forbidden(None));
     }
     Ok(doc)
@@ -335,7 +339,7 @@ pub async fn post(
     body: &str,
 ) -> CoreResult<Uuid> {
     let author = ctx.user_id().ok_or(CoreError::Unauthenticated)?;
-    let doc = can_write(core, ctx, document_id, "comment.post_denied", document_id).await?;
+    let doc = can_write(core, ctx, document_id, "comment.post_denied", None, parent).await?;
     let body = clean(body)?;
     let mut tx = core.db.begin().await?;
     let parent_author = match parent {
@@ -464,7 +468,15 @@ pub async fn edit(core: &Core, ctx: &Ctx, comment_id: Uuid, body: &str) -> CoreR
     let mut conn = core.db.acquire().await?;
     let (doc_id, author, _, _, _) = load_one(&mut conn, comment_id).await?;
     drop(conn);
-    let doc = can_write(core, ctx, doc_id, "comment.edit_denied", comment_id).await?;
+    let doc = can_write(
+        core,
+        ctx,
+        doc_id,
+        "comment.edit_denied",
+        Some(comment_id),
+        None,
+    )
+    .await?;
     let mut tx = core.db.begin().await?;
     let (_, _, before, deleted, old_mentions) = load_one(&mut tx, comment_id).await?;
     if author != me {
