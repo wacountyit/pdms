@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use chrono::NaiveDate;
 use common::*;
 use futures_util::StreamExt;
-use pdms_authz::{Permission, Scope, Subject};
+use pdms_authz::{Permission, Scope, Subject, Visibility};
 use pdms_core::documents::fields::{self, FieldSpec, FieldType, SelectOption};
 use pdms_core::documents::search::{self, CustomFilter, DocumentFilter};
 use pdms_core::documents::{
@@ -1241,4 +1241,201 @@ async fn acceptance_audit_scenario() {
         documents::timeline(&core, &as_user(&core, viewer).await, id).await,
         Err(CoreError::Forbidden(_))
     ));
+}
+
+async fn new_doc_with(
+    core: &Core,
+    ctx: &Ctx,
+    input: MetadataInput,
+    owner: Uuid,
+    visibility: Visibility,
+) -> Uuid {
+    documents::create(
+        core,
+        ctx,
+        NewDocument {
+            metadata: input,
+            owner_id: owner,
+            status: DocumentStatus::Active,
+            visibility,
+            tags: vec![],
+            file: Some(upload(core, "policy.pdf", &pdf("leave policy")).await),
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn county_wide_documents_are_viewable_by_every_department() {
+    let (core, _db) = core().await;
+    let (dept, alice) = editing_department(&core, "HR", "alice@x.org").await;
+    let (outsider, _) = user_in_new_department(&core, "OPS", "o@x.org").await;
+    let other = type_id(&core, "other").await;
+    let ctx_alice = as_user(&core, alice).await;
+    let shared = new_doc_with(
+        &core,
+        &ctx_alice,
+        meta(other, dept, "Leave policy"),
+        alice,
+        Visibility::CountyWide,
+    )
+    .await;
+    let internal = new_doc_with(
+        &core,
+        &ctx_alice,
+        meta(other, dept, "HR roster"),
+        alice,
+        Visibility::Department,
+    )
+    .await;
+
+    let ctx_out = as_user(&core, outsider).await;
+    assert_eq!(
+        visible_ids(&core, &ctx_out, DocumentFilter::default()).await,
+        vec![shared]
+    );
+    assert!(documents::view(&core, &ctx_out, shared).await.is_ok());
+    assert!(
+        documents::open_file(&core, &ctx_out, shared, None)
+            .await
+            .is_ok(),
+        "download allowed"
+    );
+    assert!(matches!(
+        documents::view(&core, &ctx_out, internal).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    // View only: editing details is still refused.
+    let doc = documents::view(&core, &ctx_out, shared)
+        .await
+        .unwrap()
+        .document;
+    let mut m = meta(other, dept, "Renamed by outsider");
+    m.description = doc.description.clone();
+    assert!(matches!(
+        documents::update(&core, &ctx_out, shared, m, doc.row_version).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    let created = audit_events(&core, "document.created").await;
+    assert!(
+        created.iter().any(|c| c.contains("county_wide")),
+        "visibility recorded at creation"
+    );
+}
+
+#[tokio::test]
+async fn owner_can_change_visibility_and_it_is_audited() {
+    let (core, _db) = core().await;
+    let (dept, alice) = editing_department(&core, "HR", "alice@x.org").await;
+    let (outsider, _) = user_in_new_department(&core, "OPS", "o@x.org").await;
+    let other = type_id(&core, "other").await;
+    let ctx_alice = as_user(&core, alice).await;
+    let id = new_doc_with(
+        &core,
+        &ctx_alice,
+        meta(other, dept, "Leave policy"),
+        alice,
+        Visibility::Department,
+    )
+    .await;
+
+    documents::set_visibility(&core, &ctx_alice, id, Visibility::CountyWide)
+        .await
+        .unwrap();
+    assert!(
+        documents::view(&core, &as_user(&core, outsider).await, id)
+            .await
+            .is_ok()
+    );
+    documents::set_visibility(&core, &ctx_alice, id, Visibility::Restricted)
+        .await
+        .unwrap();
+    assert!(matches!(
+        documents::view(&core, &as_user(&core, outsider).await, id).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    let changes = audit_events(&core, "document.visibility_changed").await;
+    assert_eq!(changes.len(), 2);
+    assert!(changes[0].contains("department") && changes[0].contains("county_wide"));
+    assert!(changes[1].contains("county_wide") && changes[1].contains("restricted"));
+}
+
+#[tokio::test]
+async fn editor_who_is_not_owner_cannot_change_visibility() {
+    let (core, _db) = core().await;
+    let (dept, alice) = editing_department(&core, "HR", "alice@x.org").await;
+    let bob = directory::create_user(&core.db, &system(), "bob", "bob@x.org", Some(dept))
+        .await
+        .unwrap();
+    let other = type_id(&core, "other").await;
+    let id = new_doc_with(
+        &core,
+        &as_user(&core, alice).await,
+        meta(other, dept, "Roster"),
+        alice,
+        Visibility::Department,
+    )
+    .await;
+    let ctx_bob = as_user(&core, bob).await; // department editor, not the owner
+    assert!(matches!(
+        documents::set_visibility(&core, &ctx_bob, id, Visibility::CountyWide).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    let doc = documents::view(&core, &ctx_bob, id).await.unwrap().document;
+    assert_eq!(doc.visibility, Visibility::Department);
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"access.denied".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn setting_same_visibility_is_a_no_op() {
+    let (core, _db) = core().await;
+    let (dept, alice) = editing_department(&core, "HR", "alice@x.org").await;
+    let other = type_id(&core, "other").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc_with(
+        &core,
+        &ctx,
+        meta(other, dept, "Roster"),
+        alice,
+        Visibility::Department,
+    )
+    .await;
+    let before = documents::view(&core, &ctx, id)
+        .await
+        .unwrap()
+        .document
+        .updated_at;
+    documents::set_visibility(&core, &ctx, id, Visibility::Department)
+        .await
+        .unwrap();
+    assert_eq!(
+        documents::view(&core, &ctx, id)
+            .await
+            .unwrap()
+            .document
+            .updated_at,
+        before
+    );
+    assert!(
+        audit_events(&core, "document.visibility_changed")
+            .await
+            .is_empty()
+    );
+}
+
+/// `changes` of every audit entry with this action, as JSON text, oldest first.
+async fn audit_events(core: &Core, action: &str) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT coalesce(changes::text, '') FROM audit_log WHERE action = $1 ORDER BY seq",
+    )
+    .bind(action)
+    .fetch_all(&core.db)
+    .await
+    .unwrap()
 }

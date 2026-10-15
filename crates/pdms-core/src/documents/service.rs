@@ -1104,15 +1104,34 @@ pub async fn transfer_owner(
     Ok(())
 }
 
-/// Who can see the document without an explicit share (D-085).
-/// Requires `manage_permissions`.
+/// Who can see the document without an explicit share (D-085). Allowed for
+/// the document's owner or anyone with `manage_permissions` on it.
 pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) -> CoreResult<()> {
-    let doc_ref = access::authorize(core, ctx, id, Permission::ManagePermissions).await?;
-    let from = doc_ref.attrs.visibility;
+    // The owner chooses visibility (D-085); otherwise `manage_permissions` is needed.
+    let is_owner = match (access::load(core, id).await?, ctx.user_id()) {
+        (Some(d), Some(user)) => d.attrs.owner_id == user,
+        (None, _) => return Err(CoreError::NotFound),
+        _ => false,
+    };
+    let doc_ref = if is_owner {
+        access::authorize(core, ctx, id, Permission::View).await?
+    } else {
+        access::authorize(core, ctx, id, Permission::ManagePermissions).await?
+    };
+    let mut tx = core.db.begin().await?;
+    // Read the current value under a row lock so concurrent changes record
+    // the right "from" and never skip a real change.
+    let current = sqlx::query_scalar!(
+        r#"SELECT visibility::text AS "visibility!" FROM documents WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(CoreError::NotFound)?;
+    let from: Visibility = current.parse().map_err(CoreError::internal)?;
     if from == to {
         return Ok(());
     }
-    let mut tx = core.db.begin().await?;
     sqlx::query!(
         "UPDATE documents SET visibility = $2::text::document_visibility, updated_at = now() WHERE id = $1",
         id,
