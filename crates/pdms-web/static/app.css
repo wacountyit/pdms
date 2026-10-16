@@ -861,3 +861,18 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
   .sidebar, .topbar, .menu-toggle, .admin-tabs, .button, button, .page-footer { display: none !important; }
   body { background: #fff; }
 }
+
+/* Branding page preview: a static sidebar strip in the saved colors.
+   Two classes, so it beats the shell's wide-screen .sidebar rules. */
+.sidebar.branding-preview {
+  position: static;
+  flex: none;
+  width: auto;
+  max-width: 280px;
+  height: auto;
+  padding: 14px;
+  gap: 12px;
+  border-radius: 8px;
+  margin: 8px 0 16px;
+}
+.sidebar.branding-preview .brand { margin-right: 0; padding: 0; }

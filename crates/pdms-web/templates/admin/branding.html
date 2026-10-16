@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+{% if confirm_reset %}
+<section class="panel" aria-labelledby="reset-h">
+  <h2 id="reset-h">Reset branding to defaults?</h2>
+  <p>This clears the county name (PADM goes back to using “{{ config_name }}”), sets the accent color back to the default and removes the seal.</p>
+  <form method="post" action="/admin/branding/reset">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <button type="submit" class="button danger">Reset to defaults</button>
+    <a class="button" href="/admin/branding">Cancel</a>
+  </form>
+</section>
+{% else %}
+<p>These settings change how PADM looks for everyone. The seal and county name also appear on the sign-in page, which anyone who can reach PADM can see.</p>
+
+<section class="panel" aria-labelledby="name-h">
+  <h2 id="name-h">Name and color</h2>
+  <form method="post" action="/admin/branding" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="b-name">County name</label>
+    <div>
+      <input id="b-name" name="org_name" type="text" maxlength="120" value="{{ org_name }}" placeholder="{{ config_name }}" aria-describedby="b-name-help">
+      <p id="b-name-help" class="help">Leave blank to use {{ config_name }}.</p>
+    </div>
+    <label for="b-accent">Accent color</label>
+    <div>
+      <input id="b-accent" name="accent" type="color" value="{{ accent }}" aria-describedby="b-accent-help">
+      <label for="b-accent-text">or type a hex code</label>
+      <input id="b-accent-text" name="accent_text" type="text" maxlength="7" pattern="#[0-9A-Fa-f]{6}" placeholder="{{ accent }}" autocomplete="off">
+      <p id="b-accent-help" class="help">White text must stay readable on it (4.5:1).</p>
+    </div>
+    <span></span><button type="submit" class="button primary">Save</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="seal-h">
+  <h2 id="seal-h">Seal</h2>
+  {% if let Some(v) = seal_version %}
+  <p><img src="/branding/seal?v={{ v }}" alt="Current seal" width="96" height="96">{% if let Some(i) = seal_info %} <span class="muted small">{{ i.0 }} × {{ i.1 }} pixels</span>{% endif %}</p>
+  {% else %}
+  <p>No seal uploaded. PADM shows a plain mark.</p>
+  {% endif %}
+  <form method="post" action="/admin/branding/seal" enctype="multipart/form-data" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="b-seal">Seal image</label>
+    <div>
+      <input id="b-seal" name="file" type="file" accept="image/png,image/jpeg" aria-describedby="b-seal-help">
+      <p id="b-seal-help" class="help">PNG or JPEG, 512 KB or smaller, between 16 and 2048 pixels on each side.</p>
+    </div>
+    <span></span><button type="submit" class="button">Upload seal</button>
+  </form>
+  {% if seal_version.is_some() %}
+  <form method="post" action="/admin/branding/seal/remove">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <button type="submit" class="button danger">Remove seal</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="preview-h">
+  <h2 id="preview-h">Preview</h2>
+  <p class="help">Shows the saved colors.</p>
+  <div class="sidebar branding-preview">
+    <div class="brand">
+      {% if let Some(v) = seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="38" height="38">{% else %}<span class="mark" aria-hidden="true">PADM</span>{% endif %}
+      <span class="brand-text"><span class="product">PADM</span><span class="org">{{ l.org_name }}</span></span>
+    </div>
+    <ul class="nav">
+      <li><a href="/admin/branding" aria-current="page">Active item</a></li>
+      <li><a href="/admin/branding">Another item</a></li>
+    </ul>
+  </div>
+  <p><span class="button primary">Primary button</span></p>
+</section>
+
+<p><a href="/admin/branding/reset">Reset to defaults…</a></p>
+{% endif %}
+{% endblock %}

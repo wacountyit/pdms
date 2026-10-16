@@ -137,6 +137,7 @@ fn is_upload_route(path: &str) -> bool {
         ["", "documents"]
             | ["", "documents", _, "versions"]
             | ["", "documents", _, "signatories", _, "signed"]
+            | ["", "admin", "branding", "seal"]
     )
 }
 
@@ -296,6 +297,7 @@ mod tests {
         assert!(is_upload_route("/documents"));
         assert!(is_upload_route("/documents/0193/versions"));
         assert!(!is_upload_route("/documents/0193/edit"));
+        assert!(is_upload_route("/admin/branding/seal"));
         assert!(!is_upload_route("/admin/users"));
         assert!(!is_upload_route("/documents/a/b/versions"));
         assert!(is_upload_route("/documents/a/signatories/b/signed"));

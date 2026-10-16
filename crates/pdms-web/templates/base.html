@@ -59,6 +59,7 @@
         {% if l.can_retention %}<li><a href="/admin/retention">Retention</a></li>{% endif %}
         {% if l.can_restore %}<li><a href="/admin/deleted">Deleted documents</a></li>{% endif %}
         {% if l.can_schema %}<li><a href="/admin/notification-rules">Notification rules</a></li>{% endif %}
+        {% if l.can_settings %}<li><a href="/admin/branding">Branding</a></li>{% endif %}
         {% if l.can_settings %}<li><a href="/admin/notifications">Delivery log</a></li>{% endif %}
         {% if l.can_integrations %}<li><a href="/admin/webhooks">Webhooks</a></li><li><a href="/admin/api">API</a></li><li><a href="/admin/outlook">Outlook &amp; OCR</a></li>{% endif %}
       </ul>

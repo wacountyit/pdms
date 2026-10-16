@@ -51,8 +51,8 @@ async fn require_admin(State(state): State<AppState>, req: Request, next: Next) 
 pub fn router(state: AppState) -> Router {
     error::set_org_name(&state.org_name());
     use routes::{
-        admin, api, appointments, audit, auth, collab, doc_admin, documents, exports, integrations,
-        ops, schedule, workflow,
+        admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
+        integrations, ops, schedule, workflow,
     };
 
     let admin_routes = Router::new()
@@ -102,6 +102,18 @@ pub fn router(state: AppState) -> Router {
             .unwrap_or(usize::MAX)
             .saturating_add(1024 * 1024),
     );
+
+    let branding_routes = Router::new()
+        .route("/branding", get(branding::show).post(branding::save))
+        .route(
+            "/branding/seal",
+            post(branding::upload_seal).layer(upload_limit),
+        )
+        .route("/branding/seal/remove", post(branding::remove_seal))
+        .route(
+            "/branding/reset",
+            get(branding::reset_confirm).post(branding::reset),
+        );
 
     let api_routes = Router::new()
         .route("/openapi.json", get(api::openapi_json))
@@ -334,7 +346,10 @@ pub fn router(state: AppState) -> Router {
             get(auth::oidc_callback),
         )
         .route("/logout", post(auth::logout))
-        .nest("/admin", admin_routes.merge(doc_admin_routes))
+        .nest(
+            "/admin",
+            admin_routes.merge(doc_admin_routes).merge(branding_routes),
+        )
         .nest("/documents", document_routes)
         .route(
             "/documents",

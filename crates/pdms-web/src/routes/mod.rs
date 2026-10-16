@@ -5,6 +5,7 @@ pub mod api;
 pub mod appointments;
 pub mod audit;
 pub mod auth;
+pub mod branding;
 pub mod collab;
 pub mod doc_admin;
 pub mod documents;
