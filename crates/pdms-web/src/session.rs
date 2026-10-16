@@ -117,9 +117,7 @@ impl FromRequestParts<AppState> for CurrentUser {
             [only] => only.clone(),
             many => format!("{} departments", many.len()),
         };
-        let can_create = !pdms_core::documents::access::creatable_departments(&state.core, &ctx)
-            .await?
-            .is_empty();
+        let can_create = pdms_core::documents::access::can_create_any(&state.core, &ctx).await?;
         Ok(CurrentUser {
             unread,
             department_label,

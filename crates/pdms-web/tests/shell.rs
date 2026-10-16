@@ -233,7 +233,9 @@ async fn branding_is_cached_until_reloaded_and_reaches_the_shell() {
     let (app, state) = app_and_state().await;
     let mut b = Browser::new(&app);
 
-    // The first request loads the cache: configured name, default accent.
+    // Load at startup, as the server does, so no background refresh runs
+    // during this test: configured name, default accent.
+    state.reload_branding().await;
     let css = b.get("/theme.css").await;
     assert!(css.body.contains("--accent: #B45309;"), "{}", css.body);
     let before = state.branding();
@@ -298,5 +300,42 @@ async fn branding_is_cached_until_reloaded_and_reaches_the_shell() {
     assert!(
         home.body
             .contains("<span class=\"org\">Example County</span>")
+    );
+}
+
+#[tokio::test]
+async fn first_page_request_starts_a_background_refresh_but_probes_do_not() {
+    let (app, state) = app_and_state().await;
+    branding::update(&app.core, &system(), "Example County", "#1F3A5F")
+        .await
+        .unwrap();
+    let mut b = Browser::new(&app);
+    assert!(state.branding().loaded_at.is_none());
+
+    for path in ["/healthz", "/readyz", "/metrics", "/static/app.css"] {
+        b.get(path).await;
+        assert!(
+            state.branding().loaded_at.is_none(),
+            "{path} must not refresh branding"
+        );
+    }
+
+    // The middleware claims the refresh on the first page request...
+    assert_eq!(b.get("/theme.css").await.status, StatusCode::OK);
+    assert!(state.branding().loaded_at.is_some());
+
+    // ...and the background reload swaps in the stored values.
+    let mut waited = 0;
+    while state.branding().org_name != "Example County" {
+        assert!(waited < 100, "background refresh never finished");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        waited += 1;
+    }
+    assert_eq!(state.branding().theme.accent, "#1F3A5F");
+    assert!(
+        b.get("/theme.css")
+            .await
+            .body
+            .contains("--accent: #1F3A5F;")
     );
 }

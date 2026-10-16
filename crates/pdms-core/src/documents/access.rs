@@ -182,3 +182,25 @@ pub async fn creatable_departments(core: &Core, ctx: &Ctx) -> CoreResult<Vec<(Uu
     }
     Ok(out)
 }
+
+/// Whether the caller may create documents in at least one active department:
+/// the same answer as `!creatable_departments(..).is_empty()`, but in two
+/// queries whatever the number of departments (it runs on every page load).
+pub async fn can_create_any(core: &Core, ctx: &Ctx) -> CoreResult<bool> {
+    let depts = sqlx::query_scalar!("SELECT id FROM departments WHERE is_active")
+        .fetch_all(&core.db)
+        .await?;
+    let Some(principal) = ctx.principal() else {
+        return Ok(!depts.is_empty());
+    };
+    if depts.is_empty() || !principal.active {
+        return Ok(false);
+    }
+    // decide_create keeps only the grants whose scope covers the department
+    // it is asked about, so one list serves every department.
+    let grants = acl::create_grants(&core.db).await?;
+    let now = Utc::now();
+    Ok(depts
+        .into_iter()
+        .any(|d| decide_create(principal, d, &grants, now).is_allowed()))
+}

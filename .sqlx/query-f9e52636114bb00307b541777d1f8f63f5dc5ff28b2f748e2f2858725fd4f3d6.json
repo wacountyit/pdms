@@ -1,0 +1,160 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, subject_user_id, subject_group_id, subject_department_id, subject_role_id,\n                  scope AS \"scope: DbScope\", scope_department_id, scope_document_id,\n                  permission AS \"permission: DbPermission\", expires_at\n             FROM acl_entries\n            WHERE permission = 'create' AND scope IN ('global', 'department')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "subject_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "subject_group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "subject_department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_role_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "subject_role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "scope: DbScope",
+        "type_info": {
+          "Custom": {
+            "name": "acl_scope",
+            "kind": {
+              "Enum": [
+                "global",
+                "department",
+                "document"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scope_department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "scope_department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "scope_document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "scope_document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "permission: DbPermission",
+        "type_info": {
+          "Custom": {
+            "name": "permission",
+            "kind": {
+              "Enum": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "approve",
+                "manage_permissions",
+                "export"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "permission"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acl_entries",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "f9e52636114bb00307b541777d1f8f63f5dc5ff28b2f748e2f2858725fd4f3d6"
+}

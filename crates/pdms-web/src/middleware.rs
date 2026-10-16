@@ -70,13 +70,21 @@ pub async fn client_info(State(state): State<AppState>, mut req: Request, next: 
     next.run(req).await
 }
 
-/// Reloads the branding cache when it is older than [`BRANDING_REFRESH`]
-/// (or was never loaded), before the handler renders anything.
+/// Paths that never show branding: probes, metrics and embedded assets.
+fn skips_branding(path: &str) -> bool {
+    matches!(path, "/healthz" | "/readyz" | "/metrics") || path.starts_with("/static/")
+}
+
+/// Refreshes the branding cache once it is older than [`BRANDING_REFRESH`]
+/// (or was never loaded). One request claims the refresh and starts it in
+/// the background; no request waits for it, and pages keep the current
+/// snapshot until the new one is swapped in.
 ///
 /// [`BRANDING_REFRESH`]: crate::state::BRANDING_REFRESH
 pub async fn branding_refresh(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    if state.branding().is_stale() {
-        state.reload_branding().await;
+    if !skips_branding(req.uri().path()) && state.claim_branding_refresh() {
+        let state = state.clone();
+        tokio::spawn(async move { state.reload_branding().await });
     }
     next.run(req).await
 }
@@ -258,6 +266,29 @@ mod tests {
 
     fn ip(s: &str) -> IpAddr {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn probes_and_assets_skip_the_branding_refresh() {
+        for p in [
+            "/healthz",
+            "/readyz",
+            "/metrics",
+            "/static/app.css",
+            "/static/fonts/x.woff2",
+        ] {
+            assert!(skips_branding(p), "{p}");
+        }
+        for p in [
+            "/",
+            "/login",
+            "/theme.css",
+            "/branding/seal",
+            "/documents",
+            "/staticx",
+        ] {
+            assert!(!skips_branding(p), "{p}");
+        }
     }
 
     #[test]

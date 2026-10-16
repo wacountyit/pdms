@@ -435,9 +435,7 @@ pub async fn list(
             .iter()
             .map(|d| (d.column(), d.label()))
             .collect(),
-        can_create: !documents::access::creatable_departments(&state.core, &user.ctx)
-            .await?
-            .is_empty(),
+        can_create: user.can_create,
         q,
     };
     Ok(Html(page.render()?))

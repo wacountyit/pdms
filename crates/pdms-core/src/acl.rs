@@ -84,6 +84,23 @@ impl GrantRow {
     }
 }
 
+/// Every `create` grant at global or department scope, in one query: what
+/// [`pdms_authz::decide_create`] needs for all departments at once. (A
+/// document-scoped grant never allows creating.)
+pub async fn create_grants(db: &PgPool) -> CoreResult<Vec<Grant>> {
+    let rows = sqlx::query_as!(
+        GrantRow,
+        r#"SELECT id, subject_user_id, subject_group_id, subject_department_id, subject_role_id,
+                  scope AS "scope: DbScope", scope_department_id, scope_document_id,
+                  permission AS "permission: DbPermission", expires_at
+             FROM acl_entries
+            WHERE permission = 'create' AND scope IN ('global', 'department')"#
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().filter_map(GrantRow::into_grant).collect())
+}
+
 /// Every grant that could apply to a document in `department_id` (global,
 /// that department, and the document itself), for [`pdms_authz::decide`].
 pub async fn relevant_grants(
