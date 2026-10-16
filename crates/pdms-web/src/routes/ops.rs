@@ -52,6 +52,28 @@ pub async fn static_file(Path(name): Path<String>) -> Response {
         .into_response()
 }
 
+const FONT_400: &[u8] = include_bytes!("../../static/fonts/source-sans-3-latin-400.woff2");
+const FONT_600: &[u8] = include_bytes!("../../static/fonts/source-sans-3-latin-600.woff2");
+const FONT_700: &[u8] = include_bytes!("../../static/fonts/source-sans-3-latin-700.woff2");
+
+/// `GET /static/fonts/{file}`: the embedded Source Sans 3 files (SIL OFL 1.1).
+pub async fn static_font(Path(name): Path<String>) -> Response {
+    let body = match name.as_str() {
+        "source-sans-3-latin-400.woff2" => FONT_400,
+        "source-sans-3-latin-600.woff2" => FONT_600,
+        "source-sans-3-latin-700.woff2" => FONT_700,
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "font/woff2"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        body,
+    )
+        .into_response()
+}
+
 /// The license PDMS is distributed under (served as shipped).
 const LICENSE: &str = include_str!("../../../../LICENSE");
 

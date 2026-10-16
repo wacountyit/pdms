@@ -390,3 +390,30 @@ async fn source_and_license_are_offered_to_every_user() {
     assert_eq!(r.status, StatusCode::SEE_OTHER);
     assert_eq!(r.location(), "https://github.com/example/pdms");
 }
+
+#[tokio::test]
+async fn fonts_are_served_with_long_cache() {
+    let app = app().await;
+    let mut b = Browser::new(&app);
+    let r = b.get("/static/fonts/source-sans-3-latin-400.woff2").await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.headers["content-type"], "font/woff2");
+    assert!(
+        r.headers["cache-control"]
+            .to_str()
+            .unwrap()
+            .contains("immutable")
+    );
+    for weight in ["600", "700"] {
+        let path = format!("/static/fonts/source-sans-3-latin-{weight}.woff2");
+        assert_eq!(b.get(&path).await.status, StatusCode::OK, "{path}");
+    }
+    assert_eq!(
+        b.get("/static/fonts/nope.woff2").await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        b.get("/static/fonts/../app.css").await.status,
+        StatusCode::NOT_FOUND
+    );
+}

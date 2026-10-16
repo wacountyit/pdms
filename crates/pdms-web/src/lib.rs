@@ -359,6 +359,7 @@ pub fn router(state: AppState) -> Router {
         .route("/readyz", get(ops::readyz))
         .route("/metrics", get(ops::metrics))
         .route("/static/{file}", get(ops::static_file))
+        .route("/static/fonts/{file}", get(ops::static_font))
         .fallback(|| async { error::AppError::Core(pdms_core::CoreError::NotFound) })
         // Layers run bottom-up for requests: the last added runs first.
         .layer(from_fn_with_state(state.clone(), middleware::flash))
