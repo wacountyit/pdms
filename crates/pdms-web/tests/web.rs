@@ -212,7 +212,7 @@ async fn login_form_requires_its_own_csrf_token() {
             "/login/local",
             &[
                 ("_csrf", "forged"),
-                ("email", "x@example.org"),
+                ("username", "x@example.org"),
                 ("password", PW),
                 ("code", &code),
             ],
@@ -231,7 +231,7 @@ async fn login_attempts_are_rate_limited() {
     let csrf = b.get("/login").await.csrf();
     let form = [
         ("_csrf", csrf.as_str()),
-        ("email", "nobody@example.org"),
+        ("username", "nobody@example.org"),
         ("password", "whatever whatever"),
         ("code", "000000"),
     ];
@@ -416,4 +416,79 @@ async fn fonts_are_served_with_long_cache() {
         b.get("/static/fonts/../app.css").await.status,
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn login_page_says_username() {
+    let app = app().await;
+    let r = Browser::new(&app).get("/login").await;
+    assert!(r.body.contains(r#"name="username""#));
+    assert!(r.body.contains(">Username<"));
+    assert!(!r.body.contains(r#"name="email""#));
+}
+
+#[tokio::test]
+async fn unknown_username_and_wrong_password_look_the_same() {
+    let app = app().await;
+    let (id, _) = user(&app.core, "ada@example.org", None, None).await;
+    directory::set_username(&app.core.db, &system(), id, Some("knownuser"))
+        .await
+        .unwrap();
+    let re = regex::Regex::new(r#"(?s)role="alert">(.*?)</div>"#).unwrap();
+    let mut texts = Vec::new();
+    for (name, pw) in [("ghostuser", PW), ("knownuser", "wrong wrong wrong wrong")] {
+        let mut b = Browser::new(&app);
+        let page = b.get("/login").await;
+        let r = b
+            .post(
+                "/login/local",
+                &[
+                    ("_csrf", &page.csrf()),
+                    ("username", name),
+                    ("password", pw),
+                    ("code", "000000"),
+                    ("next", "/"),
+                ],
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+        assert!(!r.body.contains(name), "response echoes the username");
+        assert!(!b.has_session());
+        texts.push(re.captures(&r.body).unwrap()[1].to_owned());
+    }
+    assert_eq!(texts[0], texts[1]);
+    assert!(texts[0].contains("Username, password, or authenticator code is incorrect."));
+}
+
+#[tokio::test]
+async fn admin_sets_username_and_user_signs_in_with_it() {
+    let app = app().await;
+    let (_, admin_secret) = user(&app.core, "root@example.org", None, Some("admin")).await;
+    let (id, secret) = user(&app.core, "ada@example.org", None, None).await;
+    let mut a = Browser::new(&app);
+    assert_eq!(
+        a.login("root@example.org", &admin_secret).await.status,
+        StatusCode::SEE_OTHER
+    );
+    let page = a.get(&format!("/admin/users/{id}")).await;
+    assert!(page.body.contains(r#"name="username""#));
+    let r = a
+        .post(
+            &format!("/admin/users/{id}/username"),
+            &[("_csrf", &page.csrf()), ("username", "SysAdmin")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    let mut b = Browser::new(&app);
+    let r = b.login("sysadmin", &secret).await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    assert!(b.has_session());
+    assert!(
+        actions(&app.core)
+            .await
+            .contains(&"user.username_set".to_owned())
+    );
+    // The page shows the saved value.
+    let page = a.get(&format!("/admin/users/{id}")).await;
+    assert!(page.body.contains(r#"value="SysAdmin""#));
 }

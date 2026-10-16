@@ -47,9 +47,19 @@ enum Command {
         email: String,
         #[arg(long)]
         name: String,
+        /// Plain username to sign in with, such as `sysadmin` (optional).
+        #[arg(long)]
+        username: Option<String>,
         /// Read the password from this environment variable instead of prompting.
         #[arg(long, value_name = "VAR")]
         password_env: Option<String>,
+    },
+    /// Set the sign-in username of a local (break-glass) account.
+    SetUsername {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        username: String,
     },
     /// Verify the audit log hash chain. Exit code 2 if it is broken.
     VerifyAudit {
@@ -153,10 +163,29 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
         Command::CreateAdmin {
             email,
             name,
+            username,
             password_env,
         } => {
             let core = connect(config).await?;
-            create_admin(&core, &email, &name, password_env.as_deref()).await?;
+            create_admin(
+                &core,
+                &email,
+                &name,
+                username.as_deref(),
+                password_env.as_deref(),
+            )
+            .await?;
+        }
+        Command::SetUsername { email, username } => {
+            let core = connect(config).await?;
+            let ctx = Ctx::system("cli:set-username");
+            let user = directory::list_users(&core.db, &email, 10)
+                .await?
+                .into_iter()
+                .find(|u| u.email.eq_ignore_ascii_case(&email))
+                .ok_or_else(|| anyhow::anyhow!("no user with email {email}"))?;
+            directory::set_username(&core.db, &ctx, user.id, Some(&username)).await?;
+            println!("Username for {email} set to {username}.");
         }
         Command::VerifyAudit { json } => {
             let core = connect(config).await?;
@@ -399,6 +428,7 @@ async fn create_admin(
     core: &Core,
     email: &str,
     name: &str,
+    username: Option<&str>,
     password_env: Option<&str>,
 ) -> anyhow::Result<()> {
     let ctx = Ctx::system("cli:create-admin");
@@ -434,6 +464,10 @@ async fn create_admin(
     )
     .await?;
 
+    if let Some(username) = username {
+        directory::set_username(&core.db, &ctx, user_id, Some(username)).await?;
+    }
+
     let admin_role = directory::role_id_by_key(&core.db, pdms_authz::role_keys::ADMIN).await?;
     let detail = directory::get_user(&core.db, user_id).await?;
     if !detail
@@ -446,8 +480,11 @@ async fn create_admin(
 
     let uri = totp::provisioning_uri(&secret, &core.config.org.name, email)?;
     println!("\nAdministrator ready: {email}");
+    if let Some(username) = username {
+        println!("Sign in with username {username} (or the email address).");
+    }
     println!(
-        "Add this account to an authenticator app, then sign in with email + password + 6-digit code."
+        "Add this account to an authenticator app, then sign in with username or email + password + 6-digit code."
     );
     println!("  Secret (manual entry): {}", totp::secret_base32(&secret));
     println!("  otpauth URI:           {uri}");

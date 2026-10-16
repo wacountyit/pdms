@@ -51,7 +51,8 @@ takes its default or is skipped:
   PDMS_INSTALL_PUBLIC_URL   the URL users open (external proxy)
   PDMS_INSTALL_PROXY_IP     your reverse proxy's IP address (external proxy)
   PDMS_INSTALL_DB_PORT      expose PostgreSQL on 127.0.0.1 at this port, or "yes" for the first free one (blank: don't)
-  PDMS_INSTALL_ADMIN_EMAIL, PDMS_INSTALL_ADMIN_NAME, PDMS_INSTALL_ADMIN_PASSWORD (blank: generated)
+  PDMS_INSTALL_ADMIN_EMAIL, PDMS_INSTALL_ADMIN_USERNAME (default: sysadmin), PDMS_INSTALL_ADMIN_NAME,
+  PDMS_INSTALL_ADMIN_PASSWORD (blank: generated)
   PDMS_INSTALL_TENANT_ID, PDMS_INSTALL_CLIENT_ID, PDMS_INSTALL_CLIENT_SECRET
   PDMS_INSTALL_SMTP_HOST, PDMS_INSTALL_SMTP_PORT, PDMS_INSTALL_SMTP_SECURITY (starttls|tls|none),
   PDMS_INSTALL_SMTP_USERNAME, PDMS_INSTALL_SMTP_PASSWORD, PDMS_INSTALL_SMTP_FROM
@@ -631,13 +632,15 @@ fi
 
 # --- 9. first administrator (asked now; created after the build) -----------------------
 ADMIN_EMAIL=""
+ADMIN_USERNAME=""
 ADMIN_PASSWORD_SHOWN=""
 if configuring admin || [[ -z "$(env_get PDMS_ADMIN_CREATED)" ]]; then
   say "First administrator (break-glass local account)"
-  note "This account signs in with a password and an authenticator app code. Keep it for"
+  note "This account signs in with a username (or email), a password and an authenticator app code. Keep it for"
   note "emergencies once Entra ID sign-in works. --configure admin resets it."
   admin_domain=$(env_get PDMS_DOMAIN)
   ask ADMIN_EMAIL "Administrator email" "admin@${admin_domain:-example.org}"
+  ask ADMIN_USERNAME "Administrator username" "sysadmin"
   ask ADMIN_NAME "Administrator name" "PDMS Administrator"
   if [[ -n "${PDMS_INSTALL_ADMIN_PASSWORD:-}" ]]; then
     admin_password=$PDMS_INSTALL_ADMIN_PASSWORD
@@ -668,7 +671,7 @@ if [[ -n "$ADMIN_EMAIL" ]]; then
       WHERE r.key = 'admin' AND a.department_id IS NULL AND u.status = 'active'" </dev/null 2>/dev/null || echo 0)
   if configuring admin || [[ "${admins:-0}" == 0 ]]; then
     PDMS_INSTALL_ADMIN_PASSWORD=$admin_password docker compose run --rm -T -e PDMS_INSTALL_ADMIN_PASSWORD app \
-      create-admin --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" --password-env PDMS_INSTALL_ADMIN_PASSWORD </dev/null
+      create-admin --email "$ADMIN_EMAIL" --username "$ADMIN_USERNAME" --name "$ADMIN_NAME" --password-env PDMS_INSTALL_ADMIN_PASSWORD </dev/null
   else
     echo "   An administrator already exists; not creating another (use --configure admin to reset)."
     ADMIN_PASSWORD_SHOWN=""
@@ -700,6 +703,7 @@ case "$MODE" in
 esac
 if [[ -n "$ADMIN_PASSWORD_SHOWN" ]]; then
   echo
+  [[ -n "$ADMIN_USERNAME" ]] && echo "   Administrator username: $ADMIN_USERNAME"
   echo "   Administrator password (shown once; store it in your password vault):"
   echo "     $ADMIN_PASSWORD_SHOWN"
   echo "   Add the authenticator secret printed above to an authenticator app."

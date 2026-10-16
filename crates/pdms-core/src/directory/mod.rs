@@ -34,6 +34,7 @@ pub struct UserSummary {
     pub id: Uuid,
     pub display_name: String,
     pub email: String,
+    pub username: Option<String>,
     pub status: UserStatus,
     pub last_login_at: Option<DateTime<Utc>>,
     pub has_local_login: bool,
@@ -151,7 +152,7 @@ pub async fn list_users(db: &PgPool, query: &str, limit: i64) -> CoreResult<Vec<
     let pattern = format!("%{}%", escape_like(query.trim()));
     Ok(sqlx::query_as!(
         UserSummary,
-        r#"SELECT u.id, u.display_name, u.email, u.status AS "status: UserStatus", u.last_login_at,
+        r#"SELECT u.id, u.display_name, u.email, u.username, u.status AS "status: UserStatus", u.last_login_at,
                   EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "has_local_login!",
                   (u.oidc_subject IS NOT NULL) AS "oidc_linked!",
                   ARRAY(SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id
@@ -170,7 +171,7 @@ pub async fn list_users(db: &PgPool, query: &str, limit: i64) -> CoreResult<Vec<
 pub async fn get_user(db: &PgPool, id: Uuid) -> CoreResult<UserDetail> {
     let user = sqlx::query_as!(
         UserSummary,
-        r#"SELECT u.id, u.display_name, u.email, u.status AS "status: UserStatus", u.last_login_at,
+        r#"SELECT u.id, u.display_name, u.email, u.username, u.status AS "status: UserStatus", u.last_login_at,
                   EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "has_local_login!",
                   (u.oidc_subject IS NOT NULL) AS "oidc_linked!",
                   ARRAY(SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id

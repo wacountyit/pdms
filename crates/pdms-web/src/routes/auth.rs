@@ -145,7 +145,7 @@ pub async fn login_page(
 
 #[derive(Deserialize)]
 pub struct LocalLoginForm {
-    email: String,
+    username: String,
     password: String,
     #[serde(default)]
     code: String,
@@ -168,7 +168,7 @@ pub async fn login_local(
     rate_limit(&state, &client)?;
     match local::login(
         &state.core,
-        &form.email,
+        &form.username,
         &form.password,
         &form.code,
         &client,
@@ -181,10 +181,13 @@ pub async fn login_local(
             Ok((jar, plain, Redirect::to(&safe_return_to(&form.next))).into_response())
         }
         Err(LoginError::Failed(reason)) => {
+            // One message for every reason, so nothing reveals which part was wrong.
             let msg = if reason == LoginFailure::Disabled {
                 "Emergency sign-in is disabled."
+            } else if state.core.config.auth.local.require_totp {
+                "Username, password, or authenticator code is incorrect."
             } else {
-                "Sign-in failed. Check your email, password, and authenticator code."
+                "Username or password is incorrect."
             };
             render_login(&state, jar, &form.next, Some(msg), StatusCode::UNAUTHORIZED)
         }

@@ -61,6 +61,7 @@ pub fn router(state: AppState) -> Router {
             "/users/{id}",
             get(admin::user_detail).post(admin::update_user),
         )
+        .route("/users/{id}/username", post(admin::set_username))
         .route("/users/{id}/status", post(admin::set_status))
         .route("/users/{id}/departments", post(admin::add_membership))
         .route(

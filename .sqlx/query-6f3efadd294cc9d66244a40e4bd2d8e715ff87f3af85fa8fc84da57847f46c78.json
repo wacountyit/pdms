@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id, u.display_name, u.status AS \"status: UserStatus\",\n                  c.password_hash AS \"password_hash?\", c.totp_secret_enc, c.totp_last_step,\n                  c.failed_attempts AS \"failed_attempts?\", c.locked_until\n             FROM users u\n             LEFT JOIN local_credentials c ON c.user_id = u.id\n            WHERE lower(u.email) = lower($1)",
+  "query": "SELECT u.id AS \"id!\", u.display_name AS \"display_name!\", u.status AS \"status!: UserStatus\",\n                  c.password_hash AS \"password_hash?\", c.totp_secret_enc, c.totp_last_step,\n                  c.failed_attempts AS \"failed_attempts?\", c.locked_until\n             FROM users u\n             LEFT JOIN local_credentials c ON c.user_id = u.id\n            WHERE CASE WHEN strpos($1, '@') > 0\n                       THEN lower(u.email) = lower($1)\n                       ELSE lower(u.username) = lower($1)\n                  END",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id!",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "display_name",
+        "name": "display_name!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "status: UserStatus",
+        "name": "status!: UserStatus",
         "type_info": {
           "Custom": {
             "name": "user_status",
@@ -109,15 +109,15 @@
       ]
     },
     "nullable": [
+      true,
+      true,
+      true,
       false,
+      true,
+      true,
       false,
-      false,
-      true,
-      true,
-      true,
-      true,
       true
     ]
   },
-  "hash": "8632eb7734842a919b139544c3d05b501d90255647492d924846241270a177d4"
+  "hash": "6f3efadd294cc9d66244a40e4bd2d8e715ff87f3af85fa8fc84da57847f46c78"
 }

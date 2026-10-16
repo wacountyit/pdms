@@ -69,13 +69,13 @@ fn actor(client: &ClientInfo, user_id: Option<Uuid>, display: Option<String>) ->
 
 pub async fn login(
     core: &Core,
-    email: &str,
+    identifier: &str,
     password_input: &str,
     totp_code: &str,
     client: &ClientInfo,
 ) -> Result<LoginSuccess, LoginError> {
     let cfg = &core.config.auth.local;
-    let email = email.trim();
+    let identifier = identifier.trim();
     let failed = |user_id: Option<Uuid>, display: Option<String>, reason: LoginFailure| {
         AuditEvent::new(
             Category::Auth,
@@ -86,7 +86,7 @@ pub async fn login(
         .outcome(Outcome::Failure)
         .context(
             "attempted_identifier",
-            email.chars().take(320).collect::<String>(),
+            identifier.chars().take(320).collect::<String>(),
         )
         .context("reason", reason.as_str())
     };
@@ -99,13 +99,16 @@ pub async fn login(
     }
 
     let row = sqlx::query!(
-        r#"SELECT u.id, u.display_name, u.status AS "status: UserStatus",
+        r#"SELECT u.id AS "id!", u.display_name AS "display_name!", u.status AS "status!: UserStatus",
                   c.password_hash AS "password_hash?", c.totp_secret_enc, c.totp_last_step,
                   c.failed_attempts AS "failed_attempts?", c.locked_until
              FROM users u
              LEFT JOIN local_credentials c ON c.user_id = u.id
-            WHERE lower(u.email) = lower($1)"#,
-        email
+            WHERE CASE WHEN strpos($1, '@') > 0
+                       THEN lower(u.email) = lower($1)
+                       ELSE lower(u.username) = lower($1)
+                  END"#,
+        identifier
     )
     .fetch_optional(&core.db)
     .await

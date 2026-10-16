@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id, u.display_name, u.email, u.status AS \"status: UserStatus\", u.last_login_at,\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"has_local_login!\",\n                  (u.oidc_subject IS NOT NULL) AS \"oidc_linked!\",\n                  ARRAY(SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id\n                         WHERE m.user_id = u.id ORDER BY m.is_primary DESC, d.name) AS \"departments!\"\n             FROM users u WHERE u.id = $1",
+  "query": "SELECT u.id, u.display_name, u.email, u.username, u.status AS \"status: UserStatus\", u.last_login_at,\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"has_local_login!\",\n                  (u.oidc_subject IS NOT NULL) AS \"oidc_linked!\",\n                  ARRAY(SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id\n                         WHERE m.user_id = u.id ORDER BY m.is_primary DESC, d.name) AS \"departments!\"\n             FROM users u\n            WHERE u.display_name ILIKE $1 OR u.email ILIKE $1\n            ORDER BY u.display_name\n            LIMIT $2",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "username",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "status: UserStatus",
         "type_info": {
           "Custom": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "last_login_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,19 +81,19 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "has_local_login!",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "oidc_linked!",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "departments!",
         "type_info": "TextArray",
         "origin": "Expression"
@@ -90,13 +101,15 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       false,
+      true,
       false,
       true,
       null,
@@ -104,5 +117,5 @@
       null
     ]
   },
-  "hash": "24f61ddb769a8cf528c3a32e033430d5d4910a982db875e75940aba684affd8c"
+  "hash": "6a6a6de7e13aba8cefd49e5c31174f32faa3e7186e56ec697d5016f0a7be3c2f"
 }

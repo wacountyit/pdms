@@ -78,6 +78,13 @@
 <section aria-labelledby="local-h">
   <h2 id="local-h">Emergency sign-in</h2>
   <p>This user has break-glass local credentials. Reset them with <code>pdms create-admin</code> on the server.</p>
+  <form method="post" action="/admin/users/{{ u.user.id }}/username" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" value="{% if let Some(n) = u.user.username %}{{ n }}{% endif %}" pattern="[A-Za-z0-9._-]{2,64}" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help">
+    <p id="username-help" class="help">Used with the password on the sign-in page. Leave blank to sign in with the email address only.</p>
+    <button type="submit">Save</button>
+  </form>
   <form method="post" action="/admin/users/{{ u.user.id }}/local-credentials/remove">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <button type="submit" class="danger">Remove local credentials</button>

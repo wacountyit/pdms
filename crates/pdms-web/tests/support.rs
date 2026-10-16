@@ -218,7 +218,7 @@ impl Browser {
             "/login/local",
             &[
                 ("_csrf", &page.csrf()),
-                ("email", email),
+                ("username", email),
                 ("password", PW),
                 ("code", &code),
                 ("next", "/"),

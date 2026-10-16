@@ -187,6 +187,22 @@ pub async fn update_user(
 }
 
 #[derive(Deserialize)]
+pub struct UsernameForm {
+    #[serde(default)]
+    username: String,
+}
+
+pub async fn set_username(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Form(f): Form<UsernameForm>,
+) -> AppResult<Response> {
+    let r = directory::set_username(&state.core.db, &user.ctx, id, Some(&f.username)).await;
+    done(&state, &format!("/admin/users/{id}"), r, "Username saved.")
+}
+
+#[derive(Deserialize)]
 pub struct StatusForm {
     status: String,
 }

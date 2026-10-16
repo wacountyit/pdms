@@ -228,6 +228,70 @@ pub async fn update_user(
     Ok(())
 }
 
+fn clean_username(s: &str) -> CoreResult<Option<String>> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let ok = (2..=64).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'));
+    if !ok {
+        return Err(CoreError::validation(
+            "Usernames are 2–64 letters, numbers, dots, dashes, or underscores.",
+        ));
+    }
+    Ok(Some(s.to_owned()))
+}
+
+/// Set or clear the plain username a local (break-glass) account can sign in with.
+/// An empty value clears it. Unique ignoring case.
+pub async fn set_username(
+    db: &PgPool,
+    ctx: &Ctx,
+    user_id: Uuid,
+    username: Option<&str>,
+) -> CoreResult<()> {
+    ctx.require(Capability::ManageDirectory)?;
+    let username = username.map(clean_username).transpose()?.flatten();
+    let mut tx = db.begin().await?;
+    let before = sqlx::query!(
+        r#"SELECT u.username, u.display_name, (c.user_id IS NOT NULL) AS "has_local!"
+             FROM users u LEFT JOIN local_credentials c ON c.user_id = u.id
+            WHERE u.id = $1 FOR UPDATE OF u"#,
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(CoreError::NotFound)?;
+    if !before.has_local {
+        return Err(CoreError::validation(
+            "Only accounts with local sign-in can have a username.",
+        ));
+    }
+    if before.username == username {
+        return Ok(());
+    }
+    sqlx::query!(
+        "UPDATE users SET username = $2, updated_at = now() WHERE id = $1",
+        user_id,
+        username
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| CoreError::conflict_on_unique(e, "That username is already in use."))?;
+    let e = event(ctx, Category::Admin, "user.username_set", "user")
+        .object(user_id, Some(&before.display_name))
+        .change(
+            "username",
+            before.username.as_deref().unwrap_or(""),
+            username.as_deref().unwrap_or(""),
+        );
+    pdms_audit::append(&mut tx, vec![e]).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Activate, disable, or mark departed. Leaving `active` revokes all sessions immediately.
 pub async fn set_user_status(
     db: &PgPool,
