@@ -634,6 +634,7 @@ fi
 ADMIN_EMAIL=""
 ADMIN_USERNAME=""
 ADMIN_PASSWORD_SHOWN=""
+ADMIN_CREATED_NOW=false
 if configuring admin || [[ -z "$(env_get PDMS_ADMIN_CREATED)" ]]; then
   say "First administrator (break-glass local account)"
   note "This account signs in with a username (or email), a password and an authenticator app code. Keep it for"
@@ -641,6 +642,13 @@ if configuring admin || [[ -z "$(env_get PDMS_ADMIN_CREATED)" ]]; then
   admin_domain=$(env_get PDMS_DOMAIN)
   ask ADMIN_EMAIL "Administrator email" "admin@${admin_domain:-example.org}"
   ask ADMIN_USERNAME "Administrator username" "sysadmin"
+  while [[ ! "$ADMIN_USERNAME" =~ ^[A-Za-z0-9._-]{2,64}$ ]]; do
+    if $NON_INTERACTIVE || [[ -n "${PDMS_INSTALL_ADMIN_USERNAME:-}" ]]; then
+      fail "Administrator username must be 2-64 letters, numbers, dots, dashes or underscores (got \"$ADMIN_USERNAME\")."
+    fi
+    echo "   Usernames are 2-64 letters, numbers, dots, dashes or underscores."
+    ask ADMIN_USERNAME "Administrator username" "sysadmin"
+  done
   ask ADMIN_NAME "Administrator name" "PDMS Administrator"
   if [[ -n "${PDMS_INSTALL_ADMIN_PASSWORD:-}" ]]; then
     admin_password=$PDMS_INSTALL_ADMIN_PASSWORD
@@ -672,6 +680,7 @@ if [[ -n "$ADMIN_EMAIL" ]]; then
   if configuring admin || [[ "${admins:-0}" == 0 ]]; then
     PDMS_INSTALL_ADMIN_PASSWORD=$admin_password docker compose run --rm -T -e PDMS_INSTALL_ADMIN_PASSWORD app \
       create-admin --email "$ADMIN_EMAIL" --username "$ADMIN_USERNAME" --name "$ADMIN_NAME" --password-env PDMS_INSTALL_ADMIN_PASSWORD </dev/null
+    ADMIN_CREATED_NOW=true
   else
     echo "   An administrator already exists; not creating another (use --configure admin to reset)."
     ADMIN_PASSWORD_SHOWN=""
@@ -701,9 +710,12 @@ case "$MODE" in
   external) echo "   Open: $PUBLIC_URL_NOW   (via your reverse proxy -> this host, port $(env_get PDMS_HTTP_PORT))" ;;
   *)        echo "   Open: $PUBLIC_URL_NOW   (local testing only)" ;;
 esac
+if $ADMIN_CREATED_NOW; then
+  echo
+  echo "   Username: $ADMIN_USERNAME"
+fi
 if [[ -n "$ADMIN_PASSWORD_SHOWN" ]]; then
   echo
-  [[ -n "$ADMIN_USERNAME" ]] && echo "   Administrator username: $ADMIN_USERNAME"
   echo "   Administrator password (shown once; store it in your password vault):"
   echo "     $ADMIN_PASSWORD_SHOWN"
   echo "   Add the authenticator secret printed above to an authenticator app."

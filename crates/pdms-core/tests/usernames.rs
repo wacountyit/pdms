@@ -139,3 +139,77 @@ async fn unknown_username_and_wrong_password_both_fail_generically() {
         Err(LoginError::Failed(LoginFailure::BadPassword))
     ));
 }
+
+#[tokio::test]
+async fn check_username_refuses_taken_and_bad_names() {
+    let (core, _db) = core_no_totp().await;
+    let u1 = local_user(&core, "A", "one@example.org").await;
+    let u2 = local_user(&core, "B", "two@example.org").await;
+    directory::set_username(&core.db, &system(), u1, Some("sysadmin"))
+        .await
+        .unwrap();
+    match directory::check_username(&core.db, "SysAdmin", Some(u2)).await {
+        Err(CoreError::Conflict(m)) => assert_eq!(m, "That username is already in use."),
+        other => panic!("expected conflict, got {other:?}"),
+    }
+    assert!(matches!(
+        directory::check_username(&core.db, "SysAdmin", None).await,
+        Err(CoreError::Conflict(_))
+    ));
+    for bad in ["has@sign", "a", &"a".repeat(65)] {
+        assert!(matches!(
+            directory::check_username(&core.db, bad, None).await,
+            Err(CoreError::Validation(_))
+        ));
+    }
+    // The owner may keep its own name; blank means none.
+    assert_eq!(
+        directory::check_username(&core.db, " SysAdmin ", Some(u1))
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("SysAdmin")
+    );
+    assert_eq!(
+        directory::check_username(&core.db, "  ", None)
+            .await
+            .unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn removing_local_credentials_clears_the_username() {
+    let (core, _db) = core_no_totp().await;
+    let u = local_user(&core, "A", "one@example.org").await;
+    directory::set_username(&core.db, &system(), u, Some("sysadmin"))
+        .await
+        .unwrap();
+    directory::remove_local_credentials(&core.db, &system(), u)
+        .await
+        .unwrap();
+    assert_eq!(
+        directory::get_user(&core.db, u)
+            .await
+            .unwrap()
+            .user
+            .username,
+        None
+    );
+    assert_eq!(username_set_count(&audit_actions(&core).await), 2);
+    // The name is free again.
+    let u2 = local_user(&core, "B", "two@example.org").await;
+    directory::set_username(&core.db, &system(), u2, Some("sysadmin"))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn clearing_a_username_needs_no_local_credentials() {
+    let (core, _db) = core_no_totp().await;
+    let (u, _) = user_in_new_department(&core, "A", "sso@example.org").await;
+    directory::set_username(&core.db, &system(), u, None)
+        .await
+        .unwrap();
+    assert_eq!(username_set_count(&audit_actions(&core).await), 0);
+}

@@ -244,6 +244,33 @@ fn clean_username(s: &str) -> CoreResult<Option<String>> {
     Ok(Some(s.to_owned()))
 }
 
+/// Validate `username` as `set_username` would, and check it is free (ignoring case),
+/// without changing anything. `except_user` is the account that may already hold it.
+pub async fn check_username(
+    db: &PgPool,
+    username: &str,
+    except_user: Option<Uuid>,
+) -> CoreResult<Option<String>> {
+    let Some(name) = clean_username(username)? else {
+        return Ok(None);
+    };
+    let taken = sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM users
+                           WHERE lower(username) = lower($1)
+                             AND ($2::uuid IS NULL OR id <> $2)) AS "taken!""#,
+        name,
+        except_user
+    )
+    .fetch_one(db)
+    .await?;
+    if taken {
+        return Err(CoreError::Conflict(
+            "That username is already in use.".into(),
+        ));
+    }
+    Ok(Some(name))
+}
+
 /// Set or clear the plain username a local (break-glass) account can sign in with.
 /// An empty value clears it. Unique ignoring case.
 pub async fn set_username(
@@ -264,7 +291,7 @@ pub async fn set_username(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(CoreError::NotFound)?;
-    if !before.has_local {
+    if !before.has_local && username.is_some() {
         return Err(CoreError::validation(
             "Only accounts with local sign-in can have a username.",
         ));
@@ -407,9 +434,34 @@ pub async fn remove_local_credentials(db: &PgPool, ctx: &Ctx, user_id: Uuid) -> 
     ctx.require(Capability::ManageDirectory)?;
     let mut tx = db.begin().await?;
     let label = user_label(&mut tx, user_id).await?;
+    let old_username = sqlx::query_scalar!(
+        "SELECT username FROM users WHERE id = $1 FOR UPDATE",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
     let r = sqlx::query!("DELETE FROM local_credentials WHERE user_id = $1", user_id)
         .execute(&mut *tx)
         .await?;
+    if let Some(old) = old_username {
+        // A username only belongs to an account that can sign in locally.
+        sqlx::query!(
+            "UPDATE users SET username = NULL, updated_at = now() WHERE id = $1",
+            user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        pdms_audit::append(
+            &mut tx,
+            vec![
+                event(ctx, Category::Admin, "user.username_set", "user")
+                    .object(user_id, Some(&label))
+                    .change("username", old.as_str(), ""),
+            ],
+        )
+        .await?;
+    }
     if r.rows_affected() > 0 {
         pdms_audit::append(
             &mut tx,

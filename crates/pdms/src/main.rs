@@ -453,6 +453,12 @@ async fn create_admin(
         None => directory::create_user(&core.db, &ctx, name, email, None).await?,
     };
 
+    // Validate the username before anything changes, so a bad one cannot leave
+    // the account half set up.
+    if let Some(username) = username {
+        directory::check_username(&core.db, username, Some(user_id)).await?;
+    }
+
     let secret = totp::generate_secret();
     directory::set_local_credentials(
         &core.db,
