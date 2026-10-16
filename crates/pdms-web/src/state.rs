@@ -208,9 +208,9 @@ impl AppState {
             Ok(b) => {
                 let snapshot = BrandingSnapshot::from(&self.core.config.org.name, &b);
                 let mut cache = write_cache(&self.branding);
-                let name = snapshot.org_name.clone();
+                let (name, version) = (snapshot.org_name.clone(), snapshot.version.clone());
                 if cache.apply(seq, snapshot) {
-                    crate::error::set_org_name(&name);
+                    crate::error::set_branding(&name, &version);
                 }
             }
             Err(e) => {

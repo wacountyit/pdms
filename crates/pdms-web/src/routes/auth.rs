@@ -83,18 +83,31 @@ fn rate_limit(state: &AppState, client: &pdms_core::ClientInfo) -> AppResult<()>
 #[template(path = "login.html")]
 struct LoginPage<'a> {
     org_name: &'a str,
+    theme_version: &'a str,
+    seal_version: Option<&'a str>,
     csrf: &'a str,
     next: &'a str,
     next_encoded: String,
-    oidc_name: Option<&'a str>,
     local_enabled: bool,
     totp_required: bool,
     error: Option<&'a str>,
+    notice: Option<&'static str>,
 }
 
 #[derive(Deserialize)]
 pub struct NextQuery {
     next: Option<String>,
+    #[serde(default)]
+    notice: String,
+}
+
+/// The fixed text for a `notice` code; unknown codes show nothing, and the
+/// request's own text is never echoed.
+fn notice_text(code: &str) -> Option<&'static str> {
+    match code {
+        "sso_off" => Some("Microsoft sign-in isn't set up yet. Contact your administrator."),
+        _ => None,
+    }
 }
 
 fn render_login(
@@ -102,6 +115,7 @@ fn render_login(
     jar: PrivateCookieJar,
     next: &str,
     error: Option<&str>,
+    notice: Option<&'static str>,
     status: StatusCode,
 ) -> AppResult<Response> {
     let mut cookie = read_login_cookie(state, &jar);
@@ -109,16 +123,18 @@ fn render_login(
         cookie.csrf = new_token();
     }
     let next = safe_return_to(next);
-    let org_name = state.org_name();
+    let branding = state.branding();
     let page = LoginPage {
-        org_name: &org_name,
+        org_name: &branding.org_name,
+        theme_version: &branding.version,
+        seal_version: branding.seal_version.as_deref(),
         csrf: &cookie.csrf,
         next: &next,
         next_encoded: url::form_urlencoded::byte_serialize(next.as_bytes()).collect(),
-        oidc_name: state.oidc.as_ref().map(|o| o.display_name()),
         local_enabled: state.core.config.auth.local.enabled,
         totp_required: state.core.config.auth.local.require_totp,
         error,
+        notice,
     };
     let html = page.render()?;
     let jar = jar.add(login_cookie(state, &cookie));
@@ -140,7 +156,14 @@ pub async fn login_page(
     {
         return Ok(Redirect::to(&safe_return_to(&next)).into_response());
     }
-    render_login(&state, jar, &next, None, StatusCode::OK)
+    render_login(
+        &state,
+        jar,
+        &next,
+        None,
+        notice_text(&q.notice),
+        StatusCode::OK,
+    )
 }
 
 #[derive(Deserialize)]
@@ -189,7 +212,14 @@ pub async fn login_local(
             } else {
                 "Username or password is incorrect."
             };
-            render_login(&state, jar, &form.next, Some(msg), StatusCode::UNAUTHORIZED)
+            render_login(
+                &state,
+                jar,
+                &form.next,
+                Some(msg),
+                None,
+                StatusCode::UNAUTHORIZED,
+            )
         }
         Err(LoginError::Core(e)) => Err(e.into()),
     }
@@ -202,7 +232,8 @@ pub async fn oidc_start(
     Query(q): Query<NextQuery>,
 ) -> AppResult<Response> {
     let Some(oidc) = state.oidc.clone() else {
-        return Err(pdms_core::CoreError::NotFound.into());
+        // The button is always shown; explain instead of a 404.
+        return Ok(Redirect::to("/login?notice=sso_off").into_response());
     };
     rate_limit(&state, &client)?;
     let (url, flow) = oidc.begin(q.next.as_deref().unwrap_or("/"));
@@ -238,6 +269,7 @@ pub async fn oidc_callback(
             jar,
             "/",
             Some("Single sign-on failed. Try again, or contact your administrator."),
+            None,
             StatusCode::UNAUTHORIZED,
         )
     };

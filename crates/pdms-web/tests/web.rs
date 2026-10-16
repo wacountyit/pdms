@@ -492,3 +492,56 @@ async fn admin_sets_username_and_user_signs_in_with_it() {
     let page = a.get(&format!("/admin/users/{id}")).await;
     assert!(page.body.contains(r#"value="SysAdmin""#));
 }
+
+#[tokio::test]
+async fn microsoft_button_when_sso_off_shows_notice() {
+    let app = app().await; // OIDC is off in tests
+    let mut b = Browser::new(&app);
+    let page = b.get("/login").await;
+    assert!(page.body.contains("Sign in with Microsoft"));
+    let r = b.get("/auth/oidc/start?next=%2F").await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    assert_eq!(r.location(), "/login?notice=sso_off");
+    let back = b.get("/login?notice=sso_off").await;
+    assert!(
+        back.body
+            .contains("Microsoft sign-in isn't set up yet. Contact your administrator.")
+            || back
+                .body
+                .contains("Microsoft sign-in isn&#39;t set up yet. Contact your administrator.")
+    );
+    let evil = b
+        .get("/login?notice=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+        .await;
+    assert!(!evil.body.contains("alert(1)"));
+    assert!(!evil.body.contains("set up yet"));
+}
+
+#[tokio::test]
+async fn sign_in_page_has_branding_and_no_help_line() {
+    let app = app().await;
+    let mut b = Browser::new(&app);
+    let page = b.get("/login").await;
+    assert!(
+        page.body
+            .contains("Know what&#39;s due, what&#39;s overdue, and who owns it.")
+            || page
+                .body
+                .contains("Know what's due, what's overdue, and who owns it.")
+    );
+    assert!(page.body.contains("Test Org PDMS"));
+    assert!(page.body.contains("href=\"/theme.css?v="));
+    assert!(!page.body.to_lowercase().contains("county staff"));
+    assert!(page.body.contains("Source code"));
+    assert!(!page.body.contains("Emergency administrator"));
+}
+
+#[tokio::test]
+async fn error_page_links_versioned_theme() {
+    let app = app().await;
+    let mut b = Browser::new(&app);
+    let r = b.get("/no-such-page-anywhere").await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert!(r.body.contains("href=\"/theme.css?v="), "{}", r.body);
+    assert!(r.body.contains("Back to the dashboard"));
+}

@@ -49,7 +49,10 @@ async fn require_admin(State(state): State<AppState>, req: Request, next: Next) 
 }
 
 pub fn router(state: AppState) -> Router {
-    error::set_org_name(&state.org_name());
+    {
+        let b = state.branding();
+        error::set_branding(&b.org_name, &b.version);
+    }
     use routes::{
         admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
         integrations, ops, schedule, workflow,

@@ -5,37 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in – {{ org_name }}</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/theme.css?v={{ theme_version }}">
 </head>
-<body class="login-page">
-  <main id="main" class="login-card">
-    <h1>{{ org_name }}</h1>
-    <p class="muted">Sign in to continue.</p>
-    {% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
-    {% if let Some(name) = oidc_name %}
-      <p><a class="button primary block" href="/auth/oidc/start?next={{ next_encoded }}">Sign in with {{ name }}</a></p>
-    {% endif %}
-    {% if local_enabled %}
-      {% if oidc_name.is_some() %}
-      <details {% if error.is_some() %}open{% endif %}>
-        <summary>Emergency administrator sign-in</summary>
-      {% endif %}
-      <form method="post" action="/login/local" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrf }}">
-        <input type="hidden" name="next" value="{{ next }}">
-        <label for="username">Username</label>
-        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required>
-        {% if totp_required %}
-        <label for="code">Authenticator code</label>
-        <input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required aria-describedby="code-help">
-        <p id="code-help" class="help">The 6-digit code from your authenticator app.</p>
+<body class="signin-body">
+  <div class="signin">
+    <section class="signin-about" aria-label="About PADM">
+      <div class="brand">
+        {% if let Some(v) = seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="48" height="48">{% else %}<span class="mark" aria-hidden="true">PADM</span>{% endif %}
+        <span class="brand-text"><span class="product">PADM</span><span class="org">{{ org_name }}</span></span>
+      </div>
+      <div class="signin-pitch">
+        <h1>Know what's due, what's overdue, and who owns it.</h1>
+        <ul class="signin-points">
+          <li><strong>Every document</strong><span>Policies, contracts, agreements, grants</span></li>
+          <li><strong>Every deadline</strong><span>Reviews, renewals, expirations, terms</span></li>
+          <li><strong>Every action</strong><span>Recorded in a tamper-evident log</span></li>
+        </ul>
+      </div>
+      <p class="signin-links"><a href="/source">Source code</a> · <a href="/license">License: AGPL-3.0-or-later</a></p>
+    </section>
+    <main id="main" class="signin-form">
+      <div class="signin-box">
+        <h2>Sign in</h2>
+        {% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
+        {% if let Some(n) = notice %}<div class="flash flash-info" role="status">{{ n }}</div>{% endif %}
+        {% if local_enabled %}
+        <form method="post" action="/login/local" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          {% if totp_required %}
+          <label for="code">Authenticator code</label>
+          <input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required aria-describedby="code-help">
+          <p id="code-help" class="help">The 6-digit code from your authenticator app.</p>
+          {% endif %}
+          <button type="submit" class="primary block">Sign in</button>
+        </form>
+        <p class="divider"><span>or</span></p>
         {% endif %}
-        <button type="submit" class="primary">Sign in</button>
-      </form>
-      {% if oidc_name.is_some() %}</details>{% endif %}
-    {% endif %}
-  </main>
-  <footer class="site-footer"><a href="/source">Source code</a> · <a href="/license">License: AGPL-3.0-or-later</a></footer>
+        <a class="button ms block" href="/auth/oidc/start?next={{ next_encoded }}">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
+          Sign in with Microsoft
+        </a>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

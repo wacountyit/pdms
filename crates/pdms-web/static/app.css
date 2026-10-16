@@ -561,6 +561,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-radius: 6px;
 }
 .flash-ok { background: var(--good-tint); border-left-color: var(--good-dot); color: var(--good-fg); }
+.flash-info { background: var(--info-tint); border-left-color: var(--info-dot); color: var(--info-fg); }
 .flash-error { background: var(--crit-tint); border-left-color: var(--crit-dot); color: var(--crit-fg); }
 
 /* Disclosure: a styled <details>/<summary> */
@@ -621,24 +622,58 @@ body > main { display: block; max-width: 1200px; margin: 0 auto; padding: 28px 2
 .site-header a { color: var(--nav-fg); text-decoration: none; }
 .site-header .brand { margin-right: auto; color: #FFFFFF; font-size: 17px; font-weight: 700; }
 
-/* The old sign-in page. */
-.login-page {
-  min-height: 100vh;
+/* Sign-in page: two panels (about, form). */
+.signin-body { margin: 0; background: var(--nav-bg); }
+.signin { display: grid; min-height: 100vh; background: var(--nav-bg); color: #E8EDF3; }
+.signin-about {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 32px 24px;
+}
+.signin-about .brand { display: flex; align-items: center; gap: 14px; color: #FFFFFF; font-weight: 700; }
+.signin-about .brand img, .signin-about .brand .mark { width: 48px; height: 48px; }
+.signin-about .brand .product { font-size: 18px; }
+.signin-about .brand .org { font-size: 14px; }
+.signin-pitch { display: flex; flex-direction: column; gap: 28px; max-width: 640px; }
+.signin-pitch h1 { margin: 0; font-size: 34px; line-height: 1.1; color: #FFFFFF; }
+.signin-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.signin-points li { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 2px solid var(--accent); }
+.signin-points strong { font-size: 15px; font-weight: 600; color: #FFFFFF; }
+.signin-points span { font-size: 14px; color: var(--nav-muted); }
+.signin-links { margin: 0; font-size: 13px; color: var(--nav-muted); }
+.signin-links a { color: var(--nav-signout); }
+.signin-form {
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-}
-body > main.login-card {
-  width: min(26rem, 100%);
   margin: 0;
-  padding: 28px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 40px 24px;
+  background: var(--ground);
+  color: var(--ink);
 }
-.login-card h1 { font-size: 24px; }
+.signin-box { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 18px; }
+.signin-box h2 { margin: 0; font-size: 28px; }
+.signin-box .flash { margin: 0; }
+.signin-box form { margin: 0; }
+.divider { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--muted); font-size: 14px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.button.ms { gap: 10px; justify-content: center; background: var(--surface); border-color: var(--control-border); color: var(--ink); }
+.button.ms:hover { background: var(--row); }
+.button.ms svg { flex: none; }
+@media (min-width: 900px) {
+  .signin { grid-template-columns: 1fr 440px; }
+  .signin-about { padding: 72px 64px; }
+  .signin-pitch h1 { font-size: 48px; }
+  .signin-points { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Error page */
+.error-body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 16px; background: var(--ground); }
+.error-panel { width: min(30rem, 100%); margin: 0; padding: 28px; }
+.error-org { margin: 0 0 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.error-panel h1 { margin-top: 0; }
 
 /* Buttons and links */
 button.link {
@@ -651,7 +686,7 @@ button.link {
   text-decoration: underline;
 }
 button.link:hover { background: none; text-decoration-thickness: 2px; }
-.button.block { display: flex; width: 100%; }
+.button.block, button.block { display: flex; width: 100%; justify-content: center; }
 .inline-form { display: inline; margin: 0; }
 
 /* Containers */

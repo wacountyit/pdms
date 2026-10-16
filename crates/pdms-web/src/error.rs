@@ -39,20 +39,25 @@ impl From<pdms_audit::AuditError> for AppError {
     }
 }
 
-/// The organization name for error pages, which render without the state.
-/// The branding cache updates it on every reload.
-static ORG_NAME: LazyLock<RwLock<String>> =
-    LazyLock::new(|| RwLock::new(pdms_core::config::DEFAULT_ORG_NAME.to_owned()));
+/// The organization name and theme version for error pages, which render
+/// without the state. The branding cache updates them on every reload.
+static BRANDING: LazyLock<RwLock<(String, String)>> = LazyLock::new(|| {
+    RwLock::new((
+        pdms_core::config::DEFAULT_ORG_NAME.to_owned(),
+        String::new(),
+    ))
+});
 
-pub(crate) fn set_org_name(name: &str) {
-    let mut current = ORG_NAME.write().unwrap_or_else(PoisonError::into_inner);
-    if *current != name {
-        name.clone_into(&mut current);
+pub(crate) fn set_branding(name: &str, theme_version: &str) {
+    let mut current = BRANDING.write().unwrap_or_else(PoisonError::into_inner);
+    if current.0 != name || current.1 != theme_version {
+        name.clone_into(&mut current.0);
+        theme_version.clone_into(&mut current.1);
     }
 }
 
-fn org_name() -> String {
-    ORG_NAME
+fn branding() -> (String, String) {
+    BRANDING
         .read()
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
@@ -62,15 +67,17 @@ fn org_name() -> String {
 #[template(path = "error.html")]
 struct ErrorPage<'a> {
     org_name: &'a str,
+    theme_version: &'a str,
     status: u16,
     title: &'a str,
     message: &'a str,
 }
 
 pub fn error_page(status: StatusCode, title: &str, message: &str) -> Response {
-    let org_name = org_name();
+    let (org_name, theme_version) = branding();
     let page = ErrorPage {
         org_name: &org_name,
+        theme_version: &theme_version,
         status: status.as_u16(),
         title,
         message,
