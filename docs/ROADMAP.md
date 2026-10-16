@@ -11,7 +11,7 @@ record**. Read it first if you are picking up the work.
 
 ---
 
-## 0. Where things stand (updated 2026-10-14)
+## 0. Where things stand (updated 2026-10-15)
 
 The product is now called **PADM**. The code, crates, binary, and Docker
 images are still named `pdms`.
@@ -77,7 +77,8 @@ Work through these in order unless noted. Each one gets its own spec and plan.
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Planned**: spec approved; plan P2 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
-| 5 | **UI redesign** | Every page | Not started; needs a spec. Do after 1–3 so it covers the final features | — |
+| 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Spec written 2026-10-15, awaiting owner review.** The owner moved R1 ahead of 1–3 so there is a shell to show leadership | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md) |
+| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | Not started; after 1–3 so it covers the final features | — |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 
