@@ -49,7 +49,7 @@ async fn require_admin(State(state): State<AppState>, req: Request, next: Next) 
 }
 
 pub fn router(state: AppState) -> Router {
-    error::set_org_name(state.org_name());
+    error::set_org_name(&state.org_name());
     use routes::{
         admin, api, appointments, audit, auth, collab, doc_admin, documents, exports, integrations,
         ops, schedule, workflow,
@@ -343,6 +343,9 @@ pub fn router(state: AppState) -> Router {
                 .layer(upload_limit),
         )
         .route("/tag-colors.css", get(documents::tag_colors))
+        // Public: the sign-in page uses them too.
+        .route("/theme.css", get(ops::theme_css))
+        .route("/branding/seal", get(ops::seal))
         .route(
             "/admin",
             get(|| async { axum::response::Redirect::to("/admin/users") }),
@@ -362,6 +365,10 @@ pub fn router(state: AppState) -> Router {
         .route("/static/fonts/{file}", get(ops::static_font))
         .fallback(|| async { error::AppError::Core(pdms_core::CoreError::NotFound) })
         // Layers run bottom-up for requests: the last added runs first.
+        .layer(from_fn_with_state(
+            state.clone(),
+            middleware::branding_refresh,
+        ))
         .layer(from_fn_with_state(state.clone(), middleware::flash))
         .layer(from_fn_with_state(state.clone(), middleware::csrf_guard))
         .layer(from_fn_with_state(state.clone(), middleware::client_info))

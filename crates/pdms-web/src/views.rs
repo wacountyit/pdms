@@ -54,6 +54,28 @@ pub struct Layout {
     /// Records request packages: records officers build them, auditors review them.
     pub can_exports: bool,
     pub unread: i64,
+    /// `/theme.css?v=` (changes with every branding save).
+    pub theme_version: String,
+    /// `/branding/seal?v=`; `None` shows the generic mark.
+    pub seal_version: Option<String>,
+    /// Under the user's name in the sidebar; may be empty.
+    pub user_department: String,
+    /// Shows the top bar's "New document" button.
+    pub can_create: bool,
+    /// Shows the administration tab row.
+    pub admin_tabs: bool,
+}
+
+/// Up to two uppercase initials: the first letters of the first two words,
+/// or the first two letters of a single word.
+fn initials_of(name: &str) -> String {
+    let mut words = name.split_whitespace();
+    let letters: String = match (words.next(), words.next()) {
+        (Some(a), Some(b)) => a.chars().take(1).chain(b.chars().take(1)).collect(),
+        (Some(a), None) => a.chars().take(2).collect(),
+        _ => String::new(),
+    };
+    letters.to_uppercase()
 }
 
 impl Layout {
@@ -71,6 +93,11 @@ impl Layout {
             "/admin/tags"
         }
     }
+
+    /// For the initials circle in the sidebar.
+    pub fn initials(&self) -> String {
+        initials_of(&self.user_name)
+    }
 }
 
 impl Layout {
@@ -81,8 +108,14 @@ impl Layout {
         title: &str,
         section: &'static str,
     ) -> Self {
+        let branding = state.branding();
         Layout {
-            org_name: state.org_name().to_owned(),
+            org_name: branding.org_name,
+            theme_version: branding.version,
+            seal_version: branding.seal_version,
+            user_department: user.department_label.clone(),
+            can_create: user.can_create,
+            admin_tabs: section == "admin",
             title: title.to_owned(),
             user_name: user.session.display_name.clone(),
             csrf: user.csrf.clone(),
@@ -189,4 +222,19 @@ pub fn human_size(bytes: Option<i64>) -> String {
 /// CSS class for a tag's color (rules served by `/tag-colors.css`).
 pub fn tag_class(id: uuid::Uuid) -> String {
     format!("tag tag-{}", id.simple())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::initials_of;
+
+    #[test]
+    fn initials_take_two_words_or_two_letters() {
+        assert_eq!(initials_of("Ada Lovelace"), "AL");
+        assert_eq!(initials_of("  ada   byron lovelace "), "AB");
+        assert_eq!(initials_of("ada@example.org"), "AD");
+        assert_eq!(initials_of("Ödön von Horváth"), "ÖV");
+        assert_eq!(initials_of("Q"), "Q");
+        assert_eq!(initials_of("   "), "");
+    }
 }

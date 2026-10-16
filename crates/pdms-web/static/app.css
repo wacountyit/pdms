@@ -126,7 +126,10 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
 /* ==========================================================================
    3. Shell: sidebar, top bar, page frame (spec §5)
    Below 900px the sidebar is a top bar and its menu opens from a
-   <details class="menu-toggle">.
+   <details class="menu-toggle">. The menu (templates/partials/nav.html) is
+   rendered twice: in .sidebar-nav, shown from 900px up, and inside the
+   toggle, shown below 900px. display: none on the other copy also keeps it
+   out of the accessibility tree.
    ========================================================================== */
 
 .app { display: flex; flex-direction: column; min-height: 100vh; }
@@ -151,6 +154,22 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
   font-weight: 700;
   text-decoration: none;
 }
+.brand img, .brand .mark { flex: none; width: 38px; height: 38px; border-radius: 8px; }
+.brand img { object-fit: contain; }
+.brand .mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #FFFFFF;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.brand .product { color: #FFFFFF; font-size: 16px; }
+.brand .org { color: var(--nav-muted); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+
+.sidebar-nav { display: none; }
 
 .nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nav a {
@@ -176,16 +195,58 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
   text-transform: uppercase;
 }
 
-.sidebar .me {
+/* The user block: initials, name and department, then API tokens and
+   Sign out. Pinned to the bottom of the sidebar from 900px up. */
+.me {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   margin-top: auto;
-  padding: 12px 10px;
+  padding: 12px 10px 0;
   border-top: 1px solid var(--nav-divider);
   font-size: 14px;
 }
+.menu-toggle .me { margin-top: 12px; }
+.me .initials {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--nav-active);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+}
+.me .who { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.me .name { color: #FFFFFF; font-weight: 600; overflow-wrap: anywhere; }
+.me .dept { color: var(--nav-muted); font-size: 12px; }
+.me > a, .me > form { flex: 1 0 100%; margin: 0; }
+.me > a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 2px;
+  text-decoration: none;
+}
+.me > a:hover { color: #FFFFFF; text-decoration: underline; }
+.me > a[aria-current="page"] { color: #FFFFFF; font-weight: 600; }
+.signout {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 44px;
+  gap: 10px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--nav-signout);
+  font-weight: 400;
+}
+.signout:hover { background: none; text-decoration: underline; }
 
 .menu-toggle > summary {
   position: absolute;
@@ -242,6 +303,10 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
 }
 .topbar .search input:focus-visible { outline: none; }
 
+/* Administration pages: the admin areas as a tab row under the top bar.
+   Two classes, so this wins over the later .tabs margin. */
+.tabs.admin-tabs { margin: 0; padding: 0; background: var(--surface); }
+
 .page { flex: 1 0 auto; width: 100%; padding: 22px 16px 40px; }
 .page-footer { padding: 16px; color: var(--muted); font-size: 13px; }
 
@@ -258,20 +323,12 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
     overflow-y: auto;
   }
   .sidebar .brand { margin-right: 0; padding: 0 10px; }
-  .menu-toggle > summary { position: static; }
+  .sidebar-nav { display: flex; flex: 1 0 auto; flex-direction: column; }
+  .menu-toggle { display: none; }
   .topbar { padding: 14px 40px; }
+  .tabs.admin-tabs { padding: 0 24px; }
   .page { padding: 28px 40px 48px; }
   .page-footer { padding: 16px 40px 28px; }
-}
-
-/* At 900px and up the menu is always open and its summary hidden, where the
-   browser can style the content of a closed <details>; elsewhere the Menu
-   button stays and still works. */
-@supports selector(::details-content) {
-  @media (min-width: 900px) {
-    .menu-toggle > summary { display: none; }
-    .menu-toggle::details-content { content-visibility: visible; }
-  }
 }
 
 /* ==========================================================================
@@ -547,11 +604,11 @@ details > summary { margin: 16px 0 8px; cursor: pointer; }
    5. Legacy: classes the other pages still use (spec §12)
    ========================================================================== */
 
-/* Pages without the app shell (old header, /source, /api/docs, errors). */
+/* Pages without the app shell (/source, /api/docs, sign-in, errors). */
 body > main { display: block; max-width: 1200px; margin: 0 auto; padding: 28px 24px 40px; }
 .site-footer { padding: 28px 16px; color: var(--muted); font-size: 13px; text-align: center; }
 
-/* The old top header, until the sidebar shell replaces it. */
+/* The standalone error page's header. */
 .site-header {
   display: flex;
   flex-wrap: wrap;
@@ -563,33 +620,6 @@ body > main { display: block; max-width: 1200px; margin: 0 auto; padding: 28px 2
 }
 .site-header a { color: var(--nav-fg); text-decoration: none; }
 .site-header .brand { margin-right: auto; color: #FFFFFF; font-size: 17px; font-weight: 700; }
-.site-header nav ul { display: flex; flex-wrap: wrap; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.site-header nav a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 10px;
-  border-radius: 6px;
-}
-.site-header nav a:hover, .site-header nav a[aria-current="page"] { background: var(--nav-active); color: #FFFFFF; }
-.site-header nav a[aria-current="page"] { font-weight: 600; }
-.signout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; }
-.signout .who { color: var(--nav-muted); }
-.signout a.who { color: var(--nav-fg); }
-.signout .link { color: var(--nav-signout); }
-.subnav { padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
-.subnav ul { display: flex; flex-wrap: wrap; gap: 0 4px; margin: 0; padding: 0; list-style: none; }
-.subnav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 10px;
-  border-bottom: 3px solid transparent;
-  color: var(--muted);
-  text-decoration: none;
-}
-.subnav a:hover { color: var(--ink); border-bottom-color: var(--border); }
 
 /* The old sign-in page. */
 .login-page {
@@ -828,6 +858,6 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
    ========================================================================== */
 
 @media print {
-  .sidebar, .topbar, .menu-toggle, .button, button, .page-footer { display: none !important; }
+  .sidebar, .topbar, .menu-toggle, .admin-tabs, .button, button, .page-footer { display: none !important; }
   body { background: #fff; }
 }

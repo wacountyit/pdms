@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
+use std::sync::{LazyLock, PoisonError, RwLock};
+
 use askama::Template;
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
@@ -37,10 +39,23 @@ impl From<pdms_audit::AuditError> for AppError {
     }
 }
 
-static ORG_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+/// The organization name for error pages, which render without the state.
+/// The branding cache updates it on every reload.
+static ORG_NAME: LazyLock<RwLock<String>> =
+    LazyLock::new(|| RwLock::new(pdms_core::config::DEFAULT_ORG_NAME.to_owned()));
 
 pub(crate) fn set_org_name(name: &str) {
-    let _ = ORG_NAME.set(name.to_owned());
+    let mut current = ORG_NAME.write().unwrap_or_else(PoisonError::into_inner);
+    if *current != name {
+        name.clone_into(&mut current);
+    }
+}
+
+fn org_name() -> String {
+    ORG_NAME
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 #[derive(Template)]
@@ -53,10 +68,9 @@ struct ErrorPage<'a> {
 }
 
 pub fn error_page(status: StatusCode, title: &str, message: &str) -> Response {
+    let org_name = org_name();
     let page = ErrorPage {
-        org_name: ORG_NAME
-            .get()
-            .map_or(pdms_core::config::DEFAULT_ORG_NAME, String::as_str),
+        org_name: &org_name,
         status: status.as_u16(),
         title,
         message,

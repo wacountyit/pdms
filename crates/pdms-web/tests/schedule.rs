@@ -211,6 +211,11 @@ async fn inbox_tasks_and_rules_through_the_web() {
     b.login("owner@x.org", &secret).await;
     let home = b.get("/").await;
     assert!(home.body.contains("class=\"count\""), "unread badge");
+    assert!(
+        home.body
+            .contains("<span class=\"visually-hidden\"> unread</span>"),
+        "unread badge has screen-reader text"
+    );
     let inbox = b.get("/notifications").await;
     assert!(inbox.body.contains("Review due today"));
     let csrf = inbox.csrf();

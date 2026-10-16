@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Health, readiness, metrics, and static assets.
+//! Health, readiness, metrics, static assets, and the branding theme and seal.
 
 use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
+use crate::error::AppResult;
 use crate::state::AppState;
 
 pub async fn healthz() -> &'static str {
@@ -72,6 +73,52 @@ pub async fn static_font(Path(name): Path<String>) -> Response {
         body,
     )
         .into_response()
+}
+
+/// `GET /theme.css`: the accent family from Administration -> Branding.
+pub async fn theme_css(State(state): State<AppState>) -> Response {
+    let t = state.branding().theme;
+    let css = format!(
+        ":root {{ --accent: {}; --accent-hover: {}; --accent-link: {}; --accent-tint: {}; }}\n",
+        t.accent, t.hover, t.link, t.tint
+    );
+    (
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        css,
+    )
+        .into_response()
+}
+
+/// `GET /branding/seal`: the uploaded seal, or 404 when none is set.
+pub async fn seal(State(state): State<AppState>) -> AppResult<Response> {
+    let Some((ctype, bytes)) = pdms_core::branding::seal_bytes(&state.core.db).await? else {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    };
+    // The table's CHECK constraint allows only these two types.
+    let (ctype, ext) = if ctype == "image/png" {
+        ("image/png", "png")
+    } else {
+        ("image/jpeg", "jpg")
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, ctype.to_string()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("inline; filename=\"seal.{ext}\""),
+            ),
+            (
+                header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable".to_string(),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 /// The license PDMS is distributed under (served as shipped).

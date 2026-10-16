@@ -1,0 +1,24 @@
+<nav aria-label="{{ nav_label }}">
+  <ul class="nav">
+    <li><a href="/" {% if l.section == "home" %}aria-current="page"{% endif %}>{% include "icons/layout-dashboard.html" %}Dashboard</a></li>
+    <li><a href="/documents" {% if l.section == "documents" %}aria-current="page"{% endif %}>{% include "icons/file-text.html" %}Documents</a></li>
+    <li><a href="/calendar" {% if l.section == "calendar" %}aria-current="page"{% endif %}>{% include "icons/calendar.html" %}Calendar</a></li>
+    <li><a href="/positions" {% if l.section == "positions" %}aria-current="page"{% endif %}>{% include "icons/users.html" %}Appointments</a></li>
+    <li><a href="/reports" {% if l.section == "reports" %}aria-current="page"{% endif %}>{% include "icons/chart-column.html" %}Reports</a></li>
+    <li><a href="/notifications" {% if l.section == "notifications" %}aria-current="page"{% endif %}>{% include "icons/bell.html" %}Notifications{% if l.unread > 0 %}<span class="count">{{ l.unread }}<span class="visually-hidden"> unread</span></span>{% endif %}</a></li>
+  </ul>
+  {% if l.can_exports || l.can_admin || l.can_audit %}
+  <p class="nav-group-label">Manage</p>
+  <ul class="nav">
+    {% if l.can_exports %}<li><a href="/exports" {% if l.section == "exports" %}aria-current="page"{% endif %}>{% include "icons/archive.html" %}Records requests</a></li>{% endif %}
+    {% if l.can_admin %}<li><a href="{{ l.admin_home() }}" {% if l.section == "admin" %}aria-current="page"{% endif %}>{% include "icons/settings.html" %}Administration</a></li>{% endif %}
+    {% if l.can_audit %}<li><a href="/audit" {% if l.section == "audit" %}aria-current="page"{% endif %}>{% include "icons/scroll-text.html" %}Audit log</a></li>{% endif %}
+  </ul>
+  {% endif %}
+</nav>
+<div class="me">
+  <span class="initials" aria-hidden="true">{{ l.initials() }}</span>
+  <span class="who"><span class="name">{{ l.user_name }}</span>{% if !l.user_department.is_empty() %}<span class="dept">{{ l.user_department }}</span>{% endif %}</span>
+  <a href="/account/tokens" {% if l.section == "account" %}aria-current="page"{% endif %}>{% include "icons/key-round.html" %}API tokens</a>
+  <form method="post" action="/logout"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="signout">{% include "icons/log-out.html" %}Sign out</button></form>
+</div>

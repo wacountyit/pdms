@@ -20,6 +20,11 @@ pub struct CurrentUser {
     pub csrf: String,
     /// Unacknowledged in-app notifications (for the navigation badge).
     pub unread: i64,
+    /// For the sidebar: the department's name, "N departments" when more
+    /// than one, or empty when none.
+    pub department_label: String,
+    /// May create documents in at least one department (top bar button).
+    pub can_create: bool,
 }
 
 impl CurrentUser {
@@ -99,8 +104,26 @@ impl FromRequestParts<AppState> for CurrentUser {
         let ctx = Ctx::user(principal, &s.display_name, s.auth_method, &client);
         let unread =
             pdms_core::notifications::inbox::unread_count(&state.core.db, s.user_id).await?;
+        let departments = sqlx::query_scalar!(
+            "SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id
+              WHERE m.user_id = $1 ORDER BY m.is_primary DESC, d.name",
+            s.user_id
+        )
+        .fetch_all(&state.core.db)
+        .await
+        .map_err(CoreError::from)?;
+        let department_label = match departments.as_slice() {
+            [] => String::new(),
+            [only] => only.clone(),
+            many => format!("{} departments", many.len()),
+        };
+        let can_create = !pdms_core::documents::access::creatable_departments(&state.core, &ctx)
+            .await?
+            .is_empty();
         Ok(CurrentUser {
             unread,
+            department_label,
+            can_create,
             csrf: state.core.keys.csrf_token(&token),
             session: s,
             ctx,

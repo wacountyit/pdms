@@ -70,6 +70,17 @@ pub async fn client_info(State(state): State<AppState>, mut req: Request, next: 
     next.run(req).await
 }
 
+/// Reloads the branding cache when it is older than [`BRANDING_REFRESH`]
+/// (or was never loaded), before the handler renders anything.
+///
+/// [`BRANDING_REFRESH`]: crate::state::BRANDING_REFRESH
+pub async fn branding_refresh(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    if state.branding().is_stale() {
+        state.reload_branding().await;
+    }
+    next.run(req).await
+}
+
 pub async fn security_headers(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let is_static = req.uri().path().starts_with("/static/");
     let mut res = next.run(req).await;

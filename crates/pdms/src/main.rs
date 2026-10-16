@@ -335,6 +335,7 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
         with_worker.then(|| tokio::spawn(pdms_core::maintenance::worker(&core).run(rx.clone())));
 
     let state = pdms_web::AppState::new(core, oidc, metrics);
+    state.reload_branding().await;
     let app = pdms_web::router(state);
     let listener = tokio::net::TcpListener::bind(cfg.server.bind)
         .await

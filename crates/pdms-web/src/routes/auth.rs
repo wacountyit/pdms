@@ -109,8 +109,9 @@ fn render_login(
         cookie.csrf = new_token();
     }
     let next = safe_return_to(next);
+    let org_name = state.org_name();
     let page = LoginPage {
-        org_name: state.org_name(),
+        org_name: &org_name,
         csrf: &cookie.csrf,
         next: &next,
         next_encoded: url::form_urlencoded::byte_serialize(next.as_bytes()).collect(),

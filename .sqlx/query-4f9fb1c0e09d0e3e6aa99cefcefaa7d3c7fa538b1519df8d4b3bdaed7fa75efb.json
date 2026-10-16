@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.name FROM department_members m JOIN departments d ON d.id = m.department_id\n              WHERE m.user_id = $1 ORDER BY m.is_primary DESC, d.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4f9fb1c0e09d0e3e6aa99cefcefaa7d3c7fa538b1519df8d4b3bdaed7fa75efb"
+}

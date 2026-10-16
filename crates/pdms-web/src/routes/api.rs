@@ -1270,7 +1270,7 @@ pub async fn docs_page(State(state): State<AppState>) -> Html<String> {
          <code>X-PDMS-Event</code>, <code>X-PDMS-Delivery</code>, and <code>X-PDMS-Signature: t=&lt;unix time&gt;,v1=&lt;hex HMAC-SHA256 of \"t.body\"&gt;</code>. \
          Answer with any 2xx; failures are retried with backoff.</p>\
          </main></body></html>",
-        org = esc(state.org_name()),
+        org = esc(&state.org_name()),
         base = esc(state
             .core
             .config
