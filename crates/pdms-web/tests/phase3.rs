@@ -116,6 +116,14 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
     l.login("lawyer@x.org", &lawyer_secret).await;
     let dash = l.get("/").await;
     assert!(dash.body.contains("Awaiting you"));
+    assert!(
+        dash.body.contains(&format!(
+            "class=\"button small\" href=\"/documents/{doc}#workflow\""
+        )),
+        "approval row: a non-primary Review action to the workflow"
+    );
+    assert!(dash.body.contains("owner@x.org"), "submitted by");
+    assert!(dash.body.contains("Submitted "));
     assert!(dash.body.contains("Copier lease"));
     let page = l.get(&format!("/documents/{doc}")).await;
     let step = re(r"/workflow/steps/([0-9a-f-]{36})", &page.body);

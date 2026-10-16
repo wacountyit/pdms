@@ -63,7 +63,11 @@ async fn attention_lists_worst_first_and_respects_visibility() {
         )
     };
     for (pos, a) in [
-        appoint(holdover, today - Duration::days(10), None),
+        appoint(
+            holdover,
+            today - Duration::days(10),
+            Some(today + Duration::days(1)),
+        ),
         appoint(
             decision,
             today + Duration::days(200),
@@ -102,5 +106,91 @@ async fn attention_lists_worst_first_and_respects_visibility() {
             .await
             .unwrap()
             .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn attention_boundaries_and_one_classification() {
+    let (core, _db) = core().await;
+    let (_, dept) = user_in_new_department(&core, "BOARDS", "m@x.org").await;
+    let clerk_id = directory::create_user(&core.db, &system(), "Clerk", "clerk@x.org", None)
+        .await
+        .unwrap();
+    let role = directory::role_id_by_key(&core.db, "appointments_clerk")
+        .await
+        .unwrap();
+    directory::assign_role(&core.db, &system(), clerk_id, role, None)
+        .await
+        .unwrap();
+    let clerk = as_user(&core, clerk_id).await;
+    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let d = |n: i64| today + Duration::days(n);
+
+    // (name, term end, decision date)
+    let cases = [
+        ("Yesterday", d(300), Some(d(-1))),
+        ("Today", d(300), Some(d(0))),
+        ("Horizon", d(60), Some(d(30))),
+        ("Both", d(-10), Some(d(-20))),
+        ("Beyond", d(61), Some(d(30))),
+    ];
+    let mut ids = Vec::new();
+    for (name, end, due) in cases {
+        let pos = appointments::create_position(
+            &core,
+            &clerk,
+            PositionSpec {
+                name: name.into(),
+                body_name: "Board".into(),
+                department_id: Some(dept),
+                appointing_authority: "Board".into(),
+                term_months: Some(24),
+                seats: 1,
+                manager_user_id: None,
+                reappointment_lead_days: 90,
+                description: String::new(),
+                is_active: true,
+            },
+        )
+        .await
+        .unwrap();
+        appointments::appoint(
+            &core,
+            &clerk,
+            pos,
+            NewAppointment {
+                person_name: "Jane Doe".into(),
+                start_date: d(-700),
+                end_date: Some(end),
+                reappointment_due_date: due,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        ids.push(pos);
+    }
+
+    let rows = appointments::attention(&core, &clerk, today, 60)
+        .await
+        .unwrap();
+    let got: Vec<_> = rows.iter().map(|r| (r.label.as_str(), r.state)).collect();
+    assert_eq!(
+        got,
+        [
+            ("Both, Board", SeatState::DecisionOverdue),
+            ("Yesterday, Board", SeatState::DecisionOverdue),
+            ("Today, Board", SeatState::DecisionDueToday),
+            ("Horizon, Board", SeatState::TermEnding(d(60))),
+        ],
+        "each seat once, worst state; the term ending beyond the horizon is absent"
+    );
+
+    // The positions page flag comes from the same classifier.
+    let today_pos = appointments::position(&core, &clerk, ids[1]).await.unwrap();
+    let current: Vec<_> = today_pos.appointments.iter().collect();
+    assert_eq!(
+        appointments::list_flag(&today_pos.position, &current, today),
+        "Decision due"
     );
 }

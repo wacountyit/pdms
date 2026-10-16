@@ -398,3 +398,166 @@ async fn boards_panel_hidden_without_appointment_access() {
     assert!(home.body.contains("Boards and commissions"));
     assert!(home.body.contains("All seats are filled and current."));
 }
+
+/// The markup of the panel whose heading id is `heading_id`.
+fn panel<'a>(body: &'a str, heading_id: &str) -> &'a str {
+    let start = body
+        .find(&format!("aria-labelledby=\"{heading_id}\""))
+        .unwrap_or_else(|| panic!("no panel {heading_id}"));
+    let rest = &body[start..];
+    &rest[..rest.find("</section>").unwrap()]
+}
+
+async fn spooled_pdf(app: &App) -> pdms_core::documents::files::Upload {
+    let mut w =
+        pdms_storage::spool::SpoolWriter::create(&app.core.config.storage.spool_path, 1 << 20)
+            .await
+            .unwrap();
+    w.write(b"%PDF-1.4\n% hello\n%%EOF\n").await.unwrap();
+    pdms_core::documents::files::Upload {
+        file: w.finish().await.unwrap(),
+        file_name: "policy.pdf".into(),
+    }
+}
+
+#[tokio::test]
+async fn recently_updated_labels_order_and_cap() {
+    use chrono::TimeZone;
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "OPS", "Operations")
+        .await
+        .unwrap();
+    let (uploader, secret) = user(&app.core, "uploader@x.org", Some(dept), None).await;
+    let principal = pdms_core::auth::principal::load(&app.core.db, uploader)
+        .await
+        .unwrap();
+    let ctx = pdms_core::Ctx::user(
+        principal,
+        "uploader@x.org",
+        pdms_audit::AuthMethod::Local,
+        &pdms_core::ClientInfo::default(),
+    );
+    let mut ids = Vec::new();
+    for n in 1..=6 {
+        ids.push(
+            doc(
+                &app,
+                dept,
+                uploader,
+                &format!("Recent doc {n}"),
+                "policy",
+                MetadataInput::default(),
+            )
+            .await,
+        );
+    }
+    // Doc 1: a file uploaded just now by a named person.
+    documents::add_version(
+        &app.core,
+        &ctx,
+        ids[0],
+        spooled_pdf(&app).await,
+        documents::VersionKind::Revision,
+        "",
+        None,
+    )
+    .await
+    .unwrap();
+    // Doc 2: has a file, but its details were edited well after the upload.
+    documents::add_version(
+        &app.core,
+        &ctx,
+        ids[1],
+        spooled_pdf(&app).await,
+        documents::VersionKind::Revision,
+        "",
+        None,
+    )
+    .await
+    .unwrap();
+    let tz = app.core.config.timezone();
+    let noon = |days_ago: i64| {
+        tz.from_local_datetime(
+            &(today(&app) - chrono::Duration::days(days_ago))
+                .and_hms_opt(12, 0, 0)
+                .unwrap(),
+        )
+        .unwrap()
+        .with_timezone(&Utc)
+    };
+    // Doc 2 two minutes ago, doc 3 yesterday, 4 to 6 progressively older.
+    let stamps = [
+        (ids[1], Utc::now() - chrono::Duration::minutes(2)),
+        (ids[2], noon(1)),
+        (ids[3], noon(3)),
+        (ids[4], noon(4)),
+        (ids[5], noon(5)),
+    ];
+    for (id, at) in stamps {
+        sqlx::query("UPDATE documents SET updated_at = $2 WHERE id = $1")
+            .bind(id)
+            .bind(at)
+            .execute(&app._db.superuser)
+            .await
+            .unwrap();
+    }
+
+    let mut b = Browser::new(&app);
+    b.login("uploader@x.org", &secret).await;
+    let home = b.get("/").await;
+    let recent = panel(&home.body, "recent-h");
+    let pos = |t: &str| recent.find(t).unwrap_or_else(|| panic!("{t} missing"));
+    assert!(recent.contains("New version by uploader@x.org"));
+    assert!(recent.contains("Details updated"));
+    assert!(recent.contains("Today"));
+    assert!(recent.contains("Yesterday"));
+    assert!(
+        pos("Recent doc 1") < pos("Recent doc 2")
+            && pos("Recent doc 2") < pos("Recent doc 3")
+            && pos("Recent doc 3") < pos("Recent doc 4")
+            && pos("Recent doc 4") < pos("Recent doc 5"),
+        "newest first"
+    );
+    assert!(!recent.contains("Recent doc 6"), "only five are shown");
+    // Doc 1 is the new-version row, doc 2 (older than 60 s) is not.
+    let row2 = &recent[pos("Recent doc 2")..pos("Recent doc 3")];
+    assert!(row2.contains("Details updated") && !row2.contains("New version"));
+    let row1 = &recent[pos("Recent doc 1")..pos("Recent doc 2")];
+    assert!(row1.contains("New version by uploader@x.org"));
+}
+
+#[tokio::test]
+async fn overdue_review_task_row_has_primary_action() {
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "OPS", "Operations")
+        .await
+        .unwrap();
+    let (owner, secret) = user(&app.core, "owner@x.org", Some(dept), None).await;
+    let id = doc(
+        &app,
+        dept,
+        owner,
+        "Late policy",
+        "policy",
+        MetadataInput {
+            next_review_date: Some(today(&app) - chrono::Duration::days(1)),
+            ..Default::default()
+        },
+    )
+    .await;
+    plan(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("owner@x.org", &secret).await;
+    let home = b.get("/").await;
+    let attn = panel(&home.body, "attention-h");
+    assert!(attn.contains("Overdue"), "{attn}");
+    assert!(attn.contains("1 day late"));
+    assert!(attn.contains("Review: Late policy"));
+    assert!(
+        attn.contains(&format!(
+            "class=\"button small primary\" href=\"/documents/{id}#reviews\""
+        )),
+        "primary Start review link"
+    );
+    assert!(attn.contains("Start review"));
+}

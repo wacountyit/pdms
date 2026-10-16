@@ -173,6 +173,7 @@ fn approval_row(p: &PendingStep, tz: chrono_tz::Tz) -> AttentionRow {
 fn seat_view(a: &SeatAttention) -> SeatView {
     let (status_class, status_text) = match a.state {
         SeatState::DecisionOverdue => ("critical", "Decision overdue".to_owned()),
+        SeatState::DecisionDueToday => ("critical", "Decision due today".to_owned()),
         SeatState::Holdover => ("warning", "Holdover".to_owned()),
         SeatState::Vacant => ("neutral", "Vacant".to_owned()),
         SeatState::TermEnding(d) => ("info", format!("Term ends {}", fmt_date(Some(d)))),

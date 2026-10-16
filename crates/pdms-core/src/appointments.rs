@@ -457,6 +457,8 @@ pub async fn any_visible(core: &Core, ctx: &Ctx) -> CoreResult<bool> {
 pub enum SeatState {
     /// The reappointment decision date has passed and the term has not ended.
     DecisionOverdue,
+    /// The reappointment decision date is today.
+    DecisionDueToday,
     /// The term ended and the person still serves.
     Holdover,
     Vacant,
@@ -471,36 +473,53 @@ pub struct SeatAttention {
     pub state: SeatState,
 }
 
-/// The single word the positions list shows for a position: holdover, a
-/// decision due, a vacancy, or nothing. `current` are its active appointments.
-pub fn list_flag(p: &Position, current: &[&Appointment], today: NaiveDate) -> &'static str {
-    if current
-        .iter()
-        .any(|a| a.end_date.is_some_and(|e| e < today))
-    {
-        "Holdover"
-    } else if current
-        .iter()
-        .any(|a| a.reappointment_due_date.is_some_and(|d| d <= today))
-    {
-        "Decision due"
-    } else if p.vacancies() > 0 && p.is_active {
-        "Vacant"
+/// The one place that decides what an active appointment needs, worst state
+/// first when several apply. `horizon` is the last day a term end still counts
+/// as "ending"; `None` ignores term ends.
+fn classify(a: &Appointment, today: NaiveDate, horizon: Option<NaiveDate>) -> Option<SeatState> {
+    if a.reappointment_due_date.is_some_and(|d| d < today) {
+        Some(SeatState::DecisionOverdue)
+    } else if a.reappointment_due_date == Some(today) {
+        Some(SeatState::DecisionDueToday)
+    } else if a.end_date.is_some_and(|e| e < today) {
+        Some(SeatState::Holdover)
     } else {
-        ""
+        a.end_date
+            .filter(|e| horizon.is_some_and(|h| *e <= h))
+            .map(SeatState::TermEnding)
     }
 }
 
-/// Seats the caller can see that need attention as of `today`: overdue
-/// reappointment decisions, holdovers, vacancies, and terms ending within
-/// `within_days`. Worst first, then by label.
+/// Unfilled seats of an active position; the one vacancy rule.
+fn vacant_seats(p: &Position) -> i64 {
+    if p.is_active { p.vacancies() } else { 0 }
+}
+
+/// The single word the positions list shows for a position: a decision due,
+/// a holdover, a vacancy, or nothing. `current` are its active appointments.
+pub fn list_flag(p: &Position, current: &[&Appointment], today: NaiveDate) -> &'static str {
+    let worst = current
+        .iter()
+        .filter_map(|a| classify(a, today, None))
+        .min();
+    match worst {
+        Some(SeatState::DecisionOverdue | SeatState::DecisionDueToday) => "Decision due",
+        Some(SeatState::Holdover) => "Holdover",
+        _ if vacant_seats(p) > 0 => "Vacant",
+        _ => "",
+    }
+}
+
+/// Seats the caller can see that need attention as of `today`: reappointment
+/// decisions due, holdovers, vacancies, and terms ending within `within_days`.
+/// Worst first, then by label.
 pub async fn attention(
     core: &Core,
     ctx: &Ctx,
     today: NaiveDate,
     within_days: i64,
 ) -> CoreResult<Vec<SeatAttention>> {
-    let horizon = today + Duration::days(within_days);
+    let horizon = Some(today + Duration::days(within_days));
     let mut rows = Vec::new();
     for p in list_positions(core, ctx, false).await? {
         let label = p.label();
@@ -509,16 +528,7 @@ pub async fn attention(
             .iter()
             .filter(|a| a.status == AppointmentStatus::Active)
         {
-            let state = if a.end_date.is_some_and(|e| e < today) {
-                Some(SeatState::Holdover)
-            } else if a.reappointment_due_date.is_some_and(|d| d < today) {
-                Some(SeatState::DecisionOverdue)
-            } else {
-                a.end_date
-                    .filter(|e| *e <= horizon)
-                    .map(SeatState::TermEnding)
-            };
-            if let Some(state) = state {
+            if let Some(state) = classify(a, today, horizon) {
                 rows.push(SeatAttention {
                     position_id: p.id,
                     label: label.clone(),
@@ -526,7 +536,7 @@ pub async fn attention(
                 });
             }
         }
-        let vacant = p.vacancies();
+        let vacant = vacant_seats(&p);
         if vacant > 0 {
             rows.push(SeatAttention {
                 position_id: p.id,
