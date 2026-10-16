@@ -134,9 +134,17 @@ async fn first_sso_login_provisions_user_and_syncs_groups() {
         home.url()
     );
     let html = home.text().await.unwrap();
-    assert!(html.contains("Welcome, Sso User"), "{html}");
+    assert!(html.contains("Good ") && html.contains(", Sso"), "{html}");
+    let account = b
+        .get(format!("{base}/account/tokens"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
     assert!(
-        html.contains("Operations") || html.contains("Operations"),
+        account.contains("Operations"),
         "department synced from groups claim"
     );
 
@@ -163,7 +171,7 @@ async fn first_sso_login_provisions_user_and_syncs_groups() {
         .send()
         .await
         .unwrap();
-    assert!(again.text().await.unwrap().contains("Welcome, Sso User"));
+    assert!(again.text().await.unwrap().contains(", Sso"));
     let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
         .fetch_one(&app.core.db)
         .await

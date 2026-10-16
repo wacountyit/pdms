@@ -85,18 +85,7 @@ pub async fn list(
             .filter(|a| a.status == AppointmentStatus::Active)
             .collect();
         let next = current.iter().filter_map(|a| a.end_date).min();
-        let attention = if current.iter().any(|a| a.end_date.is_some_and(|e| e < t)) {
-            "Holdover"
-        } else if current
-            .iter()
-            .any(|a| a.reappointment_due_date.is_some_and(|d| d <= t))
-        {
-            "Decision due"
-        } else if p.vacancies() > 0 && p.is_active {
-            "Vacant"
-        } else {
-            ""
-        };
+        let attention = appointments::list_flag(&p, &current, t);
         rows.push(PositionRow {
             id: p.id,
             department: p.department_name.clone().unwrap_or_default(),

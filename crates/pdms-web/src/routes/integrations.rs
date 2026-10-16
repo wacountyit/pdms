@@ -62,6 +62,8 @@ struct TokensPage {
     scopes: Vec<(&'static str, &'static str)>,
     max_days: i64,
     enabled: bool,
+    departments: Vec<String>,
+    roles: Vec<String>,
 }
 
 pub async fn my_tokens(
@@ -70,12 +72,26 @@ pub async fn my_tokens(
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
     let tokens = api_tokens::list_mine(&state.core, &user.ctx).await?;
+    let me = directory::get_user(&state.core.db, user.session.user_id).await?;
     let page = TokensPage {
         l: Layout::new(&state, &user, flash, "API tokens", "account"),
         tokens: tokens.into_iter().map(|t| token_row(&state, t)).collect(),
         scopes: api_tokens::SCOPES.to_vec(),
         max_days: state.core.config.api.max_token_days,
         enabled: state.core.config.api.enabled,
+        departments: me
+            .memberships
+            .iter()
+            .map(|m| m.department_name.clone())
+            .collect(),
+        roles: me
+            .roles
+            .iter()
+            .map(|r| match &r.department_name {
+                Some(d) => format!("{} ({d})", r.role_name),
+                None => r.role_name.clone(),
+            })
+            .collect(),
     };
     Ok(Html(page.render()?))
 }

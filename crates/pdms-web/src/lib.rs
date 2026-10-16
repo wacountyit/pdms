@@ -2,6 +2,7 @@
 // Copyright (C) 2026 PDMS contributors
 //! PDMS web layer: Axum router, middleware, and server-rendered pages.
 
+pub mod dashboard;
 pub mod error;
 pub mod middleware;
 pub mod routes;

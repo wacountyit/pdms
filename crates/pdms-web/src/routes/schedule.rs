@@ -9,9 +9,11 @@ use axum::response::{Html, IntoResponse, Response};
 use axum_extra::extract::{Form, Query};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use pdms_authz::Capability;
+use pdms_core::appointments::{self, SeatAttention, SeatState};
 use pdms_core::calendar::{self, CalEvent, Feed};
 use pdms_core::directory::{self, Department, Group, Role, UserSummary};
-use pdms_core::documents::search::DocumentFilter;
+use pdms_core::documents;
+use pdms_core::documents::search::{self, DocumentFilter};
 use pdms_core::documents::status::DocumentStatus;
 use pdms_core::documents::tags::{self, Tag};
 use pdms_core::documents::types::{self, DocumentType};
@@ -21,10 +23,12 @@ use pdms_core::notifications::rules::{
     self, Channel, DueEvent, Recipient, Rule, RuleScope, RuleSpec,
 };
 use pdms_core::reviews::{self, Completion, Task};
+use pdms_core::workflow::PendingStep;
 use pdms_core::{CoreError, CoreResult, schedule};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::dashboard::{self, AttentionRow, Urgency};
 use crate::error::{AppError, AppResult};
 use crate::session::{Client, CurrentUser};
 use crate::state::AppState;
@@ -60,62 +64,125 @@ fn event_view(e: &CalEvent, today: NaiveDate) -> EventView {
 // Dashboard (home page)
 // ---------------------------------------------------------------------------
 
-pub struct OverdueView {
-    pub e: EventView,
-    pub days: i64,
-    pub missed: String,
-    pub missed_count: usize,
-}
-
-pub struct TaskView {
-    pub id: Uuid,
-    pub document_id: Uuid,
-    pub external_id: String,
+pub struct UpcomingView {
+    pub month: String,
+    pub day: String,
     pub title: String,
-    pub kind: &'static str,
-    pub due: String,
-    pub status: &'static str,
-    pub status_label: &'static str,
+    pub href: String,
+    pub label: &'static str,
+    pub department: String,
 }
 
-fn task_view(t: &Task) -> TaskView {
-    TaskView {
-        id: t.id,
-        document_id: t.document_id,
-        external_id: t.external_id.clone(),
-        title: t.title.clone(),
-        kind: t.kind.label(),
-        due: fmt_date(Some(t.due_date)),
-        status: t.status.as_str(),
-        status_label: t.status.label(),
-    }
+pub struct SeatView {
+    pub href: String,
+    pub label: String,
+    pub status_class: &'static str,
+    pub status_text: String,
 }
 
-pub struct ApprovalView {
-    pub document_id: Uuid,
-    pub external_id: String,
+pub struct RecentView {
+    pub href: String,
     pub title: String,
-    pub kind: &'static str,
-    pub submitted: String,
+    pub detail: String,
+    pub what: String,
+    pub when: String,
 }
 
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 struct DashboardPage {
     l: Layout,
+    greeting: String,
+    date_line: String,
     days: i64,
-    upcoming: Vec<EventView>,
-    overdue: Vec<OverdueView>,
-    tasks: Vec<TaskView>,
-    approvals: Vec<ApprovalView>,
-    inbox: Vec<InboxItem>,
-    departments: Vec<String>,
-    roles: Vec<String>,
+    tile_overdue: (usize, String),
+    tile_due30: (usize, String),
+    tile_approvals: usize,
+    tile_tasks: usize,
+    attention: Vec<AttentionRow>,
+    upcoming: Vec<UpcomingView>,
+    boards: Option<Vec<SeatView>>,
+    recent: Vec<RecentView>,
 }
 
 #[derive(Deserialize, Default)]
 pub struct DashQuery {
     days: Option<i64>,
+}
+
+fn plural(n: i64, unit: &str) -> String {
+    if n == 1 {
+        format!("1 {unit}")
+    } else {
+        format!("{n} {unit}s")
+    }
+}
+
+fn task_row(t: &Task, today: NaiveDate) -> AttentionRow {
+    let urgency = dashboard::task_urgency(today, t.due_date);
+    let days = (t.due_date - today).num_days();
+    let (status_class, status_label) = match urgency {
+        Urgency::Overdue => ("critical", "Overdue"),
+        Urgency::DueSoon => ("warning", "Due soon"),
+        _ => ("neutral", "Upcoming"),
+    };
+    let due_text = match days {
+        d if d < 0 => format!("{} late", plural(-d, "day")),
+        0 => "Today".to_owned(),
+        d => format!("In {}", plural(d, "day")),
+    };
+    let review = t.kind == DueEvent::Review;
+    AttentionRow {
+        urgency,
+        days_late: -days,
+        date: t.due_date,
+        status_class,
+        status_label,
+        item: format!("{}: {}", t.kind.label(), t.title),
+        detail: t.external_id.clone(),
+        due_text,
+        due_date_text: fmt_date(Some(t.due_date)),
+        action_label: if review { "Start review" } else { "Open" },
+        action_primary: review && urgency != Urgency::Upcoming,
+        href: format!("/documents/{}#reviews", t.document_id),
+    }
+}
+
+fn approval_row(p: &PendingStep, tz: chrono_tz::Tz) -> AttentionRow {
+    let date = p.submitted_at.with_timezone(&tz).date_naive();
+    AttentionRow {
+        urgency: Urgency::Approval,
+        days_late: 0,
+        date,
+        status_class: "info",
+        status_label: "Awaiting you",
+        item: format!("{}: {}", p.kind.label(), p.title),
+        detail: format!(
+            "{} · submitted by {}",
+            p.external_id,
+            p.submitted_by.as_deref().unwrap_or("system")
+        ),
+        due_text: format!("Submitted {}", fmt_date(Some(date))),
+        due_date_text: String::new(),
+        action_label: "Review",
+        action_primary: false,
+        href: format!("/documents/{}#workflow", p.document_id),
+    }
+}
+
+fn seat_view(a: &SeatAttention) -> SeatView {
+    let (status_class, status_text) = match a.state {
+        SeatState::DecisionOverdue => ("critical", "Decision overdue".to_owned()),
+        SeatState::Holdover => ("warning", "Holdover".to_owned()),
+        SeatState::Vacant => ("neutral", "Vacant".to_owned()),
+        SeatState::TermEnding(d) => ("info", format!("Term ends {}", fmt_date(Some(d)))),
+    };
+    SeatView {
+        href: format!("/positions/{}", a.position_id),
+        label: a.label.clone(),
+        status_class,
+        status_text,
+    }
 }
 
 pub async fn dashboard(
@@ -130,74 +197,115 @@ pub async fn dashboard(
         .filter(|d| [30, 60, 90, 365].contains(d))
         .unwrap_or(30);
     let dash = calendar::dashboard(core, &user.ctx, &DocumentFilter::default(), days).await?;
-    let me = directory::get_user(&core.db, user.session.user_id).await?;
-    let page = DashboardPage {
-        l: Layout::new(
-            &state,
-            &user,
-            flash,
-            &format!("Welcome, {}", user.session.display_name),
-            "home",
+    let now_local = Utc::now().with_timezone(&state.tz);
+    let today = dash.today;
+
+    let tasks = reviews::my_open(core, &user.ctx).await?;
+    let approvals = pdms_core::workflow::my_pending(core, &user.ctx).await?;
+    let mut attention: Vec<AttentionRow> = tasks
+        .iter()
+        .map(|t| task_row(t, today))
+        .chain(approvals.iter().map(|p| approval_row(p, state.tz)))
+        .collect();
+    dashboard::order_attention(&mut attention);
+
+    let oldest = dash.overdue.iter().map(|o| o.days_overdue).max();
+    let tile_overdue = (
+        dash.overdue.len(),
+        oldest.map_or_else(
+            || "Nothing overdue".to_owned(),
+            |d| format!("Oldest: {}", plural(d, "day")),
         ),
+    );
+    let horizon = today + Duration::days(30);
+    let due30: Vec<&CalEvent> = dash.upcoming.iter().filter(|e| e.date <= horizon).collect();
+    let tile_due30 = (
+        due30.len(),
+        due30.iter().map(|e| e.date).min().map_or_else(
+            || "Nothing due".to_owned(),
+            |d| format!("Next: {}", fmt_date(Some(d))),
+        ),
+    );
+
+    let boards = if appointments::any_visible(core, &user.ctx).await? {
+        Some(
+            appointments::attention(core, &user.ctx, today, 90)
+                .await?
+                .iter()
+                .take(6)
+                .map(seat_view)
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    let found = search::search(
+        core,
+        &user.ctx,
+        &DocumentFilter {
+            per_page: 5,
+            ..Default::default()
+        },
+    )
+    .await?;
+    let mut recent = Vec::new();
+    for d in found.items {
+        let versions = documents::versions(core, &user.ctx, d.id).await?;
+        let newest_file = versions.iter().find(|v| v.file_changed);
+        let what = match newest_file {
+            Some(v) if (v.created_at - d.updated_at).num_seconds().abs() <= 60 => format!(
+                "New version by {}",
+                v.created_by_name.as_deref().unwrap_or("PADM")
+            ),
+            _ => "Details updated".to_owned(),
+        };
+        let day = d.updated_at.with_timezone(&state.tz).date_naive();
+        let when = if day == today {
+            "Today".to_owned()
+        } else if Some(day) == today.pred_opt() {
+            "Yesterday".to_owned()
+        } else {
+            day.format("%b %-d").to_string()
+        };
+        recent.push(RecentView {
+            href: format!("/documents/{}", d.id),
+            detail: format!("{} · {}", d.external_id, d.department_name),
+            title: d.title,
+            what,
+            when,
+        });
+    }
+
+    let page = DashboardPage {
+        l: Layout::new(&state, &user, flash, "Dashboard", "home"),
+        greeting: format!(
+            "{}, {}",
+            dashboard::greeting(now_local.time()),
+            dashboard::first_name(&user.session.display_name)
+        ),
+        date_line: now_local.format("%A, %B %-d, %Y").to_string(),
         days,
+        tile_overdue,
+        tile_due30,
+        tile_approvals: approvals.len(),
+        tile_tasks: tasks.len(),
+        attention,
         upcoming: dash
             .upcoming
             .iter()
-            .map(|e| event_view(e, dash.today))
-            .collect(),
-        overdue: dash
-            .overdue
-            .iter()
-            .map(|o| OverdueView {
-                e: event_view(&o.event, dash.today),
-                days: o.days_overdue,
-                missed_count: o.missed_cycles.len(),
-                missed: o
-                    .missed_cycles
-                    .iter()
-                    .map(|d| fmt_date(Some(*d)))
-                    .collect::<Vec<_>>()
-                    .join(", "),
+            .take(8)
+            .map(|e| UpcomingView {
+                month: e.date.format("%b").to_string().to_uppercase(),
+                day: e.date.format("%-d").to_string(),
+                title: e.title.clone(),
+                href: e.href(),
+                label: e.label(),
+                department: e.department.clone(),
             })
             .collect(),
-        tasks: reviews::my_open(core, &user.ctx)
-            .await?
-            .iter()
-            .map(task_view)
-            .collect(),
-        approvals: pdms_core::workflow::my_pending(core, &user.ctx)
-            .await?
-            .into_iter()
-            .map(|p| ApprovalView {
-                document_id: p.document_id,
-                external_id: p.external_id,
-                title: p.title,
-                kind: p.kind.label(),
-                submitted: format!(
-                    "{} · {}",
-                    p.submitted_by.unwrap_or_default(),
-                    fmt_date(Some(p.submitted_at.with_timezone(&state.tz).date_naive()))
-                ),
-            })
-            .collect(),
-        inbox: inbox::list(core, &user.ctx, false)
-            .await?
-            .into_iter()
-            .take(5)
-            .collect(),
-        departments: me
-            .memberships
-            .iter()
-            .map(|m| m.department_name.clone())
-            .collect(),
-        roles: me
-            .roles
-            .iter()
-            .map(|r| match &r.department_name {
-                Some(d) => format!("{} ({d})", r.role_name),
-                None => r.role_name.clone(),
-            })
-            .collect(),
+        boards,
+        recent,
     };
     Ok(Html(page.render()?))
 }

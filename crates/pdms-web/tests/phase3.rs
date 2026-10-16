@@ -115,7 +115,7 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
     let mut l = Browser::new(&app);
     l.login("lawyer@x.org", &lawyer_secret).await;
     let dash = l.get("/").await;
-    assert!(dash.body.contains("Awaiting my review or approval"));
+    assert!(dash.body.contains("Awaiting you"));
     assert!(dash.body.contains("Copier lease"));
     let page = l.get(&format!("/documents/{doc}")).await;
     let step = re(r"/workflow/steps/([0-9a-f-]{36})", &page.body);

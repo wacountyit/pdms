@@ -1,69 +1,85 @@
 {% extends "base.html" %}
+{% block heading %}
+<div class="dash-header">
+  <div>
+    <h1>{{ greeting }}</h1>
+    <p class="muted">{{ date_line }} · everything you can see</p>
+  </div>
+  <a href="/reports">County overview</a>
+</div>
+{% endblock %}
 {% block content %}
-<div class="dash-grid">
-<section aria-labelledby="overdue-h" class="card wide">
-  <h2 id="overdue-h">Overdue <span class="muted small">({{ overdue.len() }})</span></h2>
-  {% if overdue.is_empty() %}<p class="muted">Nothing is overdue.</p>{% else %}
-  <table>
-    <thead><tr><th scope="col">Document or appointment</th><th scope="col">What</th><th scope="col">Was due</th><th scope="col">Overdue</th><th scope="col">Missed review cycles</th></tr></thead>
-    <tbody>
-    {% for o in overdue %}
-      <tr><td><code>{{ o.e.external_id }}</code> <a href="{{ o.e.href }}">{{ o.e.title }}</a><br><span class="muted small">{{ o.e.department }}</span></td>
-      <td><span class="badge ev-{{ o.e.kind }}">{{ o.e.label }}</span></td><td>{{ o.e.date }}</td>
-      <td><strong>{{ o.days }} days</strong></td>
-      <td>{% if o.missed_count > 0 %}<strong>{{ o.missed_count }}</strong> <span class="muted small">({{ o.missed }})</span>{% endif %}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="dash-tiles">
+  <a class="tile tile-critical" href="/reports/overdue"><span class="label">Overdue</span><span class="value">{{ tile_overdue.0 }}</span><span class="sub">{{ tile_overdue.1 }}</span></a>
+  <a class="tile tile-warning" href="/reports/upcoming"><span class="label">Due in 30 days</span><span class="value">{{ tile_due30.0 }}</span><span class="sub">{{ tile_due30.1 }}</span></a>
+  <a class="tile tile-info" href="#attention"><span class="label">Awaiting your approval</span><span class="value">{{ tile_approvals }}</span><span class="sub">Workflow steps waiting on you</span></a>
+  <a class="tile tile-accent" href="#attention"><span class="label">Your reviews and renewals</span><span class="value">{{ tile_tasks }}</span><span class="sub">On documents you own</span></a>
+</div>
+
+<div class="dash-row">
+<section id="attention" aria-labelledby="attention-h" class="panel dash-main">
+  <div class="panel-head"><h2 id="attention-h">Needs your attention</h2><span class="muted small">{{ attention.len() }} item{% if attention.len() != 1 %}s{% endif %}</span></div>
+  {% if attention.is_empty() %}<p class="muted">Nothing needs your attention.</p>{% else %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Status</th><th scope="col">Item</th><th scope="col">Due</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+      <tbody>
+      {% for r in attention %}
+        <tr>
+          <td><span class="status status-{{ r.status_class }}">{{ r.status_label }}</span></td>
+          <td><a class="item-link" href="{{ r.href }}">{{ r.item }}</a><div class="muted small">{{ r.detail }}</div></td>
+          <td class="nowrap"><span class="{% if r.urgency == Urgency::Overdue %}due-late{% endif %}">{{ r.due_text }}</span>{% if !r.due_date_text.is_empty() %}<div class="muted small">{{ r.due_date_text }}</div>{% endif %}</td>
+          <td class="num"><a class="button small{% if r.action_primary %} primary{% endif %}" href="{{ r.href }}">{{ r.action_label }}<span class="visually-hidden">: {{ r.item }}</span></a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </section>
 
-<section aria-labelledby="upcoming-h" class="card">
-  <h2 id="upcoming-h">Coming up in the next {{ days }} days</h2>
+<section aria-labelledby="upcoming-h" class="panel dash-side">
+  <div class="panel-head"><h2 id="upcoming-h">Coming up</h2><a href="/calendar">Calendar</a></div>
   <nav class="tabs" aria-label="Time range">
     {% for d in [30, 60, 90, 365] %}<a href="/?days={{ d }}" {% if *d == days %}aria-current="page"{% endif %}>{{ d }} days</a>{% endfor %}
   </nav>
-  {% if upcoming.is_empty() %}<p class="muted">Nothing scheduled.</p>{% else %}
-  <ul class="events">
-    {% for e in upcoming %}<li><span class="date">{{ e.date }}</span> <span class="badge ev-{{ e.kind }}">{{ e.label }}</span> <a href="{{ e.href }}">{{ e.title }}</a> <span class="muted small">{{ e.external_id }} · {{ e.department }}</span></li>{% endfor %}
-  </ul>
+  {% if upcoming.is_empty() %}<p class="muted">Nothing scheduled in the next {{ days }} days.</p>{% else %}
+  <ol class="dash-list">
+    {% for e in upcoming %}
+    <li>
+      <span class="date-block" aria-hidden="true"><span class="month">{{ e.month }}</span><span class="day">{{ e.day }}</span></span>
+      <span class="dash-list-text"><a href="{{ e.href }}">{{ e.title }}</a><span class="muted small">{{ e.label }}{% if !e.department.is_empty() %} · {{ e.department }}{% endif %}</span></span>
+    </li>
+    {% endfor %}
+  </ol>
   {% endif %}
-  <p><a href="/calendar">Open the calendar →</a></p>
 </section>
+</div>
 
-<section aria-labelledby="approvals-h" class="card">
-  <h2 id="approvals-h">Awaiting my review or approval</h2>
-  {% if approvals.is_empty() %}<p class="muted">Nothing is waiting for you.</p>{% else %}
-  <ul class="events">
-    {% for a in approvals %}<li><span class="badge wf-in_progress">{{ a.kind }}</span> <a href="/documents/{{ a.document_id }}#workflow">{{ a.title }}</a> <span class="muted small">{{ a.external_id }} · submitted by {{ a.submitted }}</span></li>{% endfor %}
+<div class="dash-row">
+{% if let Some(seats) = boards %}
+<section aria-labelledby="boards-h" class="panel dash-side">
+  <div class="panel-head"><h2 id="boards-h">Boards and commissions</h2><a href="/positions">All appointments</a></div>
+  {% if seats.is_empty() %}<p class="muted">All seats are filled and current.</p>{% else %}
+  <ul class="dash-list">
+    {% for s in seats %}<li class="split"><a href="{{ s.href }}">{{ s.label }}</a><span class="status status-{{ s.status_class }}">{{ s.status_text }}</span></li>{% endfor %}
   </ul>
   {% endif %}
 </section>
+{% endif %}
 
-<section aria-labelledby="tasks-h" class="card">
-  <h2 id="tasks-h">My open reviews and renewals</h2>
-  {% if tasks.is_empty() %}<p class="muted">None. Tasks appear here for documents you own as their dates approach.</p>{% else %}
-  <ul class="events">
-    {% for t in tasks %}<li><span class="date">{{ t.due }}</span> <span class="badge task-{{ t.status }}">{{ t.status_label }}</span> {{ t.kind }}: <a href="/documents/{{ t.document_id }}#reviews">{{ t.title }}</a> <span class="muted small">{{ t.external_id }}</span></li>{% endfor %}
+<section aria-labelledby="recent-h" class="panel dash-main">
+  <div class="panel-head"><h2 id="recent-h">Recently updated</h2></div>
+  {% if recent.is_empty() %}<p class="muted">No recent changes.</p>{% else %}
+  <ul class="dash-list">
+    {% for r in recent %}
+    <li class="split">
+      <span class="dash-list-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.detail }}</span></span>
+      <span class="dash-list-text right"><span>{{ r.what }}</span><span class="muted small">{{ r.when }}</span></span>
+    </li>
+    {% endfor %}
   </ul>
   {% endif %}
-</section>
-
-<section aria-labelledby="inbox-h" class="card">
-  <h2 id="inbox-h">Notifications</h2>
-  {% if inbox.is_empty() %}<p class="muted">You are all caught up.</p>{% else %}
-  <ul class="events">
-    {% for i in inbox %}<li><a href="{{ i.href }}">{{ i.headline }}</a>{% if !i.title.is_empty() %}: {{ i.title }}{% endif %}</li>{% endfor %}
-  </ul>
-  <p><a href="/notifications">All notifications →</a></p>
-  {% endif %}
-</section>
-<section aria-labelledby="access-h" class="card">
-  <h2 id="access-h">Your access</h2>
-  <dl class="facts">
-    <dt>Departments</dt><dd>{% if departments.is_empty() %}None yet. An administrator assigns departments.{% else %}{{ departments.join(", ") }}{% endif %}</dd>
-    <dt>Roles</dt><dd>{% if roles.is_empty() %}None{% else %}{{ roles.join(", ") }}{% endif %}</dd>
-  </dl>
 </section>
 </div>
 {% endblock %}

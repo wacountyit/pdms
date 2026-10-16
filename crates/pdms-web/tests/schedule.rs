@@ -304,3 +304,97 @@ async fn inbox_tasks_and_rules_through_the_web() {
     assert_eq!(log.status, StatusCode::OK);
     assert!(log.body.contains("owner@x.org"), "{}", log.body);
 }
+
+#[tokio::test]
+async fn dashboard_greets_and_shows_tiles() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "ada@example.org", None, None).await;
+    let mut b = Browser::new(&app);
+    b.login("ada@example.org", &secret).await;
+    let home = b.get("/").await;
+    assert_eq!(home.status, StatusCode::OK);
+    assert!(home.body.contains("Good "), "greeting");
+    assert!(home.body.contains("ada@example.org"), "first name");
+    for tile in [
+        "Overdue",
+        "Due in 30 days",
+        "Awaiting your approval",
+        "Your reviews and renewals",
+    ] {
+        assert!(home.body.contains(tile), "tile {tile}");
+    }
+    assert!(home.body.contains("Nothing needs your attention."));
+    assert!(home.body.contains("No recent changes."));
+    // "Your access" now lives on the account page.
+    assert!(!home.body.contains("Your access"));
+    assert!(b.get("/account/tokens").await.body.contains("Your access"));
+}
+
+#[tokio::test]
+async fn dashboard_panels_respect_visibility() {
+    let app = app().await;
+    let a = directory::create_department(&app.core.db, &system(), "AAA", "Dept Alpha")
+        .await
+        .unwrap();
+    let bdept = directory::create_department(&app.core.db, &system(), "BBB", "Dept Bravo")
+        .await
+        .unwrap();
+    let (_, secret) = user(&app.core, "alice@x.org", Some(a), None).await;
+    let (bob, _) = user(&app.core, "bob@x.org", Some(bdept), None).await;
+    let soon = Some(today(&app) + chrono::Duration::days(10));
+    let mut ids = Vec::new();
+    for (title, vis) in [
+        ("Bravo dept doc", pdms_authz::Visibility::Department),
+        ("Bravo restricted doc", pdms_authz::Visibility::Restricted),
+        ("Bravo countywide doc", pdms_authz::Visibility::CountyWide),
+    ] {
+        let id = doc(
+            &app,
+            bdept,
+            bob,
+            title,
+            "policy",
+            MetadataInput {
+                next_review_date: soon,
+                ..Default::default()
+            },
+        )
+        .await;
+        documents::set_visibility(&app.core, &system(), id, vis)
+            .await
+            .unwrap();
+        ids.push(id);
+    }
+    plan(&app).await;
+
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let home = b.get("/").await;
+    assert_eq!(home.status, StatusCode::OK);
+    assert!(home.body.contains("Bravo countywide doc"));
+    assert!(!home.body.contains("Bravo dept doc"));
+    assert!(!home.body.contains("Bravo restricted doc"));
+    // One visible item is due in the next 30 days.
+    let tile = regex::Regex::new(r#"(?s)Due in 30 days.*?class="value">(\d+)<"#)
+        .unwrap()
+        .captures(&home.body)
+        .unwrap()[1]
+        .to_owned();
+    assert_eq!(tile, "1");
+}
+
+#[tokio::test]
+async fn boards_panel_hidden_without_appointment_access() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "plain@x.org", None, None).await;
+    let mut b = Browser::new(&app);
+    b.login("plain@x.org", &secret).await;
+    assert!(!b.get("/").await.body.contains("Boards and commissions"));
+
+    let (_, s2) = user(&app.core, "clerk@x.org", None, Some("appointments_clerk")).await;
+    let mut c = Browser::new(&app);
+    c.login("clerk@x.org", &s2).await;
+    let home = c.get("/").await;
+    assert!(home.body.contains("Boards and commissions"));
+    assert!(home.body.contains("All seats are filled and current."));
+}

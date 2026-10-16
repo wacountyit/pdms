@@ -27,7 +27,7 @@ async fn login_sets_session_and_lands_on_home() {
     let home = b.get("/").await;
     assert_eq!(home.status, StatusCode::OK);
     assert!(home.body.contains("Test Org PDMS"));
-    assert!(home.body.contains("Welcome, ada@example.org"));
+    assert!(home.body.contains("Good "));
 }
 
 #[tokio::test]

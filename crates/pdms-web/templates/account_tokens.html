@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+<section aria-labelledby="access-h" class="panel">
+  <h2 id="access-h">Your access</h2>
+  <dl class="facts">
+    <dt>Departments</dt><dd>{% if departments.is_empty() %}None yet. An administrator assigns departments.{% else %}{{ departments.join(", ") }}{% endif %}</dd>
+    <dt>Roles</dt><dd>{% if roles.is_empty() %}None{% else %}{{ roles.join(", ") }}{% endif %}</dd>
+  </dl>
+</section>
 <p>API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PDMS API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
 {% if !enabled %}<p class="flash flash-error" role="alert">The API is turned off for this installation.</p>{% endif %}
 <table>
