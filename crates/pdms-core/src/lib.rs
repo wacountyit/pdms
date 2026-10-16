@@ -11,6 +11,7 @@ pub mod api_tokens;
 pub mod appointments;
 pub mod audit_log;
 pub mod auth;
+pub mod branding;
 pub mod calendar;
 pub mod comments;
 pub mod config;

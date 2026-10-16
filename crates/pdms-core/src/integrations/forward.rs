@@ -29,6 +29,7 @@ async fn batch(core: &Core, after: i64) -> CoreResult<Vec<(i64, String, bool, Va
     )
     .fetch_all(&core.db)
     .await?;
+    let org = crate::branding::org_name(core).await;
     Ok(rows
         .into_iter()
         .map(|r| {
@@ -60,7 +61,7 @@ async fn batch(core: &Core, after: i64) -> CoreResult<Vec<(i64, String, bool, Va
                     "context": r.context,
                     "prev_hash": hex::encode(r.prev_hash),
                     "entry_hash": hex::encode(r.entry_hash),
-                    "organization": core.config.org.name,
+                    "organization": org.clone(),
                 }),
             )
         })

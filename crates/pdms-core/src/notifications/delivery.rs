@@ -417,7 +417,7 @@ async fn send_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResult<
             .map(|u| u.to_string())
             .unwrap_or_default()
     };
-    let org = core.config.org.name.clone();
+    let org = crate::branding::org_name(core).await;
     let prepared = match (d.kind, d.event, d.due_date) {
         (NotificationKind::Reminder, Some(event), Some(due)) if d.appointment_id.is_some() => {
             let a = sqlx::query!(

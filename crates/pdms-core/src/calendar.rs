@@ -433,7 +433,11 @@ pub async fn render_feed(
             .collect();
 
     let mut cal = Calendar::new();
-    cal.name(&format!("{}: {}", core.config.org.name, f.name));
+    cal.name(&format!(
+        "{}: {}",
+        crate::branding::org_name(core).await,
+        f.name
+    ));
     cal.append_property(icalendar::Property::new(
         "PRODID",
         "-//PDMS//Document dates//EN",

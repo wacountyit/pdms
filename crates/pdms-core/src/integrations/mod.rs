@@ -300,6 +300,7 @@ pub async fn dispatch(core: &Core) -> CoreResult<DispatchReport> {
     }
     let providers = providers(core);
     let attempts = core.config.integrations.webhook_max_attempts.max(1);
+    let org = crate::branding::org_name(core).await;
 
     for r in rows
         .iter()
@@ -323,7 +324,7 @@ pub async fn dispatch(core: &Core) -> CoreResult<DispatchReport> {
             event: r.action.clone(),
             occurred_at: r.occurred_at,
             audit_seq: r.seq,
-            organization: core.config.org.name.clone(),
+            organization: org.clone(),
             actor: json!({ "user_id": r.actor_user_id, "display": r.actor_display }),
             object: json!({ "type": r.object_type, "id": r.object_id, "label": r.object_label }),
             document,

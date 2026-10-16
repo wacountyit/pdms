@@ -446,12 +446,13 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
             total: 0,
             limit: core.config.exports.max_bytes,
         };
+        let org = crate::branding::org_name(core).await;
         let defs = fields::list(&core.db).await?;
         let mut manifest_docs = Vec::new();
         let mut file_count = 0i32;
         p.add_bytes(
             "README.txt",
-            readme(&core.config.org.name, &reference, created_at, &by).as_bytes(),
+            readme(&org, &reference, created_at, &by).as_bytes(),
         )?;
         for doc_ref in &docs {
             let mut conn = core.db.acquire().await?;
@@ -528,7 +529,7 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
         let manifest = json!({
             "format": "pdms-records-package/1",
             "package_id": id,
-            "organization": core.config.org.name,
+            "organization": org,
             "request_reference": reference,
             "created_at": created_at,
             "created_by": { "user_id": user, "name": by },
