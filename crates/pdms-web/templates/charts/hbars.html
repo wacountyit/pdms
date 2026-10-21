@@ -1,7 +1,11 @@
-<svg class="chart chart-hbars" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.aria }}">
+<div class="hbars" role="img" aria-label="{{ chart.aria }}">
   {% for b in chart.bars %}
-  <text class="chart-label" x="{{ chart.label_w - 10.0 }}" y="{{ b.y + 14.0 }}" text-anchor="end">{{ b.label }}</text>
-  {% if !b.path.is_empty() %}<path class="{{ bar_class }}" d="{{ b.path }}"><title>{{ b.label }}: {{ b.value }}</title></path>{% endif %}
-  <text class="chart-value" x="{{ b.end_x + 6.0 }}" y="{{ b.y + 14.0 }}"><title>{{ b.label }}: {{ b.value }}</title>{{ b.value }}</text>
+  <div class="hbar-row">
+    <span class="hbar-label">{{ b.label }}</span>
+    <span class="hbar-track">
+      {% if b.pct > 0.0 %}<svg class="hbar" width="{{ b.pct }}%" height="16"><g class="{{ bar_class }}"><title>{{ b.label }}: {{ b.value }}</title><rect x="0" y="0" width="100%" height="16" rx="4"/><rect x="0" y="0" width="50%" height="16"/></g></svg>{% endif %}
+      <span class="hbar-value">{{ b.value }}</span>
+    </span>
+  </div>
   {% endfor %}
-</svg>
+</div>

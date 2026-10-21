@@ -156,6 +156,11 @@ async fn seal_upload_round_trip_and_headers() {
     );
     let page = b.get("/admin/branding").await;
     assert!(page.body.contains("/branding/seal?v="));
+    // The 96px preview keeps a non-square seal's shape (object-fit: contain).
+    assert!(
+        page.body
+            .contains(r#"<img class="seal-preview" src="/branding/seal?v="#)
+    );
     assert!(page.body.contains("Remove seal"));
     assert!(b.get("/").await.body.contains("/branding/seal?v="));
 

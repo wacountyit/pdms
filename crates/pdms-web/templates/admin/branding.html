@@ -36,7 +36,7 @@
 <section class="panel" aria-labelledby="seal-h">
   <h2 id="seal-h">Seal</h2>
   {% if let Some(v) = seal_version %}
-  <p><img src="/branding/seal?v={{ v }}" alt="Current seal" width="96" height="96">{% if let Some(i) = seal_info %} <span class="muted small">{{ i.0 }} × {{ i.1 }} pixels</span>{% endif %}</p>
+  <p><img class="seal-preview" src="/branding/seal?v={{ v }}" alt="Current seal" width="96" height="96">{% if let Some(i) = seal_info %} <span class="muted small">{{ i.0 }} × {{ i.1 }} pixels</span>{% endif %}</p>
   {% else %}
   <p>No seal uploaded. PADM shows a plain mark.</p>
   {% endif %}

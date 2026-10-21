@@ -72,63 +72,53 @@ pub fn vbars(data: &[(String, i64, String)], aria_prefix: &str) -> VBars {
     }
 }
 
+/// One row of a horizontal bar chart. The label is HTML text on its own line
+/// (`charts/hbars.html`); the bar is a small SVG whose width is `pct` of the
+/// row. Inside it a rect with `rx` is squared off over its left half by a
+/// second rect, so only the data end (right) is rounded.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HBar {
-    pub y: f64,
-    pub path: String,
-    pub end_x: f64,
-    pub value: i64,
     pub label: String,
+    pub value: i64,
+    /// Bar length as a percentage of the row (0 = no mark).
+    pub pct: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HBars {
-    pub width: f64,
-    pub height: f64,
-    pub label_w: f64,
     pub bars: Vec<HBar>,
     pub aria: String,
 }
 
-/// Horizontal bars, rounded at the right (data) end.
+/// The longest bar's share of the row; the rest leaves room for the count
+/// after it.
+const HBAR_MAX_PCT: f64 = 80.0;
+/// The shortest bar for a non-zero value, so a small count still shows a mark.
+const HBAR_MIN_PCT: f64 = 1.0;
+
+/// Horizontal bars, rounded at the right (data) end. Each department name is
+/// HTML text on its own line above its bar, so long names wrap instead of
+/// shrinking with the chart or overflowing it.
 pub fn hbars(data: &[(String, i64)], aria_prefix: &str) -> HBars {
-    let (width, label_w, row_h, bar_h) = (600.0, 180.0, 34.0, 18.0);
-    let plot = width - label_w - 40.0;
     let max = data.iter().map(|d| d.1).max().unwrap_or(0).max(1) as f64;
+    let round = |x: f64| (x * 10.0).round() / 10.0;
     let bars = data
         .iter()
-        .enumerate()
-        .map(|(i, (label, value))| {
-            let y = i as f64 * row_h + (row_h - bar_h) / 2.0;
-            let w = (*value as f64 / max) * plot;
-            let r = 4.0_f64.min(w / 2.0).min(bar_h / 2.0);
-            let path = if w <= 0.0 {
-                String::new()
+        .map(|(label, value)| {
+            let pct = if *value > 0 {
+                round((*value as f64 / max * HBAR_MAX_PCT).max(HBAR_MIN_PCT))
             } else {
-                format!(
-                    "M{x:.1},{y:.1}H{xr:.1}Q{xe:.1},{y:.1} {xe:.1},{yr:.1}V{yb2:.1}Q{xe:.1},{yb:.1} {xr:.1},{yb:.1}H{x:.1}Z",
-                    x = label_w,
-                    xr = label_w + w - r,
-                    xe = label_w + w,
-                    yr = y + r,
-                    yb2 = y + bar_h - r,
-                    yb = y + bar_h
-                )
+                0.0
             };
             HBar {
-                y,
-                path,
-                end_x: label_w + w,
-                value: *value,
                 label: label.clone(),
+                value: *value,
+                pct,
             }
         })
         .collect();
     let summary: Vec<String> = data.iter().map(|d| format!("{} {}", d.0, d.1)).collect();
     HBars {
-        width,
-        height: (data.len().max(1) as f64) * row_h,
-        label_w,
         bars,
         aria: format!("{aria_prefix}: {}.", summary.join(", ")),
     }
@@ -231,8 +221,41 @@ mod tests {
             "Overdue by department",
         );
         assert_eq!(h.bars.len(), 2);
-        assert!(h.bars[0].end_x > h.bars[1].end_x);
+        assert!(h.bars[0].pct > h.bars[1].pct);
+        assert_eq!(
+            h.aria,
+            "Overdue by department: Operations 2, Human Resources 1."
+        );
         let e = hbars(&[], "Overdue by department");
         assert!(e.bars.is_empty());
+    }
+
+    #[test]
+    fn hbars_scale_to_the_longest_and_leave_room_for_the_count() {
+        let h = hbars(
+            &[
+                ("Information Technology and Communications".into(), 4),
+                ("Operations".into(), 1),
+                ("Parks".into(), 0),
+            ],
+            "Overdue items by department",
+        );
+        // The longest bar stops short of the row, leaving room for its count.
+        assert_eq!(h.bars[0].pct, HBAR_MAX_PCT);
+        assert_eq!(h.bars[1].pct, 20.0);
+        // Zero draws no mark.
+        assert_eq!(h.bars[2].pct, 0.0);
+        // A long name is kept whole: it is HTML text, not squeezed into a
+        // fixed column.
+        assert_eq!(h.bars[0].label, "Information Technology and Communications");
+    }
+
+    #[test]
+    fn hbars_tiny_values_still_show_a_mark() {
+        let h = hbars(&[("Big".into(), 1000), ("Small".into(), 1)], "x");
+        assert_eq!(h.bars[1].pct, HBAR_MIN_PCT);
+        // Percentages are rounded to one decimal for tidy markup.
+        let t = hbars(&[("A".into(), 3), ("B".into(), 1)], "x");
+        assert_eq!(t.bars[1].pct, 26.7);
     }
 }
