@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM department_entra_values v USING departments d\n          WHERE v.value_normalized = $1 AND d.id = v.department_id\n          RETURNING v.value_display, v.department_id, d.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value_display",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "department_entra_values",
+            "name": "value_display"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "department_entra_values",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "737f0693070219981792c349910445a266efd138b92ff8590dc84860c1f5ffc9"
+}

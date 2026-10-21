@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ra.user_id FROM role_assignments ra\n             JOIN roles r ON r.id = ra.role_id JOIN users u ON u.id = ra.user_id\n            WHERE r.key = $1 AND ra.department_id IS NULL AND u.status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_assignments",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aa3af6a8269fafc28fa836cf9edaa80728a88fad1b79540dd3e414a2543592c4"
+}

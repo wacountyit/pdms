@@ -132,7 +132,7 @@ If the IdP is unreachable at startup, single sign-on is disabled (logged as an
 error) until the next restart, and break-glass login keeps working. A
 background re-discovery loop is a candidate improvement.
 
-### D-022 OIDC users are auto-provisioned; email-linking only for unbound accounts — Accepted (email linking superseded by D-086)
+### D-022 OIDC users are auto-provisioned; email-linking only for unbound accounts — Superseded by D-086 (email linking removed)
 New SSO users are created on first login with no access beyond what IdP group
 mappings give them, which follows from deny-by-default. An administrator can
 pre-create a user by email; the first SSO login links that account only if it
@@ -651,7 +651,7 @@ contradictory combinations. One enum therefore replaces both; this amends
 the "broken inheritance" part of D-003. The interface says "County-wide",
 not "Public", so it is never confused with publishing outside the county.
 
-### D-086 Users from Entra; department from the Department field — Accepted (design, not built)
+### D-086 Users from Entra; department from the Department field — Accepted (built in P2, 2026-10-21)
 The county's AD groups are not synced to Entra, so groups cannot drive
 access. Instead, a nightly and on-demand Microsoft Graph `/users/delta` sync
 creates, updates, and deactivates member accounts.
@@ -761,6 +761,32 @@ would expose it. "Needs your attention" holds only the viewer's own tasks and
 approvals; "Coming up" and the tiles cover everything the viewer can see.
 There is no "Share" button: PADM has no sharing model apart from access
 grants. "Your access" moved to the account page.
+
+### D-096 Graph app-only authentication with a certificate (PS256) — Accepted (2026-10-21)
+PADM signs a client assertion with its own certificate (header `alg` PS256,
+`x5t#S256` SHA-256 thumbprint, ten-minute lifetime), as the Microsoft
+identity platform documents; there is no client secret to leak or rotate in
+config. The certificate and key are one PEM file supplied through
+`PDMS_GRAPH__CERTIFICATE_FILE`; `pdms gen-graph-cert` creates it (RSA-2048,
+two years by default) and writes the public certificate beside it as
+`<file>.crt`, never overwriting either file. Signing uses `ring`; the `rsa`
+crate is used only to generate the key once. The bearer token is sent only
+to `[graph] api_url`'s origin, never through a redirect, and
+pre-authenticated download and upload URLs are fetched without it. Downloads
+have no total deadline (only connect and read timeouts) so large files
+stream; JSON calls and upload chunks have a per-request timeout.
+
+The directory sync (D-086) follows these rules. It never reactivates an
+account and never links accounts by email. A full round also departs people
+the directory no longer lists, but holds back and reports if no member
+accounts come back or if more than max(5, 20%) of linked accounts would be
+departed. The last administrator is never departed automatically; it is
+reported. A linked account that also has a local password is departed like
+any other and reported, because a departed employee with a working password
+is the larger risk; the break-glass account has no directory link and is
+never touched. While it is on, group mappings from the identity provider are
+not applied and the token never sets names or groups; configuration requires
+`auth.oidc.subject_claim = "oid"`, and runs are refused while it is off.
 
 ## Open questions (configurable defaults; not blocking)
 

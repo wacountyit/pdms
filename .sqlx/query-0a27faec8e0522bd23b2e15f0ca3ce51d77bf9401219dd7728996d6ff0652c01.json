@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT last_run, last_error, last_summary FROM sync_cursors WHERE name = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_run",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sync_cursors",
+            "name": "last_run"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sync_cursors",
+            "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "last_summary",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "sync_cursors",
+            "name": "last_summary"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0a27faec8e0522bd23b2e15f0ca3ce51d77bf9401219dd7728996d6ff0652c01"
+}

@@ -11,6 +11,7 @@ use chrono::NaiveDate;
 use pdms_authz::{Permission, Scope, Subject};
 use pdms_core::directory::{
     self, Department, Group, GroupMember, IdpMapping, MappingTarget, Role, UserDetail, UserSummary,
+    entra_sync, entra_values,
 };
 use pdms_core::model::UserStatus;
 use pdms_core::{CoreError, acl};
@@ -739,6 +740,8 @@ struct IdpPage {
     departments: Vec<Department>,
     groups: Vec<Group>,
     roles: Vec<Role>,
+    /// The Entra sync is on, so sign-in does not apply these mappings.
+    entra_sync: bool,
 }
 
 pub async fn idp(
@@ -753,6 +756,7 @@ pub async fn idp(
         departments: directory::list_departments(db).await?,
         groups: directory::list_groups(db).await?,
         roles: directory::list_roles(db).await?,
+        entra_sync: state.core.config.entra_sync.enabled,
     };
     Ok(Html(page.render()?))
 }
@@ -799,4 +803,113 @@ pub async fn delete_mapping(
 ) -> AppResult<Response> {
     let r = directory::delete_idp_mapping(&state.core.db, &user.ctx, id).await;
     done(&state, "/admin/idp", r, "Mapping deleted.")
+}
+
+#[derive(Template)]
+#[template(path = "admin/entra.html")]
+struct EntraPage {
+    l: Layout,
+    configured: bool,
+    /// The Graph certificate's `x5t#S256` thumbprint, when configured.
+    thumbprint: Option<String>,
+    enabled: bool,
+    attribute: String,
+    last_run: String,
+    summary: String,
+    last_error: String,
+    problems: Vec<String>,
+    values: Vec<entra_values::EntraValue>,
+    unmapped: Vec<entra_values::UnmappedValue>,
+    departments: Vec<Department>,
+}
+
+pub async fn entra(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    flash: FlashMsg,
+) -> AppResult<Html<String>> {
+    let core = &state.core;
+    let status = entra_sync::status(&core.db).await?;
+    let (summary, problems) = match &status.last_summary {
+        Some(r) => (
+            // `unmapped` counts only the people that run read (a delta reads
+            // changed accounts); the table below lists everyone.
+            format!(
+                "{} created, {} updated, {} departed; of the people it read, {} had no mapped department",
+                r.created, r.updated, r.departed, r.unmapped
+            ),
+            r.errors.clone(),
+        ),
+        None => ("No sync has completed yet.".to_owned(), Vec::new()),
+    };
+    // A failed run's error is shown once, even if the report lists it too.
+    let last_error = status
+        .last_error
+        .filter(|e| !problems.contains(e))
+        .unwrap_or_default();
+    let page = EntraPage {
+        l: Layout::new(&state, &user, flash, "Entra ID sync", "admin"),
+        configured: core.graph.is_some(),
+        thumbprint: core.graph.as_ref().map(|g| g.thumbprint().to_owned()),
+        enabled: core.config.entra_sync.enabled,
+        attribute: core.config.entra_sync.attribute.clone(),
+        last_run: fmt_time_opt(state.tz, status.last_run),
+        summary,
+        last_error,
+        problems,
+        values: entra_values::list(&core.db).await?,
+        unmapped: entra_values::unmapped(&core.db).await?,
+        departments: directory::list_departments(&core.db).await?,
+    };
+    Ok(Html(page.render()?))
+}
+
+#[derive(Deserialize)]
+pub struct EntraValueForm {
+    value: String,
+    department_id: String,
+}
+
+pub async fn add_entra_value(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<EntraValueForm>,
+) -> AppResult<Response> {
+    let dept = uuid_opt(&f.department_id)?
+        .ok_or_else(|| AppError::BadRequest("choose a department".into()))?;
+    let r = entra_values::upsert(&state.core.db, &user.ctx, &f.value, dept).await;
+    done(&state, "/admin/entra", r, "Mapping saved.")
+}
+
+#[derive(Deserialize)]
+pub struct EntraRemoveForm {
+    value: String,
+}
+
+pub async fn remove_entra_value(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<EntraRemoveForm>,
+) -> AppResult<Response> {
+    let r = entra_values::remove(&state.core.db, &user.ctx, &f.value).await;
+    done(&state, "/admin/entra", r, "Mapping removed.")
+}
+
+#[derive(Deserialize)]
+pub struct EntraSyncForm {
+    full: Option<String>,
+}
+
+pub async fn entra_sync_now(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<EntraSyncForm>,
+) -> AppResult<Response> {
+    let r = entra_sync::request_sync(&state.core, &user.ctx, checkbox(&f.full)).await;
+    done(
+        &state,
+        "/admin/entra",
+        r,
+        "Sync queued. Refresh this page in a minute to see the result.",
+    )
 }

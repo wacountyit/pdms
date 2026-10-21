@@ -70,3 +70,11 @@ uuid = { version = "1", features = ["v7", "v4", "serde"] }
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# RSA key generation (graph::cert::generate: tests and `pdms gen-graph-cert`)
+# takes many seconds unoptimized; optimize just these crates in dev/test builds.
+[profile.dev.package.rsa]
+opt-level = 3
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3

@@ -257,3 +257,169 @@ async fn deactivated_sso_user_cannot_sign_in() {
     assert_eq!(r.status(), 401);
     assert!(r.text().await.unwrap().contains("Single sign-on failed"));
 }
+
+#[tokio::test]
+async fn existing_account_with_the_same_email_is_never_linked() {
+    let app = app().await;
+    let local = directory::create_user(
+        &app.core.db,
+        &system(),
+        "Break Glass",
+        "sso.user@org.example",
+        None,
+    )
+    .await
+    .unwrap();
+    let (_idp, issuer) = mock_idp(serde_json::json!({
+        "sub": "pairwise-sub-2", "oid": "entra-oid-2", "aud": [CLIENT_ID],
+        "email": "sso.user@org.example", "name": "Sso User"
+    }))
+    .await;
+    let base = serve(app.core.clone(), &issuer).await;
+    let r = browser()
+        .get(format!("{base}/auth/oidc/start"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401);
+    let subject: Option<String> =
+        sqlx::query_scalar("SELECT oidc_subject FROM users WHERE id = $1")
+            .bind(local)
+            .fetch_one(&app.core.db)
+            .await
+            .unwrap();
+    assert_eq!(subject, None, "not linked by email");
+    let contexts: Vec<serde_json::Value> =
+        sqlx::query_scalar("SELECT context FROM audit_log WHERE action = 'auth.login_failed'")
+            .fetch_all(&app.core.db)
+            .await
+            .unwrap();
+    assert!(
+        contexts.iter().any(|c| c["reason"] == "email_in_use"),
+        "{contexts:?}"
+    );
+}
+
+#[tokio::test]
+async fn overlong_or_empty_token_names_still_sign_in() {
+    let long = format!("{}{}", "N".repeat(150), "é".repeat(150));
+    let cases = [
+        (
+            "entra-oid-20",
+            "long@org.example",
+            long.clone(),
+            long.chars().take(200).collect::<String>(),
+        ),
+        (
+            "entra-oid-21",
+            "empty@org.example",
+            String::new(),
+            "empty@org.example".to_owned(),
+        ),
+    ];
+    for (oid, email, name, want) in cases {
+        let app = app().await;
+        let (_idp, issuer) = mock_idp(serde_json::json!({
+            "sub": format!("pairwise-{oid}"), "oid": oid, "aud": [CLIENT_ID],
+            "email": email, "name": name
+        }))
+        .await;
+        let base = serve(app.core.clone(), &issuer).await;
+        // The first sign-in creates the account; the second updates it.
+        for attempt in 1..=2 {
+            let r = browser()
+                .get(format!("{base}/auth/oidc/start"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(r.status(), 200, "{email}, sign-in {attempt}");
+        }
+        let got: String =
+            sqlx::query_scalar("SELECT display_name FROM users WHERE oidc_subject = $1")
+                .bind(oid)
+                .fetch_one(&app.core.db)
+                .await
+                .unwrap();
+        assert_eq!(got, want, "{email}");
+    }
+}
+
+#[tokio::test]
+async fn with_entra_sync_on_token_groups_do_not_change_departments() {
+    let mut cfg = config();
+    cfg.entra_sync.enabled = true; // Graph is not configured: sign-in provisions as before
+    let app = app_with(cfg).await;
+    let ops = directory::create_department(&app.core.db, &system(), "OPS", "Operations")
+        .await
+        .unwrap();
+    directory::create_idp_mapping(
+        &app.core.db,
+        &system(),
+        "grp-ops",
+        "",
+        MappingTarget::Department(ops),
+    )
+    .await
+    .unwrap();
+    let (_idp, issuer) = mock_idp(serde_json::json!({
+        "sub": "pairwise-sub-3", "oid": "entra-oid-3", "aud": [CLIENT_ID],
+        "email": "g@org.example", "name": "G", "groups": ["grp-ops"]
+    }))
+    .await;
+    let base = serve(app.core.clone(), &issuer).await;
+    let r = browser()
+        .get(format!("{base}/auth/oidc/start"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let members: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM department_members WHERE department_id = $1")
+            .bind(ops)
+            .fetch_one(&app.core.db)
+            .await
+            .unwrap();
+    assert_eq!(
+        members, 0,
+        "departments come from the Entra Department field"
+    );
+    assert!(
+        !actions(&app.core)
+            .await
+            .contains(&"user.idp_memberships_synced".to_owned())
+    );
+
+    // The sync owns names: a later sign-in keeps the name from Entra.
+    sqlx::query("UPDATE users SET display_name = 'Gail Entra' WHERE oidc_subject = 'entra-oid-3'")
+        .execute(&app.core.db)
+        .await
+        .unwrap();
+    let again = browser()
+        .get(format!("{base}/auth/oidc/start"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(again.status(), 200);
+    let name: String =
+        sqlx::query_scalar("SELECT display_name FROM users WHERE oidc_subject = 'entra-oid-3'")
+            .fetch_one(&app.core.db)
+            .await
+            .unwrap();
+    assert_eq!(name, "Gail Entra", "the token's name does not replace it");
+}
+
+#[tokio::test]
+async fn idp_mappings_page_says_they_are_not_applied_while_syncing() {
+    let notice = "These mappings are not applied while the Entra directory sync is on";
+    for on in [false, true] {
+        let mut cfg = config();
+        cfg.entra_sync.enabled = on;
+        let app = app_with(cfg).await;
+        let (_, secret) = user(&app.core, "admin@example.test", None, Some("admin")).await;
+        let mut b = Browser::new(&app);
+        b.login("admin@example.test", &secret).await;
+        let page = b.get("/admin/idp").await;
+        assert_eq!(page.status, 200);
+        assert_eq!(page.body.contains(notice), on, "sync on: {on}");
+    }
+}

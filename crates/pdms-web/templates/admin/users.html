@@ -28,7 +28,7 @@
 
 <section aria-labelledby="new-user-h">
   <h2 id="new-user-h">Add a user</h2>
-  <p class="help">Users added here sign in with single sign-on; their account is matched by email on first sign-in. New users can only view their department’s documents until granted more.</p>
+  <p class="help">Single sign-on matches people by their Entra account, never by email, so nobody signs in with single sign-on as a user added here. Such a user also keeps anyone with the same email address from signing in with single sign-on, until that user’s email address is changed on their page. New users can only view their department’s documents until granted more.</p>
   <form method="post" action="/admin/users" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="nu-name">Display name</label><input id="nu-name" name="display_name" required maxlength="200">

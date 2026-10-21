@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, display_name, status AS \"status: UserStatus\", oidc_subject\n                 FROM users WHERE lower(email) = lower($1) FOR UPDATE",
+  "query": "SELECT u.id, u.display_name, u.email, u.oidc_subject AS \"oidc_subject!\",\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u\n            WHERE u.oidc_issuer = $1 AND u.status = 'active' AND u.created_at < $2\n            ORDER BY u.display_name",
   "describe": {
     "columns": [
       {
@@ -27,29 +27,18 @@
       },
       {
         "ordinal": 2,
-        "name": "status: UserStatus",
-        "type_info": {
-          "Custom": {
-            "name": "user_status",
-            "kind": {
-              "Enum": [
-                "active",
-                "disabled",
-                "departed"
-              ]
-            }
-          }
-        },
+        "name": "email",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "users",
-            "name": "status"
+            "name": "email"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "oidc_subject",
+        "name": "oidc_subject!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -57,19 +46,27 @@
             "name": "oidc_subject"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "local_login!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "Timestamptz"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      true
+      true,
+      null
     ]
   },
-  "hash": "88fb334ae9daefd44b124c3c8bfe9331f218cebbebc5ca36d69e695958ce71f2"
+  "hash": "606e94f51f6752839faf9e539a049f3cc51ce1af0d1aae80ac114af879dfb72e"
 }

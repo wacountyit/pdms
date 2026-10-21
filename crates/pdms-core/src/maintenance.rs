@@ -27,7 +27,7 @@ pub fn worker(core: &Core) -> Worker {
     let worker_id = worker.id().to_owned();
     let worker_id2 = worker_id.clone();
     let (planner_core, mail_core) = (core.clone(), core.clone());
-    worker
+    let worker = worker
         .handle(PLAN_NOTIFICATIONS, move |_| {
             let core = planner_core.clone();
             async move {
@@ -206,5 +206,31 @@ pub fn worker(core: &Core) -> Worker {
             crate::integrations::forward::FORWARD_JOB,
             Duration::from_secs(30),
         )
-        .every(API_LOG_PURGE, Duration::from_secs(24 * 3600))
+        .every(API_LOG_PURGE, Duration::from_secs(24 * 3600));
+    use crate::directory::entra_sync;
+    let worker = worker
+        .handle(entra_sync::SYNC_JOB, {
+            let core = core.clone();
+            move |job| {
+                let core = core.clone();
+                async move { entra_sync::run_job(&core, &job.payload).await }
+            }
+        })
+        .handle(entra_sync::TICK_JOB, {
+            let core = core.clone();
+            move |_| {
+                let core = core.clone();
+                async move {
+                    entra_sync::schedule_daily(&core, chrono::Utc::now())
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| e.to_string())
+                }
+            }
+        });
+    if core.config.entra_sync.enabled {
+        worker.every(entra_sync::TICK_JOB, Duration::from_secs(15 * 60))
+    } else {
+        worker
+    }
 }

@@ -12,6 +12,7 @@ aes-gcm.workspace = true
 anyhow.workspace = true
 argon2.workspace = true
 base64.workspace = true
+bytes = "1"
 chrono.workspace = true
 chrono-tz.workspace = true
 figment.workspace = true
@@ -29,14 +30,18 @@ pdms-audit.workspace = true
 pdms-authz.workspace = true
 pdms-storage.workspace = true
 rand.workspace = true
+rcgen = "0.14.5"
 regex = "1"
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+ring = "0.17"
+rsa = "0.9"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
+time = "0.3"
 tokio.workspace = true
 totp-rs.workspace = true
 tracing.workspace = true
@@ -45,7 +50,9 @@ uuid.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+axum.workspace = true
 reqwest.workspace = true
+serde_urlencoded.workspace = true
 testcontainers.workspace = true
 pdms-audit.workspace = true
 pdms-storage.workspace = true

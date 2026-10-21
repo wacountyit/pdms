@@ -81,8 +81,29 @@ enum Command {
     /// Run the reminder planner now (statuses, tasks, notifications). The worker
     /// also does this every 15 minutes; emails are sent by the worker.
     RunScheduler,
+    /// Read people and departments from Entra ID now (the worker does this
+    /// nightly). Refused unless [entra_sync] enabled = true. --full ignores
+    /// the saved cursor.
+    SyncDirectory {
+        #[arg(long)]
+        full: bool,
+    },
     /// Print a new random master secret for PDMS_SECRET_KEY.
     GenSecret,
+    /// Create the certificate for the Microsoft Graph app registration
+    /// ("PADM Service"). Writes certificate + private key to OUT (mode 0600)
+    /// and the public certificate to OUT with ".crt" appended (graph.pem
+    /// gives graph.pem.crt), which you upload in Entra ID. Needs no
+    /// configuration.
+    GenGraphCert {
+        #[arg(long)]
+        out: PathBuf,
+        /// Validity in days (30 to 1095).
+        #[arg(long, default_value_t = 730)]
+        days: u32,
+        #[arg(long, default_value = "PADM Service")]
+        name: String,
+    },
     /// Validate configuration and print it with secrets redacted.
     CheckConfig,
     /// Exit 0 if the local server answers /healthz (for container health checks).
@@ -115,6 +136,11 @@ async fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Command::Healthcheck { addr } => return healthcheck(addr).await,
+        Command::GenGraphCert {
+            ref out,
+            days,
+            ref name,
+        } => return gen_graph_cert(out, days, name),
         _ => {}
     }
     let config = match Config::load(cli.config.as_deref()) {
@@ -137,7 +163,7 @@ async fn main() -> ExitCode {
 
 async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
     match command {
-        Command::GenSecret | Command::Healthcheck { .. } => {}
+        Command::GenSecret | Command::Healthcheck { .. } | Command::GenGraphCert { .. } => {}
         Command::CheckConfig => {
             config.master_key().context("secret_key")?;
             println!("{config:#?}");
@@ -263,6 +289,23 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
                 r.status_changes, r.tasks_created, r.tasks_overdue, r.notifications, r.deliveries
             );
         }
+        Command::SyncDirectory { full } => {
+            use pdms_core::directory::entra_sync;
+            let core = connect(config).await?;
+            let ctx = Ctx::system("cli:sync-directory");
+            let r = if full {
+                entra_sync::run_full(&core, &ctx).await?
+            } else {
+                entra_sync::run(&core, &ctx).await?
+            };
+            println!(
+                "Created {}, updated {}, departed {}; {} without a mapped department.",
+                r.created, r.updated, r.departed, r.unmapped
+            );
+            for e in &r.errors {
+                println!("  needs attention: {e}");
+            }
+        }
         Command::SeedDemo => {
             let core = connect(config).await?;
             let summary = pdms_core::demo::seed(&core).await?;
@@ -346,6 +389,13 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
             "auth.local.require_totp is off: local sign-in is password-only (demo use only)"
         );
     }
+    if cfg.auth.oidc.enabled && !cfg.auth.oidc.auto_provision && !cfg.entra_sync.enabled {
+        tracing::warn!(
+            "auth.oidc.auto_provision and entra_sync are both off: single sign-on never links \
+             accounts by email, so only people already linked to their single sign-on account \
+             can sign in"
+        );
+    }
 
     let oidc = if cfg.auth.oidc.enabled {
         match OidcProvider::discover(&cfg.auth.oidc, &cfg.server.public_url).await {
@@ -409,6 +459,61 @@ async fn shutdown_signal(tx: watch::Sender<bool>) {
     }
     tracing::info!("shutdown requested");
     let _ = tx.send(true);
+}
+
+fn gen_graph_cert(out: &std::path::Path, days: u32, name: &str) -> ExitCode {
+    match write_graph_cert(out, days, name) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    if !(30..=1095).contains(&days) {
+        bail!("--days must be 30–1095");
+    }
+    let mut public_name = out.as_os_str().to_owned();
+    public_name.push(".crt");
+    let public = PathBuf::from(public_name);
+    for path in [out, public.as_path()] {
+        if path.symlink_metadata().is_ok() {
+            bail!(
+                "{} already exists; refusing to overwrite it",
+                path.display()
+            );
+        }
+    }
+    let g = pdms_core::graph::cert::generate(name, days)?;
+    let create = |path: &std::path::Path, mode: u32| {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(mode);
+        }
+        #[cfg(not(unix))]
+        let _ = mode;
+        opts.open(path)
+            .with_context(|| format!("creating {} (it must not exist yet)", path.display()))
+    };
+    create(out, 0o600)?.write_all(g.pem.as_bytes())?;
+    create(&public, 0o644)?.write_all(g.certificate_pem.as_bytes())?;
+    println!(
+        "Certificate and private key: {} (secret: give it to PADM as PDMS_GRAPH__CERTIFICATE_FILE)",
+        out.display()
+    );
+    println!(
+        "Public certificate for Entra ID (App registrations > PADM Service > Certificates & secrets > Upload): {}",
+        public.display()
+    );
+    println!("SHA-256 thumbprint (x5t#S256): {}", g.thumbprint);
+    println!("Expires: {}", g.not_after.format("%Y-%m-%d"));
+    Ok(())
 }
 
 fn read_password(env_var: Option<&str>) -> anyhow::Result<String> {
@@ -499,4 +604,45 @@ async fn create_admin(
         "\nStore the secret securely; it is not shown again. Run this command again to reset."
     );
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::write_graph_cert;
+
+    fn scratch() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("padm-cert-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn an_existing_public_certificate_file_is_left_untouched() {
+        let d = scratch();
+        let out = d.join("graph.pem");
+        std::fs::write(d.join("graph.pem.crt"), "keep me").unwrap();
+        assert!(write_graph_cert(&out, 30, "PADM test").is_err());
+        assert_eq!(
+            std::fs::read_to_string(d.join("graph.pem.crt")).unwrap(),
+            "keep me"
+        );
+        assert!(!out.exists(), "no key is written when the .crt exists");
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn out_ending_in_crt_keeps_the_key_and_writes_a_separate_public_file() {
+        let d = scratch();
+        let out = d.join("x.crt");
+        write_graph_cert(&out, 30, "PADM test").unwrap();
+        assert!(
+            std::fs::read_to_string(&out)
+                .unwrap()
+                .contains("PRIVATE KEY")
+        );
+        let public = std::fs::read_to_string(d.join("x.crt.crt")).unwrap();
+        assert!(!public.contains("PRIVATE KEY"));
+        std::fs::remove_dir_all(d).unwrap();
+    }
 }

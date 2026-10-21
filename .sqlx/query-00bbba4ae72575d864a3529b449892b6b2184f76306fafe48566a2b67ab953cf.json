@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO department_entra_values (value_normalized, value_display, department_id)\n         VALUES ($1, $2, $3)\n         ON CONFLICT (value_normalized)\n         DO UPDATE SET value_display = EXCLUDED.value_display, department_id = EXCLUDED.department_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "00bbba4ae72575d864a3529b449892b6b2184f76306fafe48566a2b67ab953cf"
+}

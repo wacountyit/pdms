@@ -73,6 +73,10 @@ pub struct Config {
     pub comments: CommentsConfig,
     pub ocr: OcrConfig,
     pub graph_calendar: GraphCalendarConfig,
+    /// Microsoft Graph as PADM itself (app-only, certificate). Used by the
+    /// Entra user sync and, later, SharePoint storage.
+    pub graph: GraphConfig,
+    pub entra_sync: EntraSyncConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -623,6 +627,86 @@ impl Default for GraphCalendarConfig {
     }
 }
 
+/// Microsoft Graph with an app registration ("PADM Service") and a
+/// certificate credential. All three of `tenant_id`, `client_id`, and
+/// `certificate` are needed; with none of them set, Graph is off.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct GraphConfig {
+    pub tenant_id: String,
+    pub client_id: String,
+    /// PEM: the certificate followed by its unencrypted RSA private key
+    /// (`PRIVATE KEY` or `RSA PRIVATE KEY`). Supply it as a file:
+    /// `PDMS_GRAPH__CERTIFICATE_FILE=/run/secrets/graph_certificate`.
+    pub certificate: Secret,
+    /// Overridable for tests and national clouds.
+    pub authority_url: String,
+    pub api_url: String,
+    pub timeout_seconds: u64,
+    /// Retries after HTTP 429/503/504 before giving up.
+    pub max_retries: u32,
+}
+
+impl Default for GraphConfig {
+    fn default() -> Self {
+        GraphConfig {
+            tenant_id: String::new(),
+            client_id: String::new(),
+            certificate: Secret::default(),
+            authority_url: "https://login.microsoftonline.com".into(),
+            api_url: "https://graph.microsoft.com/v1.0".into(),
+            timeout_seconds: 60,
+            max_retries: 4,
+        }
+    }
+}
+
+impl GraphConfig {
+    pub fn is_configured(&self) -> bool {
+        !self.tenant_id.is_empty() && !self.client_id.is_empty() && !self.certificate.is_empty()
+    }
+}
+
+/// People and departments from Entra ID (D-086).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct EntraSyncConfig {
+    pub enabled: bool,
+    /// Daily run time, `HH:MM` in `[org] timezone`.
+    pub run_at: String,
+    /// Entra user property that names the department.
+    pub attribute: String,
+    /// Also sync guest (B2B) accounts. Off: guests cannot sign in.
+    pub include_guests: bool,
+}
+
+impl Default for EntraSyncConfig {
+    fn default() -> Self {
+        EntraSyncConfig {
+            enabled: false,
+            run_at: "02:30".into(),
+            attribute: "department".into(),
+            include_guests: false,
+        }
+    }
+}
+
+impl EntraSyncConfig {
+    pub fn run_at_time(&self) -> Option<chrono::NaiveTime> {
+        chrono::NaiveTime::parse_from_str(self.run_at.trim(), "%H:%M").ok()
+    }
+}
+
+/// `https`, or plain `http` to this machine (tests and local mocks).
+fn https_or_loopback(s: &str) -> bool {
+    Url::parse(s).is_ok_and(|u| u.scheme() == "https" || (u.scheme() == "http" && is_loopback(&u)))
+}
+
+/// The URL names this machine.
+pub(crate) fn is_loopback(u: &Url) -> bool {
+    matches!(u.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+}
+
 /// Review and approval workflow policy.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -762,6 +846,50 @@ impl Config {
         if !self.auth.oidc.enabled && !self.auth.local.enabled {
             return bad("at least one of auth.oidc and auth.local must be enabled".into());
         }
+        let g = &self.graph;
+        let parts = [
+            !g.tenant_id.is_empty(),
+            !g.client_id.is_empty(),
+            !g.certificate.is_empty(),
+        ];
+        if parts.iter().any(|p| *p) && !parts.iter().all(|p| *p) {
+            return bad("graph needs tenant_id, client_id, and certificate together".into());
+        }
+        if !https_or_loopback(&g.authority_url) || !https_or_loopback(&g.api_url) {
+            return bad("graph.authority_url and graph.api_url must be https URLs".into());
+        }
+        let e = &self.entra_sync;
+        if e.enabled {
+            if !g.is_configured() {
+                return bad(
+                    "entra_sync needs [graph] tenant_id, client_id, and certificate".into(),
+                );
+            }
+            if self.auth.oidc.issuer_url.trim().is_empty() {
+                return bad(
+                    "entra_sync needs auth.oidc.issuer_url so synced people can sign in".into(),
+                );
+            }
+            if self.auth.oidc.subject_claim != "oid" {
+                return bad(
+                    "entra_sync needs auth.oidc.subject_claim = \"oid\": synced accounts are keyed by object ID"
+                        .into(),
+                );
+            }
+        }
+        if e.run_at_time().is_none() {
+            return bad(format!("entra_sync.run_at {:?} must be HH:MM", e.run_at));
+        }
+        let attr_ok = e.attribute.starts_with(|c: char| c.is_ascii_alphabetic())
+            && e.attribute
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !attr_ok {
+            return bad(format!(
+                "entra_sync.attribute {:?} must be one Entra property name",
+                e.attribute
+            ));
+        }
         Ok(())
     }
 
@@ -842,6 +970,82 @@ mod tests {
         std::fs::write(&f, "[org]\nname = \"Example Org PDMS\"\n").unwrap();
         let c = Config::load_from(Some(&f), &[]).unwrap();
         assert_eq!(c.org.name, "Example Org PDMS");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn graph_and_entra_sync_defaults_and_validation() {
+        let c = Config::default();
+        assert!(!c.graph.is_configured());
+        assert_eq!(c.graph.authority_url, "https://login.microsoftonline.com");
+        assert_eq!(c.graph.api_url, "https://graph.microsoft.com/v1.0");
+        assert!(!c.entra_sync.enabled);
+        assert_eq!(c.entra_sync.run_at, "02:30");
+        assert_eq!(c.entra_sync.attribute, "department");
+        assert!(!c.entra_sync.include_guests);
+
+        let mut c = Config::default();
+        c.graph.tenant_id = "t".into();
+        assert!(c.validate().is_err(), "partial [graph] is rejected");
+        c.graph.client_id = "c".into();
+        c.graph.certificate = Secret::new("-----BEGIN CERTIFICATE-----");
+        assert!(c.validate().is_ok());
+        assert!(c.graph.is_configured());
+        c.graph.api_url = "http://graph.example.com/v1.0".into();
+        assert!(c.validate().is_err(), "plain http only to loopback");
+        c.graph.api_url = "http://127.0.0.1:9999/v1.0".into();
+        assert!(c.validate().is_ok());
+
+        let mut c = Config::default();
+        c.entra_sync.enabled = true;
+        assert!(c.validate().is_err(), "needs [graph] and an OIDC issuer");
+        c.graph.tenant_id = "t".into();
+        c.graph.client_id = "c".into();
+        c.graph.certificate = Secret::new("x");
+        c.auth.oidc.issuer_url = "https://login.microsoftonline.com/t/v2.0".into();
+        assert!(c.validate().is_ok());
+        c.auth.oidc.subject_claim = "sub".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("subject_claim"), "{err}");
+        c.auth.oidc.subject_claim = "oid".into();
+        assert!(c.validate().is_ok());
+        c.entra_sync.run_at = "25:00".into();
+        assert!(c.validate().is_err());
+        c.entra_sync.run_at = "02:30".into();
+        assert_eq!(
+            c.entra_sync.run_at_time(),
+            chrono::NaiveTime::from_hms_opt(2, 30, 0)
+        );
+        c.entra_sync.attribute = "department,mail".into();
+        assert!(c.validate().is_err(), "the attribute goes into $select");
+    }
+
+    #[test]
+    fn graph_certificate_is_read_from_a_file() {
+        let dir = std::env::temp_dir().join(format!("pdms-cfg-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("graph_certificate");
+        std::fs::write(
+            &f,
+            "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        let c = Config::load_from(
+            None,
+            &env(&[
+                ("PDMS_GRAPH__TENANT_ID", "t"),
+                ("PDMS_GRAPH__CLIENT_ID", "c"),
+                ("PDMS_GRAPH__CERTIFICATE_FILE", f.to_str().unwrap()),
+            ]),
+        )
+        .unwrap();
+        assert!(
+            c.graph
+                .certificate
+                .expose()
+                .starts_with("-----BEGIN CERTIFICATE-----\nAAAA")
+        );
+        assert_eq!(format!("{:?}", c.graph.certificate), "\"[redacted]\"");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

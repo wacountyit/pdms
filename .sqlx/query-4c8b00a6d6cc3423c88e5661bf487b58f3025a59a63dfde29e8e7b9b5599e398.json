@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET display_name = $2, email = $3, entra_department = $4,\n                        entra_synced_at = now(), source = 'entra', updated_at = now()\n                  WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4c8b00a6d6cc3423c88e5661bf487b58f3025a59a63dfde29e8e7b9b5599e398"
+}

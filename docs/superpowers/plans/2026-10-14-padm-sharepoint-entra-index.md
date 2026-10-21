@@ -27,9 +27,9 @@ These do not change behaviour. They change where things live.
 
 1. **Migrations are split per plan.** The spec's single `0008_sharepoint_entra.sql` becomes:
    - `0008_document_visibility.sql` (P1);
-   - `0009_entra_sync.sql` (P2: `department_entra_values`, `sync_cursors`, user columns);
-   - `0010_sharepoint_files.sql` (P3);
-   - `0011_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
+   - `0010_entra_sync.sql` (P2: `department_entra_values`, `sync_cursors`, user columns);
+   - `0011_sharepoint_files.sql` (P3);
+   - `0012_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
 2. **The Graph client lives in `pdms-core::graph`** (new module), not in
    `pdms-storage`. `pdms-storage` cannot depend on `pdms-core`, and the Entra
    sync needs the same client. The SharePoint store therefore lives in
@@ -83,23 +83,35 @@ one, they update this table in the same commit.
 | `pdms_core::Core.graph` | `Option<pdms_core::graph::GraphClient>`: `Some` when `[graph]` has `tenant_id`, `client_id`, `certificate` |
 | `pdms_core::directory::entra_sync` | `pub const SYNC_JOB: &str = "directory.entra_sync"`; `pub async fn run(core: &Core, ctx: &Ctx) -> CoreResult<SyncReport>`; `pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>>`; `pub struct SyncReport { pub created: u32, pub updated: u32, pub departed: u32, pub unmapped: u32, pub changed_departments: BTreeSet<Uuid> }` |
 | `pdms_core::directory::entra_values` | `list(db) -> CoreResult<Vec<EntraValue>>`, `upsert(db, ctx, value: &str, department_id: Uuid) -> CoreResult<()>`, `remove(db, ctx, value: &str) -> CoreResult<()>`, `unmapped(db) -> CoreResult<Vec<UnmappedValue>>`, `normalize(value: &str) -> String` |
-| DB | `department_entra_values`, `sync_cursors (name text PK, delta_link text, last_run timestamptz, last_error text)`, `users.entra_department`, `users.entra_synced_at`, `users.source user_source ('local','entra')` |
+| DB | `department_entra_values`, `sync_cursors (name text PK, delta_link text, last_run timestamptz, last_error text, last_summary jsonb, delta_select text)`, `users.entra_department`, `users.entra_synced_at`, `users.source user_source ('local','entra')` |
 | Worker | Handler for `SYNC_JOB`; daily schedule at `[entra_sync] run_at`. **P4 adds** "enqueue `sharepoint.reconcile_access` after a successful sync" inside this handler. |
-| CLI | `pdms sync-directory`; `pdms gen-graph-cert --out <file>` (writes PEM certificate + key, prints the public certificate to upload to Entra) |
+| CLI | `pdms sync-directory`; `pdms gen-graph-cert --out <file> [--days N] [--name CN]` (`--days` 30-1095; writes the PEM bundle, certificate + unencrypted key, mode 600, to `<file>` and the public certificate to `<file>.crt`; never overwrites; prints the `.crt` path and the thumbprint) |
 
 **Changes recorded when P2 was written** (the P2 plan is authoritative for exact signatures):
 
 - **Config key:** `[graph] certificate`, not `certificate_file`. The config loader maps any `PDMS_*_FILE` environment variable onto the key without `_FILE`.
 - **Signing:** client assertions are signed **PS256** with an `x5t#S256` header (Microsoft's current guidance).
 - **Error mapping:** `GraphError::Conflict` maps to `CoreError::Conflict`; every other Graph error maps to `CoreError::Internal`, so a Graph "not found" is never shown to people as a 404.
+- **Grants:** migration 0010 also grants `DELETE` on `department_entra_values` (spec §6 listed SELECT, INSERT, UPDATE), because removing a mapping needs it.
 - **Departures:** audited as the existing `user.status_changed`, which `set_user_status` writes. There is no `directory.user_departed` (spec §11 adjusted).
+- **Guests:** guests are skipped by `userType = Guest` (any letter case); a null `userType` counts as a member (spec §7.5 said `ne 'Member'`).
+- **Full rounds sweep:** a round that lists every account (first run, full resync, expired delta token, changed attribute or `include_guests`) departs this issuer's active accounts it did not list that were created before the round started. The sweep is skipped, and reported with the names of up to 20 accounts, when the round has no member accounts or would depart more than max(5, 20% of the issuer's active linked accounts); the last administrator, whom `set_user_status` keeps, does not count.
+- **Local passwords:** a linked account with local credentials is departed like any other (by a delta or by the sweep), and the run adds a line to `SyncReport.errors` saying it had a local password. The last administrator is still kept and reported.
+- **Cursor and attribute:** `sync_cursors.delta_select` records what a delta link was started with: the `$select`, plus `;guests` when `include_guests` is on. When `[entra_sync] attribute` or `include_guests` changes, the next run reads every account again.
+- **Mapping changes:** `entra_values::upsert` and `remove` re-apply the mapping at once, in the same transaction, to active synced people whose stored Department value matches (same `idp` rule and `user.idp_memberships_synced` audit as the sync). **P4:** a mapping change should also queue a folder-access reconcile.
+- **Turned off:** `entra_sync::run`, `run_full` and `pdms sync-directory` are refused unless `[entra_sync] enabled`; a queued job that finds the sync off finishes without retrying.
 - **Additions:**
   - `GraphConfig.timeout_seconds` and `max_retries`;
-  - `SyncReport.errors: Vec<String>`;
+  - `SyncReport.errors: Vec<String>`; `SyncReport` is `#[serde(default)]`, so a stored summary still reads after a later plan adds a field;
   - `sync_cursors.last_summary jsonb`;
   - `entra_sync::{run_full, status, request_sync, schedule_daily, run_job, TICK_JOB, LOCK_KEY}`;
-  - `oidc::resolve_identity`, `normalize_issuer`;
-  - `model::UserSource`.
+  - `oidc::resolve_identity`, `normalize_issuer`.
+- **Types:** `model::UserSource` was dropped; the sync writes `users.source` directly in SQL.
+- **Mapping:** a manual department membership in the mapped department satisfies the mapping.
+- **Config check:** `entra_sync.enabled` requires `[graph]`, `auth.oidc.issuer_url` and `auth.oidc.subject_claim = "oid"`.
+- **Sign-in:** when the sync is on, a first sign-in asks Entra about the person and is denied with `email_in_use` if an unlinked account has that email; a Graph error denies sign-in. The token never sets names or groups while the sync is on.
+- **Downloads:** download streams have no total deadline, so P3's large files are safe from it, but the download's pre-authenticated GET does not yet retry 429/503/504.
+- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 must be renumbered from D-097 when P4 is executed.
 - **Left to P4:** the Docker Compose secret and `install.sh` wiring for the certificate.
 - **Open behaviour:** an account that is departed and later re-enabled in Entra is **not** reactivated automatically; an admin reactivates it. A simultaneous first sign-in and nightly sync are resolved with `ON CONFLICT DO NOTHING`.
 
@@ -149,7 +161,7 @@ one, they update this table in the same commit.
 - **Tests:** they use P2's `tests/mock_graph` plus P3's `sp.rs` (`MockGraph`, `SpItem`, `SpState`), not a separate P4 mock.
 - **Jobs:** `RECONCILE_JOB` and `DELTA_JOB` live in `sharepoint::access` and `sharepoint::changes` and are re-exported from `sharepoint`. They are registered by `sharepoint::register_ops_jobs(worker, core)`, chained after P3's `register_jobs`.
 - **Run records:** `sync_cursors` gains a `sharepoint.reconcile` record.
-- **Migration 0011** also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
+- **Migration 0012** also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
 - **Authorization:** new `Capability::ManageSharePoint`, and new `dispatch::Visibility::Anyone` for notices that name no document.
 - **Integrity:**
   - `verify-integrity --rehash-sharepoint` (`--rehash` stays the local-file option);

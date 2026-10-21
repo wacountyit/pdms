@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<p>Map identity-provider groups (for Entra ID, the group’s object ID) to departments, groups, or roles. Memberships created this way are updated at each sign-in; memberships added by hand are never changed.</p>
+{% if entra_sync %}<p class="flash flash-info" role="status">These mappings are not applied while the Entra directory sync is on: departments come from the Entra Department field, and roles and groups are assigned in PADM. Roles and group memberships that earlier mappings granted stay until an administrator removes them: roles on the person’s page, group memberships on the group’s page.</p>{% endif %}
+<p>Map identity-provider groups (for Entra ID, the group’s object ID) to departments, groups, or roles. Unless the Entra directory sync is on, memberships created this way are updated at each sign-in; memberships added by hand are never changed.</p>
 <div class="table-wrap">
 <table>
   <thead><tr><th scope="col">IdP group ID</th><th scope="col">Description</th><th scope="col">Maps to</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>

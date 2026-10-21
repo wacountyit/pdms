@@ -102,6 +102,10 @@ pub fn router(state: AppState) -> Router {
         .route("/grants/{id}/revoke", post(admin::revoke_grant))
         .route("/idp", get(admin::idp).post(admin::create_mapping))
         .route("/idp/{id}/delete", post(admin::delete_mapping))
+        .route("/entra", get(admin::entra))
+        .route("/entra/values", post(admin::add_entra_value))
+        .route("/entra/values/remove", post(admin::remove_entra_value))
+        .route("/entra/sync", post(admin::entra_sync_now))
         .route_layer(from_fn_with_state(state.clone(), require_admin));
 
     let max_body = state.core.config.server.max_body_bytes;

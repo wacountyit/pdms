@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT delta_link, delta_select FROM sync_cursors WHERE name = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "delta_link",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sync_cursors",
+            "name": "delta_link"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delta_select",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sync_cursors",
+            "name": "delta_select"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "19cef1472745122025a96c923bbe503d1d4e90442e9a42d6f8b4dd0d3fbebd24"
+}

@@ -80,7 +80,7 @@ Work through these in order unless noted. Each one gets its own spec and plan.
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | final P1 review |
 | 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility), P3 (storage), P4 (access, change detection, operations) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
-| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded | **Planned**: spec approved; plan P2 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
+| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
@@ -241,7 +241,7 @@ Things that work but are limited, or were deliberately left for later:
 | Area | Gap | Why it matters | Effort |
 |---|---|---|---|
 | Migration | **No bulk import tool.** Documents are created one at a time (or via the API without files). | Go-live with hundreds of existing documents needs it. Planned as sub-project 4 (§0.3). | L |
-| Identity | Department/role changes from Entra apply at the user's next sign-in; departed staff are not disabled automatically. | Offboarding relies on someone marking the account departed. Addressed by sub-project 2 (§0.3). | M |
+| Identity | With the Entra ID sync on (off by default), departed staff are marked departed at the next nightly sync, but the sync never reactivates anyone and holds back a mass departure for an administrator to check. With it off, department/role changes apply at the next sign-in and offboarding is manual (sub-project 2, D-086, D-096). | Turn the sync on after setting up the app registration (Administrator guide). | S |
 | Appointments | Reminder rules per position exist in the engine but have no screen (organization defaults are editable). | Boards with unusual timing need the admin to edit defaults. | S |
 | API | Read-mostly: no file upload, edits, workflow, or appointment changes through the API. | Integrations that write back (e.g. a records platform) need more. | M |
 | Workflow | Fixed stage order (reviewers → legal → approvers); no conditional routing or delegation while someone is away. | Some approvals need a different order or a backup approver. | M |
@@ -262,7 +262,7 @@ Ordered by likely value; adjust after the pilot. Where these overlap the sub-pro
 
 1. **Bulk import.** A CSV of document details plus a folder of files, with a dry run that reports problems before anything is created, and an audit entry per document. Essential for go-live. **Now sub-project 4 (§0.3).**
 2. **Fixes and polish from testing.** This always comes first once testing starts.
-3. ~~**Entra lifecycle sync** through Microsoft Graph: nightly group-membership sync and automatic deactivation of disabled Entra accounts.~~ **Replaced by sub-project 2 (§0.3)**: sync from the Department field, not groups (D-086).
+3. ~~**Entra lifecycle sync** through Microsoft Graph: nightly group-membership sync and automatic deactivation of disabled Entra accounts.~~ **Replaced by sub-project 2 (§0.3), done**: sync from the Department field, not groups (D-086, D-096).
 4. **Position reminder rules screen**, and per-user notification preferences (daily digest instead of individual emails).
 5. **Saved searches and "watch this document"**, so people can follow documents they do not own.
 6. **Release engineering:** versioned releases and a changelog, a published container image, `cargo audit`/`cargo deny` and an image scan in CI, and Playwright smoke tests.

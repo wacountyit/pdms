@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 2024, reqwest 0.12 (rustls, `stream`), ring 0.17 (RSA-PSS signing), rcgen 0.14 + rsa 0.9 (certificate generation), SQLx 0.9, Axum 0.8 (also as an in-process mock Graph in tests), Askama 0.16.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D10–D13, §7.5, §9, §10, §11, §12, Appendix A step 7; decision D-086. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P2"; P1 owns migration 0008, this plan owns 0009). **Depends on:** P1 merged (only for migration numbering).
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D10–D13, §7.5, §9, §10, §11, §12, Appendix A step 7; decision D-086. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P2"; P1 owns migration 0008, UI redesign R1 owns 0009, this plan owns 0010). **Depends on:** P1 merged (only for migration numbering).
 
 ## Global Constraints
 
@@ -16,15 +16,15 @@
 - The certificate is a PEM bundle (certificate + **unencrypted** RSA private key, `PRIVATE KEY` (PKCS#8) or `RSA PRIVATE KEY` (PKCS#1)) in `[graph] certificate`, normally supplied as a file with `PDMS_GRAPH__CERTIFICATE_FILE` (the existing `_FILE` loader reads it).
 - Config keys, exactly: `[graph] tenant_id, client_id, certificate, authority_url (default https://login.microsoftonline.com), api_url (default https://graph.microsoft.com/v1.0), timeout_seconds (60), max_retries (4)`; `[entra_sync] enabled (false), run_at ("02:30", HH:MM in [org] timezone), attribute ("department"), include_guests (false)`. URLs must be `https`, except `http` to `127.0.0.1`/`localhost`/`[::1]` (tests).
 - The bearer token is sent **only** to the origin of `api_url`; redirects are never followed with it; pre-authenticated download and upload URLs get **no** `Authorization` header (Graph docs: "You don't need to include an Authorization header when you access the download URL").
-- Retries: HTTP 429/503/504 honour `Retry-After` (seconds); at most `max_retries` retries; each wait at most 60 s; then `GraphError::Throttled`. One automatic token renewal on HTTP 401.
+- Retries: HTTP 429/503/504 honour `Retry-After` (seconds), otherwise exponential backoff with jitter (spec §10); at most `max_retries` retries; each wait at most 60 s; then `GraphError::Throttled`. One automatic token renewal on HTTP 401.
 - Delta: `$select` only on the initial request; follow `@odata.nextLink`/`@odata.deltaLink` URLs as given; HTTP 410, or error codes `resyncRequired`/`syncStateNotFound`/`syncStateInvalid` → full resync. The same change can be replayed, so applying a user must be idempotent. Directory delta tokens expire after 7 days.
 - Graph permission needed by this plan: **`User.Read.All` (application)** only.
 - Identity key: `(normalized issuer, Entra object ID)` where the normalized issuer is `trim()` without trailing `/`. **Never link or merge accounts by email** (D-086).
-- Guests (`userType` = `Guest`) are excluded unless `include_guests`. Disabled (`accountEnabled = false`) and removed (`@removed`) users become `departed` through `directory::set_user_status` (revokes sessions; keeps the last-administrator guard). The sync **never reactivates** anyone.
-- Department value normalization: replace `&` with ` and `, lowercase, collapse whitespace (so "Road & Bridge" = "road and bridge "). One `idp` department membership per person; `manual` memberships are never touched.
+- Guests (`userType` = `Guest`) are excluded unless `include_guests`; a null `userType` counts as a member. Disabled (`accountEnabled = false`) and removed (`@removed`) users become `departed` through `directory::set_user_status` (revokes sessions; keeps the last-administrator guard). The sync **never reactivates** anyone.
+- Department value normalization: replace `&` with ` and `, lowercase, collapse whitespace (so "Road & Bridge" = "road and bridge "). One `idp` department membership per person; `manual` memberships are never touched, and a manual membership in the mapped department satisfies the mapping.
 - Audit actions used: `directory.user_created`, `user.updated`, `user.idp_memberships_synced`, `user.status_changed` (departures, from `set_user_status`), `directory.synced`, `directory.department_mapping_changed`, `directory.sync_requested`. Each in the same transaction as its change.
-- Migration `migrations/0009_entra_sync.sql`; never edit 0001–0008; migrations have no SPDX header (D-080).
-- New Rust files start with `// SPDX-License-Identifier: AGPL-3.0-or-later` and `// Copyright (C) 2026 PDMS contributors`. `unwrap`/`expect`/`panic`/`dbg` are denied outside tests; test files start with the same `#![allow(...)]` block existing tests use.
+- Migration `migrations/0010_entra_sync.sql`; never edit 0001–0009; migrations have no SPDX header (D-080).
+- New Rust files start with `// SPDX-License-Identifier: AGPL-3.0-or-later` and `// Copyright (C) 2026 PDMS contributors`. `unwrap`/`expect`/`panic`/`dbg` are denied outside tests; new test files put those two SPDX lines first, then the same `#![allow(...)]` block existing tests use.
 - After any `sqlx::query!` or migration change: `sqlx migrate run --source migrations` on the dev DB, then `cargo sqlx prepare --workspace -- --all-targets`, and commit `.sqlx/`. Use the index's "Shared development setup" (exports `DATABASE_URL`, `PDMS_TEST_DATABASE_URL`, …) in every shell.
 
 ## Review Focus
@@ -47,7 +47,7 @@ Inputs the spec implies that are most likely to hurt a real county user; each ha
 | `crates/pdms-core/src/graph/cert.rs` (create) | PEM parsing, thumbprint, PS256 client assertion, certificate generation |
 | `crates/pdms-core/src/graph/client.rs` (create) | `GraphClient`, token cache, retries, `get/post/patch/delete/get_delta/put_bytes/download` |
 | `crates/pdms-core/src/lib.rs` (modify) | `pub mod graph;`, `Core.graph` |
-| `migrations/0009_entra_sync.sql` (create) | `user_source`, user columns, `department_entra_values`, `sync_cursors` |
+| `migrations/0010_entra_sync.sql` (create) | `user_source`, user columns, `department_entra_values`, `sync_cursors` |
 | `crates/pdms-core/src/model.rs` (modify) | `UserSource` enum |
 | `crates/pdms-core/src/directory/entra_values.rs` (create) | normalize, list, lookup, upsert, remove, unmapped |
 | `crates/pdms-core/src/directory/entra_sync.rs` (create) | run, run_full, sync_one, status, request_sync, schedule_daily, run_job |
@@ -278,6 +278,12 @@ Expected: PASS (all config tests, including the two new ones).
 git add crates/pdms-core/src/config.rs
 git commit -m "config: add [graph] and [entra_sync] sections"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **File test environment.** `graph_certificate_is_read_from_a_file` must also pass `("PDMS_GRAPH__TENANT_ID", "t")` and `("PDMS_GRAPH__CLIENT_ID", "c")`. This task's own validation rejects a partial `[graph]`, so without them the test panics.
+- **Subject claim.** When `entra_sync.enabled` is true, `validate()` also rejects any `auth.oidc.subject_claim` other than `"oid"`, and the error names `subject_claim`. Synced accounts are keyed by object ID. Add this assertion to `graph_and_entra_sync_defaults_and_validation`. Do **not** require `auth.oidc.enabled`: the sync may run before SSO is switched on.
+
 
 ---
 
@@ -730,6 +736,12 @@ Expected: PASS — `thumbprint_is_base64url_sha256`, `generated_certificate_sign
 git add Cargo.toml Cargo.lock crates/pdms-core/Cargo.toml crates/pdms-core/src/lib.rs crates/pdms-core/src/graph
 git commit -m "graph: certificate credential with PS256 client assertions"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Module order.** In `crates/pdms-core/src/lib.rs`, put `pub mod graph;` after `pub mod exports;`, not after `pub mod error;`. That is rustfmt's order (R1 added `pub mod branding;`). Run `cargo fmt`.
+- **rcgen.** The rcgen 0.14 calls in this task could not be checked offline. If the real API differs (`KeyPair::from_pkcs8_pem_and_sign_algo`, `CertificateParams::new(..)`, `self_signed(&KeyPair)`, `cert.der()`), adapt to it, keep the behaviour, and say so in your report.
+
 
 ---
 
@@ -1662,6 +1674,23 @@ git add Cargo.lock crates/pdms-core/Cargo.toml crates/pdms-core/src/graph crates
 git commit -m "graph: client with token cache, retries, delta paging, uploads, downloads"
 ```
 
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Compile fix.** Put `#[serde(bound(deserialize = "T: DeserializeOwned"))]` on `RawPage<T>`. Without it, `#[serde(default)]` on `value: Vec<T>` makes serde require `T: Default`, and `get_delta` fails with E0277.
+- **`graph/mod.rs`.** Add `mod client;` and `pub use client::{DeltaPage, GraphClient};` to the existing file. Keep its SPDX header and doc comment; do not replace the whole file.
+- **The other-hosts test must be able to fail.** Requests to `evil.example` never reach the mock, so asserting on the mock's `requests()` proves nothing. Start a second `MockGraph`: another port is another origin. Point the `nextLink` (and any `Location` the test uses) at it. Then assert that the call fails with `GraphError::Transport` and that the second mock received no request. Wherever a test claims a host got no bearer token, assert on what that host actually recorded.
+- **Throttling test.** `throttling_is_retried_then_gives_up` also asserts that the returned `GraphError::Throttled { retry_after }` equals `Duration::ZERO` and that the call took under one second. Otherwise the test passes even when `Retry-After` is ignored.
+- **No duplicated logic blocks.**
+  - One private helper decides the retry wait (`Retry-After`, the backoff, `max_retries`, the 60 s cap). `send` and `put_bytes` both use it.
+  - `post` and `patch` share one helper that takes the method.
+  - One `is_loopback(&Url)` helper serves both `https_or_loopback` and `preauthenticated`.
+  - `tests/mock_graph/mod.rs` exposes `pub fn certificate() -> &'static str` (the `OnceLock` PEM). `tests/graph.rs` and later test files reuse it instead of copying it.
+  - Keep the mock's `handle` in this order: the `fail_next` block, then the `/blob/` and `/upload/` branches, then `match (method, api)`. P3 adds code at those points.
+- **Jitter (spec §10).** When a response has no `Retry-After`, the exponential backoff adds random jitter (`rand` 0.8 is already a `pdms-core` dependency). It still honours the 60 s cap.
+- **SPDX first.** New test files start with the two SPDX comment lines, then the `#![allow(...)]` block. That is the R1 convention (see `crates/pdms-core/tests/usernames.rs`).
+- **No extra dev-dependency.** Skip the `bytes` dev-dependency; integration tests already see the regular dependencies.
+
+
 ---
 
 ### Task 4: `Core.graph` and `pdms gen-graph-cert`
@@ -1814,10 +1843,10 @@ git commit -m "core: Graph client on Core; pdms gen-graph-cert"
 
 ---
 
-### Task 5: Migration 0009 and the Department mapping list
+### Task 5: Migration 0010 and the Department mapping list
 
 **Files:**
-- Create: `migrations/0009_entra_sync.sql`
+- Create: `migrations/0010_entra_sync.sql`
 - Modify: `crates/pdms-core/src/model.rs` (add `UserSource` after `MembershipSource`)
 - Create: `crates/pdms-core/src/directory/entra_values.rs`
 - Modify: `crates/pdms-core/src/directory/mod.rs` (after `pub mod sync;` add `pub mod entra_values;`)
@@ -1827,7 +1856,7 @@ git commit -m "core: Graph client on Core; pdms gen-graph-cert"
 - Consumes: `Capability::ManageDirectory`, audit API.
 - Produces (index contract): DB `user_source` enum, `users.source`, `users.entra_department`, `users.entra_synced_at`, `department_entra_values`, `sync_cursors (name, delta_link, last_run, last_error, last_summary jsonb)`; `pdms_core::model::UserSource { Local, Entra }`; `pdms_core::directory::entra_values::{normalize(&str) -> String, list(&PgPool) -> CoreResult<Vec<EntraValue>>, lookup(&PgPool, Option<&str>) -> CoreResult<Option<Uuid>>, upsert(&PgPool, &Ctx, value: &str, department_id: Uuid) -> CoreResult<()>, remove(&PgPool, &Ctx, value: &str) -> CoreResult<()>, unmapped(&PgPool) -> CoreResult<Vec<UnmappedValue>>}`, `EntraValue { value: String, normalized: String, department_id: Uuid, department_name: String }`, `UnmappedValue { value: String, normalized: String, users: i64 }`.
 
-- [ ] **Step 1: Write the migration.** Create `migrations/0009_entra_sync.sql`:
+- [ ] **Step 1: Write the migration.** Create `migrations/0010_entra_sync.sql`:
 
 ```sql
 -- Entra ID user sync (spec 2026-10-14, §6; D-086): who manages each account,
@@ -1864,7 +1893,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON department_entra_values TO pdms_app;
 GRANT SELECT, INSERT, UPDATE ON sync_cursors TO pdms_app;
 ```
 
-Apply it to the dev database: `sqlx migrate run --source migrations` → `Applied 9/migrate entra sync`.
+Apply it to the dev database: `sqlx migrate run --source migrations` → `Applied 10/migrate entra sync`.
 
 - [ ] **Step 2: Write the failing tests.** Create `crates/pdms-core/tests/entra_sync.rs`:
 
@@ -2163,9 +2192,18 @@ Expected: PASS (1 unit test, 1 integration test).
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
-git add migrations/0009_entra_sync.sql crates/pdms-core/src/model.rs crates/pdms-core/src/directory crates/pdms-core/tests/entra_sync.rs .sqlx
-git commit -m "directory: Entra Department value mappings (migration 0009)"
+git add migrations/0010_entra_sync.sql crates/pdms-core/src/model.rs crates/pdms-core/src/directory crates/pdms-core/tests/entra_sync.rs .sqlx
+git commit -m "directory: Entra Department value mappings (migration 0010)"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Migration number.** The file is `migrations/0010_entra_sync.sql`, because R1's `0009_ui_redesign.sql` exists. In the same commit, update refinement #1 in `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`: `0009_entra_sync.sql` becomes `0010_entra_sync.sql` (P2), P3 becomes `0011_sharepoint_files.sql`, and P4 becomes `0012_sharepoint_access.sql`. Add the index to `git add`.
+- **Module order.** In `crates/pdms-core/src/directory/mod.rs`, put `pub mod entra_values;` between `mod admin;` and `pub mod sync;` (rustfmt's order).
+- **No `model::UserSource`.** Do not add it: nothing reads it, and the queries use SQL literals. The SQL type `user_source` stays. In the same commit, remove `model::UserSource` from the index's "Additions" list.
+- **DELETE grant.** The migration's `DELETE` grant on `department_entra_values` stays, because `remove()` needs it. Spec §6 listed only SELECT, INSERT and UPDATE. Record this in the index under "Changes recorded when P2 was written".
+- **SPDX first** in `crates/pdms-core/tests/entra_sync.rs` (see Task 3's correction).
+
 
 ---
 
@@ -3053,6 +3091,21 @@ git add crates/pdms-core/src/directory crates/pdms-core/src/auth/oidc.rs crates/
 git commit -m "directory: Entra user sync with delta, departures, and Department mapping"
 ```
 
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Manual memberships (idempotency).**
+  - An existing `manual` membership in the department a person's Entra value maps to satisfies the mapping.
+  - The sync then adds no `idp` row; any other `idp` rows are still removed.
+  - When nothing else changed, the run counts no update, writes no `user.idp_memberships_synced`, and leaves the department out of `changed_departments`. P4 reconciles on that set.
+  - Test it: give a person a manual membership in the department their value maps to, run the sync twice, and assert that the second run reports `updated == 0` and adds no audit rows.
+- **Counts and errors.**
+  - `unmapped` counts only accounts the run actually applied, not ones skipped because of an email conflict or because they are departed.
+  - `sync_cursors.last_error` is written only when a run **fails**. A successful run clears it, even when individual accounts had problems; those stay in `last_summary.errors`.
+- **Audit the source change.** When the update branch changes `users.source` from `local` to `entra`, `user.updated` includes `change("source", "local", "entra")`.
+- **Guests.** Skip only `userType == "Guest"`; a missing or null `userType` counts as a member, because Graph returns null for some older member accounts. Record this in the index under "Changes recorded when P2 was written": "guests are skipped by `userType = Guest`; a null `userType` counts as a member (spec §7.5 said `ne 'Member'`)".
+- **Module order.** `pub mod entra_sync;` goes next to `pub mod entra_values;` in `directory/mod.rs`, in rustfmt's order.
+
+
 ---
 
 ### Task 7: Daily schedule, worker jobs, and `pdms sync-directory`
@@ -3252,6 +3305,11 @@ cargo sqlx prepare --workspace -- --all-targets
 git add crates/pdms-core/src/directory/entra_sync.rs crates/pdms-core/src/maintenance.rs crates/pdms/src/main.rs crates/pdms-core/tests/entra_sync.rs .sqlx
 git commit -m "worker: nightly Entra sync; pdms sync-directory"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Test command.** Step 2's command is `cargo test -p pdms-core --test entra_sync -- daily job`. Cargo rejects a second filter that has no `--` before it.
+
 
 ---
 
@@ -3530,6 +3588,28 @@ cargo sqlx prepare --workspace -- --all-targets
 git add crates/pdms-core/src/auth/oidc.rs crates/pdms-core/tests/entra_sync.rs crates/pdms-web/tests/oidc.rs .sqlx
 git commit -m "auth: match SSO by object ID only; ask Entra on first sign-in when syncing"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Where the code is.** The function is `OidcProvider::complete` (`crates/pdms-core/src/auth/oidc.rs:121–239`), not `login`:
+  - the `self.resolve_user` call is at :162;
+  - `let ctx = …` is at :177;
+  - `if claims.groups_overage {` is at :188;
+  - `let _ = &ctx;` is at :193;
+  - `resolve_user` is at :302–393;
+  - `decode_jwt_payload` is at :406.
+- **Email collision with the sync on.**
+  - When `entra_sync.enabled` and `sync_one` returns `Ok(None)`, `resolve_identity` denies with `email_in_use` if an existing account not linked to this identity already has the token's email (case-insensitive). Otherwise it denies with `not_provisioned`.
+  - Keep `sync_one`'s signature, because the index contract and P4 depend on it.
+  - Add a sync-on test of the email collision. Review Focus #2 promises `email_in_use`.
+- **Names come from the sync.** `complete()` must not overwrite `display_name` from the token's `name` claim while `entra_sync.enabled` is true. Otherwise names flip back and forth and `user.updated` is audited every night.
+- **Text that still says "matched by email".** Rewrite every place that says SSO accounts are matched or linked by email:
+  - `crates/pdms-web/templates/admin/users.html:31`;
+  - the doc comment at `crates/pdms-core/src/directory/admin.rs:156`;
+  - `crates/pdms-web/templates/admin/idp.html:3`: "updated at each sign-in" is no longer true while the sync is on.
+  Add these files to `git add`.
+- **Startup warning.** Log a `tracing::warn!` once at startup (where `Core` is built) when `auth.oidc.enabled` is true, `auth.oidc.auto_provision` is false and `entra_sync.enabled` is false. Accounts are no longer linked by email, so in that setup a person who has never signed in through SSO cannot. Warn only; do not reject the configuration.
+
 
 ---
 
@@ -3821,6 +3901,49 @@ git add crates/pdms-web/src/routes/admin.rs crates/pdms-web/src/lib.rs crates/pd
 git commit -m "web: Administration → Entra ID sync page"
 ```
 
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **Routes.** Add the routes after the two `/idp` routes, now at `crates/pdms-web/src/lib.rs:103–104`, before the `route_layer` at :105.
+- **Admin tab.** The link goes in `base.html`'s admin tabs, after base.html:52 (`<li><a href="/admin/idp">Identity provider mappings</a></li>`), inside `{% if l.can_directory %}`. `partials/nav.html` needs no change.
+- **R1 markup.** `admin/entra.html` uses the R1 admin markup (exemplar: `templates/admin/branding.html`):
+  - `.panel` sections with `.panel-head`;
+  - tables inside `.table-wrap`;
+  - `.button` classes (`button primary`, `button`, `button small danger`);
+  - `<dl class="facts">`;
+  - a "not configured" notice as `<p class="flash flash-error" role="alert">` and the sync-off notice as `<p class="flash flash-info" role="status">`;
+  - errors as `<span class="status status-critical">`;
+  - forms as `.toolbar`, `.inline-form` and `.grid-form`.
+
+  Keep the strings the tests look for: "Microsoft Graph is not configured", "No sync has completed yet." and `Road &amp; Bridge`. Shape:
+
+```html
+{% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
+{% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
+<section class="panel" aria-labelledby="sync-h">
+  <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
+  <dl class="facts"><dt>Last run</dt><dd>{{ last_run }}</dd><dt>Result</dt><dd>{{ summary }}</dd>
+    {% if !last_error.is_empty() %}<dt>Last error</dt><dd><span class="status status-critical">{{ last_error }}</span></dd>{% endif %}</dl>
+  {% if !problems.is_empty() %}<h3>Needs attention</h3><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+  <div class="toolbar">
+    <form method="post" action="/admin/entra/sync"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button primary">Sync now</button></form>
+    <form method="post" action="/admin/entra/sync"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="full" value="true"><button type="submit" class="button">Full resync</button></form>
+  </div>
+</section>
+<section class="panel" aria-labelledby="map-h">
+  <h2 id="map-h">Department mapping</h2>
+  <div class="table-wrap"><table>… <td><form method="post" action="/admin/entra/values/remove" class="inline-form">…<button type="submit" class="button small danger">Remove</button></form></td> …</table></div>
+  <form method="post" action="/admin/entra/values" class="grid-form">… <span></span><button type="submit" class="button primary">Save mapping</button></form>
+</section>
+<section class="panel" aria-labelledby="unmapped-h">
+  <h2 id="unmapped-h">Values with no department</h2>
+  <p class="help">…</p>
+  <div class="table-wrap"><table>…</table></div>
+</section>
+```
+
+- **SPDX first** in `crates/pdms-web/tests/entra.rs` (see Task 3's correction).
+
+
 ---
 
 ### Task 10: Documentation, example configuration, and final verification
@@ -3828,7 +3951,7 @@ git commit -m "web: Administration → Entra ID sync page"
 **Files:**
 - Modify: `config/pdms.example.toml` (after the `[graph_calendar]` block)
 - Modify: `docs/ADMIN_GUIDE.md` (new subsection after "### Mapping Entra groups", line ~164; and §13 reference if it lists sections)
-- Modify: `docs/DECISIONS.md` (append D-090 before "## Open questions")
+- Modify: `docs/DECISIONS.md` (append D-096 before "## Open questions")
 - Modify: `docs/ROADMAP.md` §0.3 (status)
 
 **Interfaces:**
@@ -3907,7 +4030,7 @@ is refused until you rename or remove the other account.
 - [ ] **Step 3: Decision record.** In `docs/DECISIONS.md`, before `## Open questions`, add:
 
 ```markdown
-### D-090 Graph app-only authentication with a certificate (PS256) — Accepted
+### D-096 Graph app-only authentication with a certificate (PS256) — Accepted
 PADM signs a client assertion with its own certificate (header `alg` PS256,
 `x5t#S256` SHA-256 thumbprint, five-to-ten-minute lifetime), as the
 Microsoft identity platform documents; there is no client secret to leak or
@@ -3945,3 +4068,33 @@ Expected: `fmt` prints nothing; `clippy` finishes without warnings; `prepare --c
 git add config/pdms.example.toml docs/ADMIN_GUIDE.md docs/DECISIONS.md docs/ROADMAP.md
 git commit -m "docs: Entra ID user sync and Graph certificate setup"
 ```
+
+#### Pre-flight corrections (2026-10-21; these override the task text above)
+
+- **ADMIN_GUIDE.**
+  - Put the new Entra section after `docs/ADMIN_GUIDE.md:266`, at the end of the groups-mapping section, before "## 4. Documents" at :268.
+  - Rewrite §2 (:66–99) so it no longer says SSO links a pre-created account by email (:89–92).
+  - Say that the groups-claim step (:69) is not needed while the sync is on.
+  - State the consequence: with SSO on, `auto_provision = false` and the sync off, only people already linked to their Entra account can sign in.
+  - Fix :261–266 ("At every sign-in, PDMS adds and removes…") for the sync-on case.
+- **DECISIONS.**
+  - Append **D-096** after D-095, before "## Open questions" at `docs/DECISIONS.md:765`; D-090 to D-095 are taken.
+  - Change D-086's status, "(design, not built)" at :654, to say it was built in P2.
+- **ROADMAP.**
+  - In `docs/ROADMAP.md` §0.3 the rows are now 1a, 1b, 1, 2, 3, 4, 5a, 5b. Mark row 2 (Entra user sync) **Done** and add any P2 note next to it rather than as a new "2a" row.
+  - Update the date at :14.
+  - Update the Known gaps "Identity" row (:244, which says departed staff are not disabled automatically) and §5 item 3 (:265).
+- **Plan index.**
+  - Change the "Produced by P2" CLI row: `gen-graph-cert` writes the PEM bundle to `--out` and the public certificate to `<out>.crt`, and prints that path and the thumbprint.
+  - Renumber the remaining migration references for P3 and P4 (index :152 "Migration 0011" becomes 0012).
+  - Add a note that P4's planned decisions D-091 to D-097 must be renumbered from D-097 when P4 is executed.
+  - Leave the P3 and P4 plan bodies alone; their own pre-flight will renumber them.
+  - Make sure "Changes recorded when P2 was written" lists every pre-flight deviation:
+    - DELETE granted on `department_entra_values`;
+    - a null `userType` counts as a member;
+    - `model::UserSource` dropped;
+    - a manual membership satisfies the mapping;
+    - the sync requires `subject_claim = "oid"`;
+    - the `email_in_use` check when the sync is on;
+    - names are not taken from the token while the sync is on.
+
