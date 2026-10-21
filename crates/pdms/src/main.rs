@@ -387,6 +387,13 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
             "auth.local.require_totp is off: local sign-in is password-only (demo use only)"
         );
     }
+    if cfg.auth.oidc.enabled && !cfg.auth.oidc.auto_provision && !cfg.entra_sync.enabled {
+        tracing::warn!(
+            "auth.oidc.auto_provision and entra_sync are both off: single sign-on never links \
+             accounts by email, so only people already linked to their single sign-on account \
+             can sign in"
+        );
+    }
 
     let oidc = if cfg.auth.oidc.enabled {
         match OidcProvider::discover(&cfg.auth.oidc, &cfg.server.public_url).await {

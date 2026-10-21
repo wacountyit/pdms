@@ -159,7 +159,15 @@ impl OidcProvider {
             }
         };
 
-        let user = match self.resolve_user(core, &claims).await? {
+        let user = match resolve_identity(
+            core,
+            &claims.issuer,
+            &claims.subject,
+            claims.email.as_deref(),
+            claims.name.as_deref(),
+        )
+        .await?
+        {
             Ok(u) => u,
             Err(reason) => {
                 let mut e = fail(reason, String::new())
@@ -174,7 +182,6 @@ impl OidcProvider {
         };
 
         let mut tx = core.db.begin().await?;
-        let ctx = crate::context::Ctx::system("idp-sync");
         let mut actor = Actor {
             user_id: Some(user.0),
             display: Some(user.1.clone()),
@@ -185,12 +192,15 @@ impl OidcProvider {
             request_id: client_info.request_id.clone(),
         };
         let mut events = Vec::new();
-        if claims.groups_overage {
+        let syncing = core.config.entra_sync.enabled;
+        if syncing {
+            // Departments come from the Entra Department field through the
+            // directory sync (D-086), never from token group claims.
+        } else if claims.groups_overage {
             tracing::warn!(user_id = %user.0, "IdP group overage: groups claim omitted; memberships left unchanged");
         } else if let Some(change) =
             sync::reconcile_idp_memberships(&mut tx, user.0, &claims.groups).await?
         {
-            let _ = &ctx;
             events.push(
                 AuditEvent::new(
                     Category::Permission,
@@ -208,10 +218,12 @@ impl OidcProvider {
                 .change("roles", change.roles_before, change.roles_after),
             );
         }
+        // While syncing, the name is Entra's (set by the sync), not the token's.
+        let name = claims.name.clone().filter(|_| !syncing);
         sqlx::query!(
             "UPDATE users SET last_login_at = now(), display_name = $2, updated_at = now() WHERE id = $1",
             user.0,
-            claims.name.clone().unwrap_or_else(|| user.1.clone()),
+            name.unwrap_or_else(|| user.1.clone()),
         )
         .execute(&mut *tx)
         .await?;
@@ -298,99 +310,6 @@ impl OidcProvider {
             groups_overage,
         })
     }
-
-    /// Find, link, or provision the local user. `Ok(Err(reason))` means "deny".
-    async fn resolve_user(
-        &self,
-        core: &Core,
-        claims: &VerifiedClaims,
-    ) -> CoreResult<Result<(Uuid, String), &'static str>> {
-        let existing = sqlx::query!(
-            r#"SELECT id, display_name, status AS "status: UserStatus"
-                 FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2"#,
-            claims.issuer,
-            claims.subject,
-        )
-        .fetch_optional(&core.db)
-        .await?;
-        if let Some(u) = existing {
-            return Ok(if u.status == UserStatus::Active {
-                Ok((u.id, u.display_name))
-            } else {
-                Err("inactive")
-            });
-        }
-
-        let Some(email) = &claims.email else {
-            return Ok(Err("no_email_claim"));
-        };
-        let display = claims.name.clone().unwrap_or_else(|| email.clone());
-
-        // An administrator may have pre-provisioned the user by email.
-        let mut tx = core.db.begin().await?;
-        let pre = sqlx::query!(
-            r#"SELECT id, display_name, status AS "status: UserStatus", oidc_subject
-                 FROM users WHERE lower(email) = lower($1) FOR UPDATE"#,
-            email
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        let system = Actor::system("oidc-login");
-        let result = match pre {
-            Some(u) if u.oidc_subject.is_some() => Err("email_bound_to_other_identity"),
-            Some(u) if u.status != UserStatus::Active => Err("inactive"),
-            Some(u) => {
-                sqlx::query!(
-                    "UPDATE users SET oidc_issuer = $2, oidc_subject = $3, updated_at = now() WHERE id = $1",
-                    u.id,
-                    claims.issuer,
-                    claims.subject,
-                )
-                .execute(&mut *tx)
-                .await?;
-                pdms_audit::append(
-                    &mut tx,
-                    vec![
-                        AuditEvent::new(Category::Admin, "user.identity_linked", system, "user")
-                            .object(u.id, Some(&u.display_name))
-                            .change("oidc_issuer", None::<String>, claims.issuer.clone())
-                            .change("oidc_subject", None::<String>, claims.subject.clone()),
-                    ],
-                )
-                .await?;
-                Ok((u.id, u.display_name))
-            }
-            None if self.config.auto_provision => {
-                let id = Uuid::now_v7();
-                sqlx::query!(
-                    "INSERT INTO users (id, display_name, email, oidc_issuer, oidc_subject)
-                     VALUES ($1, $2, $3, $4, $5)",
-                    id,
-                    display,
-                    email,
-                    claims.issuer,
-                    claims.subject,
-                )
-                .execute(&mut *tx)
-                .await?;
-                pdms_audit::append(
-                    &mut tx,
-                    vec![
-                        AuditEvent::new(Category::Admin, "user.provisioned", system, "user")
-                            .object(id, Some(&display))
-                            .change("email", None::<String>, email.clone())
-                            .change("oidc_subject", None::<String>, claims.subject.clone())
-                            .context("source", "oidc_first_login"),
-                    ],
-                )
-                .await?;
-                Ok((id, display))
-            }
-            None => Err("not_provisioned"),
-        };
-        tx.commit().await?;
-        Ok(result)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -412,6 +331,143 @@ fn decode_jwt_payload(jwt: &str) -> Result<serde_json::Value, String> {
         .decode(payload.trim_end_matches('='))
         .map_err(|e| format!("JWT payload: {e}"))?;
     serde_json::from_slice(&bytes).map_err(|e| format!("JWT payload: {e}"))
+}
+
+/// Find or provision the account for a verified sign-in. `Ok(Err(reason))`
+/// means "deny". Accounts are matched by issuer and subject (Entra object ID)
+/// only, never by email (D-086).
+pub async fn resolve_identity(
+    core: &Core,
+    issuer: &str,
+    subject: &str,
+    email: Option<&str>,
+    name: Option<&str>,
+) -> CoreResult<Result<(Uuid, String), &'static str>> {
+    let issuer = normalize_issuer(issuer);
+    if let Some(found) = find_identity(core, issuer, subject).await? {
+        return Ok(found);
+    }
+    if core.config.entra_sync.enabled && core.graph.is_some() {
+        // Entra decides: enabled member or not, and the department.
+        return Ok(
+            match crate::directory::entra_sync::sync_one(core, subject).await {
+                Ok(Some(_)) => find_identity(core, issuer, subject)
+                    .await?
+                    .unwrap_or(Err("not_provisioned")),
+                Ok(None) => {
+                    // A sync running at the same moment may have created the
+                    // account just now (its insert won).
+                    if let Some(found) = find_identity(core, issuer, subject).await? {
+                        found
+                    } else if email_taken(core, issuer, subject, email).await? {
+                        Err("email_in_use")
+                    } else {
+                        Err("not_provisioned")
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Entra lookup at first sign-in failed");
+                    Err("directory_unavailable")
+                }
+            },
+        );
+    }
+    if !core.config.auth.oidc.auto_provision {
+        return Ok(Err("not_provisioned"));
+    }
+    let Some(email) = email else {
+        return Ok(Err("no_email_claim"));
+    };
+    let display: String = name.unwrap_or(email).chars().take(200).collect();
+    let id = Uuid::now_v7();
+    let mut tx = core.db.begin().await?;
+    let inserted = sqlx::query!(
+        "INSERT INTO users (id, display_name, email, oidc_issuer, oidc_subject)
+         VALUES ($1, $2, $3, $4, $5)",
+        id,
+        display,
+        email,
+        issuer,
+        subject,
+    )
+    .execute(&mut *tx)
+    .await;
+    if let Err(e) = inserted {
+        return match CoreError::conflict_on_unique(e, "") {
+            CoreError::Conflict(_) => {
+                drop(tx);
+                // The same person's first sign-in in another tab may have won.
+                Ok(find_identity(core, issuer, subject)
+                    .await?
+                    .unwrap_or(Err("email_in_use")))
+            }
+            other => Err(other),
+        };
+    }
+    pdms_audit::append(
+        &mut tx,
+        vec![
+            AuditEvent::new(
+                Category::Admin,
+                "user.provisioned",
+                Actor::system("oidc-login"),
+                "user",
+            )
+            .object(id, Some(&display))
+            .change("email", None::<String>, email.to_owned())
+            .change("oidc_subject", None::<String>, subject.to_owned())
+            .context("source", "oidc_first_login"),
+        ],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Ok((id, display)))
+}
+
+async fn find_identity(
+    core: &Core,
+    issuer: &str,
+    subject: &str,
+) -> CoreResult<Option<Result<(Uuid, String), &'static str>>> {
+    let u = sqlx::query!(
+        r#"SELECT id, display_name, status AS "status: UserStatus"
+             FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2"#,
+        issuer,
+        subject,
+    )
+    .fetch_optional(&core.db)
+    .await?;
+    Ok(u.map(|u| {
+        if u.status == UserStatus::Active {
+            Ok((u.id, u.display_name))
+        } else {
+            Err("inactive")
+        }
+    }))
+}
+
+/// Whether an account other than this identity already has `email`.
+async fn email_taken(
+    core: &Core,
+    issuer: &str,
+    subject: &str,
+    email: Option<&str>,
+) -> CoreResult<bool> {
+    let Some(email) = email else {
+        return Ok(false);
+    };
+    Ok(sqlx::query_scalar!(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM users
+                WHERE lower(email) = lower($1)
+                  AND (oidc_issuer IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)
+           ) AS "taken!""#,
+        email,
+        issuer,
+        subject,
+    )
+    .fetch_one(&core.db)
+    .await?)
 }
 
 /// Only allow local, absolute-path redirects (prevents open redirects).

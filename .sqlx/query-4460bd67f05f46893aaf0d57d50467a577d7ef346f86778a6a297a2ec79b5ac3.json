@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, display_name, status AS \"status: UserStatus\"\n                 FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2",
+  "query": "SELECT id, display_name, status AS \"status: UserStatus\"\n             FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "3e346fe0520cc766b1c36957bb7f6fee9a35b2e45d5ccb0fb79942470f3e19a4"
+  "hash": "4460bd67f05f46893aaf0d57d50467a577d7ef346f86778a6a297a2ec79b5ac3"
 }

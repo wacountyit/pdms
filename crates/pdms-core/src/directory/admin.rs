@@ -153,8 +153,9 @@ pub async fn update_department(
 // Users
 // ---------------------------------------------------------------------------
 
-/// Pre-provision a user. They sign in with OIDC (matched by email) unless local
-/// credentials are set.
+/// Create an account by hand (for example a local administrator). Single
+/// sign-on never links to it: SSO accounts are matched by issuer and Entra
+/// object ID only, never by email (D-086).
 pub async fn create_user(
     db: &PgPool,
     ctx: &Ctx,

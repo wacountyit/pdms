@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n               SELECT 1 FROM users\n                WHERE lower(email) = lower($1)\n                  AND (oidc_issuer IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)\n           ) AS \"taken!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4227930c2bb54a3fee340f9e4dfdf86793fec42576887cc521d0cb72b1a23c92"
+}

@@ -935,3 +935,191 @@ async fn the_job_skips_quietly_while_another_run_holds_the_lock() {
         .unwrap();
     held.rollback().await.unwrap();
 }
+
+#[tokio::test]
+async fn first_sign_in_asks_entra_when_the_sync_is_on() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    entra_values::upsert(&core.db, &system(), "Road & Bridge", rb)
+        .await
+        .unwrap();
+    m.add_user(member(
+        OID_A,
+        "Alice",
+        "alice@county.example",
+        Some("Road & Bridge"),
+    ));
+    let mut guest = member(OID_G, "Gwen", "gwen@partner.example", None);
+    guest["userType"] = json!("Guest");
+    m.add_user(guest);
+
+    let (id, name) = resolve_identity(
+        &core,
+        &format!("{ISSUER}/"),
+        OID_A,
+        Some("x@x.org"),
+        Some("Token Name"),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(name, "Alice", "Entra, not the token, names the person");
+    assert_eq!(
+        idp_departments(&core, id).await,
+        vec![rb],
+        "department is set before the first page"
+    );
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_A, None, None)
+            .await
+            .unwrap(),
+        Ok((id, "Alice".to_owned()))
+    );
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_G, Some("gwen@partner.example"), None)
+            .await
+            .unwrap(),
+        Err("not_provisioned")
+    );
+    m.fail_next(500, 0);
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_E, Some("e@county.example"), None)
+            .await
+            .unwrap(),
+        Err("directory_unavailable")
+    );
+}
+
+#[tokio::test]
+async fn first_sign_in_without_the_sync_never_links_by_email() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let (core, _db) = core().await;
+    let local = directory::create_user(
+        &core.db,
+        &system(),
+        "Break Glass",
+        "admin@county.example",
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        resolve_identity(
+            &core,
+            ISSUER,
+            OID_A,
+            Some("Admin@County.example"),
+            Some("Mallory")
+        )
+        .await
+        .unwrap(),
+        Err("email_in_use")
+    );
+    let subject: Option<String> =
+        sqlx::query_scalar("SELECT oidc_subject FROM users WHERE id = $1")
+            .bind(local)
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert_eq!(subject, None);
+    let (id, _) = resolve_identity(
+        &core,
+        ISSUER,
+        OID_B,
+        Some("new@county.example"),
+        Some("New Person"),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(id_of(&core, OID_B).await, Some(id));
+}
+
+#[tokio::test]
+async fn first_sign_in_with_the_sync_on_never_takes_an_existing_email() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let local = directory::create_user(
+        &core.db,
+        &system(),
+        "Break Glass",
+        "alice@county.example",
+        None,
+    )
+    .await
+    .unwrap();
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    assert_eq!(
+        resolve_identity(
+            &core,
+            ISSUER,
+            OID_A,
+            Some("Alice@County.example"),
+            Some("Alice")
+        )
+        .await
+        .unwrap(),
+        Err("email_in_use")
+    );
+    let subject: Option<String> =
+        sqlx::query_scalar("SELECT oidc_subject FROM users WHERE id = $1")
+            .bind(local)
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert_eq!(subject, None, "never linked by email");
+    assert_eq!(id_of(&core, OID_A).await, None);
+}
+
+/// A first sign-in while a sync creates the same person: the sign-in's
+/// insert finds the sync's row (DO NOTHING), and the person still gets in.
+#[tokio::test]
+async fn first_sign_in_that_races_a_sync_still_succeeds() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    // The sync's insert, not yet committed when the sign-in looks for the person.
+    let mut sync = core.db.begin().await.unwrap();
+    let id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO users (id, display_name, email, oidc_issuer, oidc_subject, source, entra_synced_at)
+         VALUES ($1, 'Alice', 'alice@county.example', $2, $3, 'entra', now())",
+    )
+    .bind(id)
+    .bind(ISSUER)
+    .bind(OID_A)
+    .execute(&mut *sync)
+    .await
+    .unwrap();
+    let signing_in = tokio::spawn({
+        let core = core.clone();
+        async move { resolve_identity(&core, ISSUER, OID_A, Some("alice@county.example"), None).await }
+    });
+    // Let the sync commit once the sign-in's insert is waiting on its row.
+    let mut waiting = false;
+    for _ in 0..500 {
+        waiting = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                             WHERE datname = current_database() AND wait_event_type = 'Lock')",
+        )
+        .fetch_one(&core.db)
+        .await
+        .unwrap();
+        if waiting {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(waiting, "the sign-in never reached its insert");
+    sync.commit().await.unwrap();
+    assert_eq!(
+        signing_in.await.unwrap().unwrap(),
+        Ok((id, "Alice".to_owned()))
+    );
+}
