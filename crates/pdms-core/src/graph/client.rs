@@ -44,6 +44,8 @@ struct Inner {
     scope: String,
     api: Url,
     max_retries: u32,
+    /// Deadline for a whole request and response (not for streamed downloads).
+    timeout: Duration,
     token: Mutex<Option<(String, Instant)>>,
 }
 
@@ -85,8 +87,12 @@ impl GraphClient {
             cfg.authority_url.trim_end_matches('/'),
             cfg.tenant_id
         );
+        let timeout = Duration::from_secs(cfg.timeout_seconds.max(5));
+        // No total timeout on the client: a download streams for as long as
+        // it keeps moving. Each request that is not a stream sets its own.
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(cfg.timeout_seconds.max(5)))
+            .connect_timeout(timeout)
+            .read_timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("PADM/", env!("CARGO_PKG_VERSION")))
             .build()
@@ -100,6 +106,7 @@ impl GraphClient {
                 scope,
                 api,
                 max_retries: cfg.max_retries,
+                timeout,
                 token: Mutex::new(None),
             }),
         })
@@ -191,6 +198,7 @@ impl GraphClient {
                     format!("bytes {start}-{end}/{total}"),
                 )
                 .body(bytes.clone())
+                .timeout(self.inner.timeout)
                 .send()
                 .await
                 .map_err(transport)?;
@@ -215,7 +223,8 @@ impl GraphClient {
     /// Stream a file. Graph answers `/content` with a 302 to a pre-authenticated
     /// URL, which is fetched without the token.
     pub async fn download(&self, path: &str) -> Result<pdms_storage::ByteStream, GraphError> {
-        let first = self.send(Method::GET, path, None).await?;
+        // Neither leg has a total deadline: the body may stream for longer.
+        let first = self.send_with(Method::GET, path, None, None).await?;
         let resp = if first.status().is_redirection() {
             let location = first
                 .headers()
@@ -275,6 +284,7 @@ impl GraphClient {
                 ),
                 ("client_assertion", assertion.as_str()),
             ])
+            .timeout(self.inner.timeout)
             .send()
             .await
             .map_err(|e| GraphError::Transport(format!("token request: {e}")))?;
@@ -359,11 +369,24 @@ impl GraphClient {
         Ok(url)
     }
 
+    /// An authenticated request whose whole response must arrive in time.
     async fn send(
         &self,
         method: Method,
         path: &str,
         body: Option<&Value>,
+    ) -> Result<reqwest::Response, GraphError> {
+        self.send_with(method, path, body, Some(self.inner.timeout))
+            .await
+    }
+
+    /// An authenticated request, with `deadline` for the whole response if given.
+    async fn send_with(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        deadline: Option<Duration>,
     ) -> Result<reqwest::Response, GraphError> {
         let url = self.url(path)?;
         let mut attempt: u32 = 0;
@@ -377,6 +400,9 @@ impl GraphClient {
                 .bearer_auth(&token);
             if let Some(b) = body {
                 req = req.json(b);
+            }
+            if let Some(d) = deadline {
+                req = req.timeout(d);
             }
             let resp = req
                 .send()

@@ -249,11 +249,16 @@ async fn upload_chunks_are_sent_without_the_token() {
 #[tokio::test]
 async fn failed_preauthenticated_requests_do_not_echo_the_url() {
     let (_m, g) = client().await;
-    let closed = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
-    let url = format!("http://{closed}/upload/a?tempauth=secret");
+    // A host that hangs up on every connection (kept open, so no other test
+    // can take its port).
+    let hang_up = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = hang_up.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((conn, _)) = hang_up.accept().await {
+            drop(conn);
+        }
+    });
+    let url = format!("http://{addr}/upload/a?tempauth=secret");
     let e = g
         .put_bytes(&url, bytes::Bytes::from_static(b"x"), (0, 0, 1))
         .await
