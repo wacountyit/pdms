@@ -90,7 +90,7 @@ enum Command {
     GenGraphCert {
         #[arg(long)]
         out: PathBuf,
-        /// Validity in days (1 to 3650).
+        /// Validity in days (30 to 1095).
         #[arg(long, default_value_t = 730)]
         days: u32,
         #[arg(long, default_value = "PADM Service")]
@@ -441,9 +441,8 @@ fn gen_graph_cert(out: &std::path::Path, days: u32, name: &str) -> ExitCode {
 
 fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Result<()> {
     use std::io::Write;
-    let max = pdms_core::graph::cert::MAX_VALID_DAYS;
-    if !(1..=max).contains(&days) {
-        bail!("--days must be 1 to {max}");
+    if !(30..=1095).contains(&days) {
+        bail!("--days must be 30–1095");
     }
     let g = pdms_core::graph::cert::generate(name, days)?;
     let mut opts = std::fs::OpenOptions::new();
