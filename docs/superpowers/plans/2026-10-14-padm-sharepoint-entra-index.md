@@ -94,6 +94,7 @@ one, they update this table in the same commit.
 - **Error mapping:** `GraphError::Conflict` maps to `CoreError::Conflict`; every other Graph error maps to `CoreError::Internal`, so a Graph "not found" is never shown to people as a 404.
 - **Grants:** migration 0010 also grants `DELETE` on `department_entra_values` (spec §6 listed SELECT, INSERT, UPDATE), because removing a mapping needs it.
 - **Departures:** audited as the existing `user.status_changed`, which `set_user_status` writes. There is no `directory.user_departed` (spec §11 adjusted).
+- **Guests:** guests are skipped by `userType = Guest`; a null `userType` counts as a member (spec §7.5 said `ne 'Member'`).
 - **Additions:**
   - `GraphConfig.timeout_seconds` and `max_retries`;
   - `SyncReport.errors: Vec<String>`;

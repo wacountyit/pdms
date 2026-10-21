@@ -423,6 +423,11 @@ pub fn safe_return_to(path: &str) -> String {
     if ok { path.to_owned() } else { "/".to_owned() }
 }
 
+/// Issuer URLs are compared and stored without surrounding spaces or a trailing `/`.
+pub fn normalize_issuer(issuer: &str) -> &str {
+    issuer.trim().trim_end_matches('/')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
