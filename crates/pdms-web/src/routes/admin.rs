@@ -810,6 +810,8 @@ pub async fn delete_mapping(
 struct EntraPage {
     l: Layout,
     configured: bool,
+    /// The Graph certificate's `x5t#S256` thumbprint, when configured.
+    thumbprint: Option<String>,
     enabled: bool,
     attribute: String,
     last_run: String,
@@ -830,8 +832,10 @@ pub async fn entra(
     let status = entra_sync::status(&core.db).await?;
     let (summary, problems) = match &status.last_summary {
         Some(r) => (
+            // `unmapped` counts only the people that run read (a delta reads
+            // changed accounts); the table below lists everyone.
             format!(
-                "{} created, {} updated, {} departed; {} without a mapped department",
+                "{} created, {} updated, {} departed; of the people it read, {} had no mapped department",
                 r.created, r.updated, r.departed, r.unmapped
             ),
             r.errors.clone(),
@@ -846,6 +850,7 @@ pub async fn entra(
     let page = EntraPage {
         l: Layout::new(&state, &user, flash, "Entra ID sync", "admin"),
         configured: core.graph.is_some(),
+        thumbprint: core.graph.as_ref().map(|g| g.thumbprint().to_owned()),
         enabled: core.config.entra_sync.enabled,
         attribute: core.config.entra_sync.attribute.clone(),
         last_run: fmt_time_opt(state.tz, status.last_run),

@@ -82,7 +82,8 @@ enum Command {
     /// also does this every 15 minutes; emails are sent by the worker.
     RunScheduler,
     /// Read people and departments from Entra ID now (the worker does this
-    /// nightly when [entra_sync] is enabled). --full ignores the saved cursor.
+    /// nightly). Refused unless [entra_sync] enabled = true. --full ignores
+    /// the saved cursor.
     SyncDirectory {
         #[arg(long)]
         full: bool,
@@ -91,8 +92,9 @@ enum Command {
     GenSecret,
     /// Create the certificate for the Microsoft Graph app registration
     /// ("PADM Service"). Writes certificate + private key to OUT (mode 0600)
-    /// and the public certificate to OUT with the extension .crt, which you
-    /// upload in Entra ID. Needs no configuration.
+    /// and the public certificate to OUT with ".crt" appended (graph.pem
+    /// gives graph.pem.crt), which you upload in Entra ID. Needs no
+    /// configuration.
     GenGraphCert {
         #[arg(long)]
         out: PathBuf,

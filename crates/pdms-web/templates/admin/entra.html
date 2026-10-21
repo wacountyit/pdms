@@ -2,7 +2,7 @@
 {% block content %}
 {% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
 {% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
-<p>People and their departments come from Microsoft Entra ID. Each night PADM reads every enabled member account: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below.</p>
+<p>People and their departments come from Microsoft Entra ID. Each night PADM picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
 
 <section class="panel" aria-labelledby="sync-h">
   <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
@@ -10,6 +10,7 @@
     <dt>Last run</dt><dd>{{ last_run }}</dd>
     <dt>Result</dt><dd>{{ summary }}</dd>
     {% if !last_error.is_empty() %}<dt>Last error</dt><dd><span class="status status-critical">{{ last_error }}</span></dd>{% endif %}
+    {% if let Some(t) = thumbprint %}<dt>Certificate thumbprint</dt><dd><code>{{ t }}</code></dd>{% endif %}
   </dl>
   {% if !problems.is_empty() %}
   <h3>Needs attention</h3>
