@@ -8,6 +8,7 @@
 )]
 //! The Microsoft Graph client against an in-process mock Graph.
 
+mod common;
 mod mock_graph;
 
 use std::time::{Duration, Instant};
@@ -16,6 +17,8 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::StreamExt;
 use mock_graph::*;
+use pdms_core::Core;
+use pdms_core::config::Secret;
 use pdms_core::graph::{GraphClient, GraphError};
 use serde_json::{Value, json};
 
@@ -275,4 +278,29 @@ async fn post_patch_and_delete_send_json() {
     let v: Value = g.patch("/test/echo", &json!({ "b": 2 })).await.unwrap();
     assert_eq!(v["b"], 2);
     g.delete("/test/item").await.unwrap();
+}
+
+#[tokio::test]
+async fn core_has_a_graph_client_only_when_configured() {
+    let (core, _db) = common::core().await;
+    assert!(core.graph.is_none());
+    let m = MockGraph::start().await;
+    let mut cfg = (*core.config).clone();
+    cfg.graph = m.config(certificate());
+    let configured = Core::new(core.db.clone(), cfg.clone()).unwrap();
+    assert!(configured.graph.is_some());
+    cfg.graph.certificate =
+        Secret::new("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n");
+    let err = Core::new(core.db.clone(), cfg).unwrap_err().to_string();
+    assert!(err.contains("PRIVATE KEY"), "fails at startup: {err}");
+}
+
+#[test]
+fn certificate_lifetime_outside_1_to_3650_days_is_an_error() {
+    for days in [0, 3651, u32::MAX] {
+        assert!(
+            pdms_core::graph::cert::generate("PADM test", days).is_err(),
+            "{days} days"
+        );
+    }
 }

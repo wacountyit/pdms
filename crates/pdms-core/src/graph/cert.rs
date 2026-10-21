@@ -128,9 +128,17 @@ pub struct GeneratedCertificate {
     pub not_after: chrono::DateTime<chrono::Utc>,
 }
 
+/// Longest certificate lifetime `generate` accepts (about ten years).
+pub const MAX_VALID_DAYS: u32 = 3650;
+
 /// Generate an RSA-2048 key and a self-signed certificate valid for `valid_days`.
 pub fn generate(common_name: &str, valid_days: u32) -> Result<GeneratedCertificate, GraphError> {
     use rsa::pkcs8::{EncodePrivateKey, LineEnding};
+    if !(1..=MAX_VALID_DAYS).contains(&valid_days) {
+        return Err(GraphError::Auth(format!(
+            "certificate lifetime must be 1 to {MAX_VALID_DAYS} days"
+        )));
+    }
     let fail = |what: &str, e: &dyn std::fmt::Display| GraphError::Auth(format!("{what}: {e}"));
     let key = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048)
         .map_err(|e| fail("generating the key", &e))?;

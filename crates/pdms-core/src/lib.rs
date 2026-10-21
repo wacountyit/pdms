@@ -65,6 +65,8 @@ pub struct Core {
     pub signatures: Arc<dyn signatures::SignatureProvider>,
     /// OCR for scanned files (`None` unless an OCR sidecar is configured).
     pub ocr: Option<Arc<dyn ocr::OcrProvider>>,
+    /// Microsoft Graph as PADM itself (`None` unless `[graph]` is configured).
+    pub graph: Option<graph::GraphClient>,
 }
 
 impl std::fmt::Debug for Core {
@@ -88,8 +90,17 @@ impl Core {
             });
         let mailer = notifications::mailer::from_config(&config.email)
             .map_err(|e| CoreError::validation(format!("email: {e}")))?;
+        let graph = if config.graph.is_configured() {
+            Some(
+                graph::GraphClient::new(&config.graph)
+                    .map_err(|e| CoreError::validation(format!("graph: {e}")))?,
+            )
+        } else {
+            None
+        };
         let allow_self_approval = config.workflow.allow_self_approval;
         Ok(Core {
+            graph,
             mailer,
             signatures: Arc::new(signatures::ManualSignatures),
             ocr: ocr::from_config(&config.ocr),

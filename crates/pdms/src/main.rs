@@ -83,6 +83,19 @@ enum Command {
     RunScheduler,
     /// Print a new random master secret for PDMS_SECRET_KEY.
     GenSecret,
+    /// Create the certificate for the Microsoft Graph app registration
+    /// ("PADM Service"). Writes certificate + private key to OUT (mode 0600)
+    /// and the public certificate to OUT with the extension .crt, which you
+    /// upload in Entra ID. Needs no configuration.
+    GenGraphCert {
+        #[arg(long)]
+        out: PathBuf,
+        /// Validity in days (1 to 3650).
+        #[arg(long, default_value_t = 730)]
+        days: u32,
+        #[arg(long, default_value = "PADM Service")]
+        name: String,
+    },
     /// Validate configuration and print it with secrets redacted.
     CheckConfig,
     /// Exit 0 if the local server answers /healthz (for container health checks).
@@ -115,6 +128,11 @@ async fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Command::Healthcheck { addr } => return healthcheck(addr).await,
+        Command::GenGraphCert {
+            ref out,
+            days,
+            ref name,
+        } => return gen_graph_cert(out, days, name),
         _ => {}
     }
     let config = match Config::load(cli.config.as_deref()) {
@@ -137,7 +155,7 @@ async fn main() -> ExitCode {
 
 async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
     match command {
-        Command::GenSecret | Command::Healthcheck { .. } => {}
+        Command::GenSecret | Command::Healthcheck { .. } | Command::GenGraphCert { .. } => {}
         Command::CheckConfig => {
             config.master_key().context("secret_key")?;
             println!("{config:#?}");
@@ -409,6 +427,49 @@ async fn shutdown_signal(tx: watch::Sender<bool>) {
     }
     tracing::info!("shutdown requested");
     let _ = tx.send(true);
+}
+
+fn gen_graph_cert(out: &std::path::Path, days: u32, name: &str) -> ExitCode {
+    match write_graph_cert(out, days, name) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let max = pdms_core::graph::cert::MAX_VALID_DAYS;
+    if !(1..=max).contains(&days) {
+        bail!("--days must be 1 to {max}");
+    }
+    let g = pdms_core::graph::cert::generate(name, days)?;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    opts.open(out)
+        .with_context(|| format!("creating {} (it must not exist yet)", out.display()))?
+        .write_all(g.pem.as_bytes())?;
+    let public = out.with_extension("crt");
+    std::fs::write(&public, &g.certificate_pem)
+        .with_context(|| format!("writing {}", public.display()))?;
+    println!(
+        "Certificate and private key: {} (secret: give it to PADM as PDMS_GRAPH__CERTIFICATE_FILE)",
+        out.display()
+    );
+    println!(
+        "Public certificate for Entra ID (App registrations > PADM Service > Certificates & secrets > Upload): {}",
+        public.display()
+    );
+    println!("SHA-256 thumbprint (x5t#S256): {}", g.thumbprint);
+    println!("Expires: {}", g.not_after.format("%Y-%m-%d"));
+    Ok(())
 }
 
 fn read_password(env_var: Option<&str>) -> anyhow::Result<String> {
