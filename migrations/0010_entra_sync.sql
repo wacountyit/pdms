@@ -32,6 +32,7 @@ CREATE INDEX department_entra_values_department_idx ON department_entra_values (
 CREATE TABLE sync_cursors (
     name         text PRIMARY KEY,   -- 'entra.users'; P4 adds 'sharepoint.delta'
     delta_link   text,
+    delta_select text,               -- the $select the delta link was started with
     last_run     timestamptz,
     last_error   text,
     last_summary jsonb

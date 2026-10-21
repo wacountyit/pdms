@@ -9,6 +9,11 @@
 //!   manual membership in the mapped department satisfies the mapping);
 //! - disabled or removed accounts become `departed` (sessions revoked) through
 //!   `set_user_status`, which also refuses to remove the last administrator;
+//! - a round that lists every account (the first, a full resync, an expired
+//!   delta token, a changed attribute) also departs this issuer's active
+//!   accounts it did not list, unless the round looks wrong (no members, or
+//!   more than max(5, 20%) of them missing);
+//! - accounts with a local password are never departed by the sync, only reported;
 //! - guests (`userType` = `Guest`) are skipped unless `include_guests`;
 //!   nobody is ever reactivated.
 //!
@@ -125,7 +130,10 @@ fn parse_user(v: &Value, attribute: &str) -> Option<EntraUser> {
             .and_then(Value::as_bool)
             .unwrap_or(true),
         // A missing or null userType is a member (older member accounts).
-        guest: v.get("userType").and_then(Value::as_str) == Some("Guest"),
+        guest: v
+            .get("userType")
+            .and_then(Value::as_str)
+            .is_some_and(|t| t.eq_ignore_ascii_case("guest")),
         name: text("displayName").map(|n| n.chars().take(200).collect()),
         email: text("mail")
             .filter(|e| valid_email(e))
@@ -176,33 +184,35 @@ async fn sync_all(
     full: bool,
 ) -> CoreResult<SyncReport> {
     let attribute = core.config.entra_sync.attribute.as_str();
-    let initial = format!("/users/delta?$select={}", select_list(attribute));
+    let select = select_list(attribute);
+    let initial = format!("/users/delta?$select={select}");
     let saved = if full {
         None
     } else {
-        sqlx::query_scalar!(
-            "SELECT delta_link FROM sync_cursors WHERE name = $1",
-            CURSOR
-        )
-        .fetch_optional(&core.db)
-        .await?
-        .flatten()
+        saved_link(&core.db, &select).await?
     };
-    let page: DeltaPage<Value> = match saved {
+    // A round started from `initial` lists every account; a delta round only changes.
+    let (page, complete): (DeltaPage<Value>, bool) = match saved {
         Some(link) => match graph.get_delta(&link).await {
             Err(GraphError::ResyncRequired) => {
                 tracing::warn!("Entra delta token no longer valid; reading every account again");
-                graph.get_delta(&initial).await?
+                (graph.get_delta(&initial).await?, true)
             }
-            other => other?,
+            other => (other?, false),
         },
-        None => graph.get_delta(&initial).await?,
+        None => (graph.get_delta(&initial).await?, true),
     };
 
     let mut report = SyncReport::default();
+    let mut seen = BTreeSet::new();
+    let mut members = 0usize;
     for v in &page.items {
         match parse_user(v, attribute) {
             Some(u) => {
+                seen.insert(u.id.to_ascii_lowercase());
+                if !u.removed && !u.guest {
+                    members += 1;
+                }
                 apply(core, ctx, issuer, &u, &mut report).await?;
             }
             None => report
@@ -210,18 +220,26 @@ async fn sync_all(
                 .push("an entry without an id was skipped".into()),
         }
     }
+    if complete {
+        sweep(core, ctx, issuer, &seen, members, &mut report).await?;
+    }
+    for e in &report.errors {
+        tracing::warn!(problem = %e, "Entra sync");
+    }
 
     // Problems with single accounts stay in the summary; `last_error` is
     // only for a run that failed.
     let summary = serde_json::to_value(&report).map_err(CoreError::internal)?;
     let mut tx = core.db.begin().await?;
     sqlx::query!(
-        "INSERT INTO sync_cursors (name, delta_link, last_run, last_error, last_summary)
-         VALUES ($1, $2, now(), NULL, $3)
-         ON CONFLICT (name) DO UPDATE SET delta_link = EXCLUDED.delta_link, last_run = EXCLUDED.last_run,
+        "INSERT INTO sync_cursors (name, delta_link, delta_select, last_run, last_error, last_summary)
+         VALUES ($1, $2, $3, now(), NULL, $4)
+         ON CONFLICT (name) DO UPDATE SET delta_link = EXCLUDED.delta_link,
+                delta_select = EXCLUDED.delta_select, last_run = EXCLUDED.last_run,
                 last_error = NULL, last_summary = EXCLUDED.last_summary",
         CURSOR,
         page.delta_link,
+        select,
         summary
     )
     .execute(&mut *tx)
@@ -248,6 +266,119 @@ async fn sync_all(
     .await?;
     tx.commit().await?;
     Ok(report)
+}
+
+/// The saved delta link, if it was started with the same `$select`: a link
+/// keeps its original `$select`, so after the attribute changes, changed
+/// people would come back without it.
+async fn saved_link(db: &PgPool, select: &str) -> CoreResult<Option<String>> {
+    let row = sqlx::query!(
+        "SELECT delta_link, delta_select FROM sync_cursors WHERE name = $1",
+        CURSOR
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(match row {
+        Some(r) if r.delta_select.as_deref() == Some(select) => r.delta_link,
+        Some(r) if r.delta_link.is_some() => {
+            tracing::info!("the Entra sync attribute changed; reading every account again");
+            None
+        }
+        _ => None,
+    })
+}
+
+/// After a round that listed every account: depart this issuer's active
+/// accounts it did not list (deleted while no delta could report it, or
+/// before the sync was on). Held back, and reported, when the round looks
+/// wrong: no member accounts, or more missing than max(5, 20%).
+async fn sweep(
+    core: &Core,
+    ctx: &Ctx,
+    issuer: &str,
+    seen: &BTreeSet<String>,
+    members: usize,
+    report: &mut SyncReport,
+) -> CoreResult<()> {
+    let linked = sqlx::query!(
+        r#"SELECT u.id, u.display_name, u.email, u.oidc_subject AS "oidc_subject!",
+                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
+             FROM users u WHERE u.oidc_issuer = $1 AND u.status = 'active'
+            ORDER BY u.display_name"#,
+        issuer
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let missing: Vec<_> = linked
+        .iter()
+        .filter(|r| !seen.contains(&r.oidc_subject.to_ascii_lowercase()))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    if members == 0 {
+        report.errors.push(format!(
+            "Entra listed no member accounts, so the {} PADM account(s) it did not list \
+             were not deactivated; check the Graph permissions, then run a full sync",
+            missing.len()
+        ));
+        return Ok(());
+    }
+    let limit = (linked.len() / 5).max(5);
+    if missing.len() > limit {
+        report.errors.push(format!(
+            "{} of {} linked PADM accounts are not in Entra (more than {limit} at once), \
+             so none was deactivated; check the Graph permissions, then run a full sync",
+            missing.len(),
+            linked.len()
+        ));
+        return Ok(());
+    }
+    for r in missing {
+        let who = Linked {
+            id: r.id,
+            name: &r.display_name,
+            email: &r.email,
+            local_login: r.local_login,
+        };
+        depart(core, ctx, &who, "is not in Entra", report).await?;
+    }
+    Ok(())
+}
+
+/// An active PADM account linked to an Entra account.
+struct Linked<'a> {
+    id: Uuid,
+    name: &'a str,
+    email: &'a str,
+    local_login: bool,
+}
+
+/// Depart someone Entra no longer has as an enabled member. The last
+/// administrator and accounts with a local password are reported instead.
+async fn depart(
+    core: &Core,
+    ctx: &Ctx,
+    who: &Linked<'_>,
+    why: &str,
+    report: &mut SyncReport,
+) -> CoreResult<()> {
+    let (name, email) = (who.name, who.email);
+    if who.local_login {
+        report.errors.push(format!(
+            "{name} <{email}> {why} but was not deactivated: the account has a local password, \
+             so an administrator decides"
+        ));
+        return Ok(());
+    }
+    match super::set_user_status(&core.db, ctx, who.id, UserStatus::Departed).await {
+        Ok(()) => report.departed += 1,
+        Err(CoreError::Conflict(reason)) => report.errors.push(format!(
+            "{name} <{email}> {why} but was not deactivated: {reason}"
+        )),
+        Err(err) => return Err(err),
+    }
+    Ok(())
 }
 
 /// Keep the saved cursor (no change is lost) and remember why the run failed.
@@ -306,8 +437,10 @@ async fn apply(
     report: &mut SyncReport,
 ) -> CoreResult<Option<Uuid>> {
     let existing = sqlx::query!(
-        r#"SELECT id, display_name, email, status AS "status: UserStatus", source::text AS "source!"
-             FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2"#,
+        r#"SELECT u.id, u.display_name, u.email, u.status AS "status: UserStatus",
+                  u.source::text AS "source!",
+                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
+             FROM users u WHERE u.oidc_issuer = $1 AND u.oidc_subject = $2"#,
         issuer,
         u.id
     )
@@ -319,14 +452,20 @@ async fn apply(
         if let Some(e) = existing.as_ref()
             && e.status == UserStatus::Active
         {
-            match super::set_user_status(&core.db, ctx, e.id, UserStatus::Departed).await {
-                Ok(()) => report.departed += 1,
-                Err(CoreError::Conflict(why)) => report.errors.push(format!(
-                    "{} <{}> is disabled in Entra but was not deactivated: {why}",
-                    e.display_name, e.email
-                )),
-                Err(err) => return Err(err),
-            }
+            let why = if u.removed {
+                "was removed from Entra"
+            } else if !u.enabled {
+                "is disabled in Entra"
+            } else {
+                "is a guest account in Entra"
+            };
+            let who = Linked {
+                id: e.id,
+                name: &e.display_name,
+                email: &e.email,
+                local_login: e.local_login,
+            };
+            depart(core, ctx, &who, why, report).await?;
         }
         return Ok(None);
     }

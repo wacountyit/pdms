@@ -94,7 +94,10 @@ one, they update this table in the same commit.
 - **Error mapping:** `GraphError::Conflict` maps to `CoreError::Conflict`; every other Graph error maps to `CoreError::Internal`, so a Graph "not found" is never shown to people as a 404.
 - **Grants:** migration 0010 also grants `DELETE` on `department_entra_values` (spec §6 listed SELECT, INSERT, UPDATE), because removing a mapping needs it.
 - **Departures:** audited as the existing `user.status_changed`, which `set_user_status` writes. There is no `directory.user_departed` (spec §11 adjusted).
-- **Guests:** guests are skipped by `userType = Guest`; a null `userType` counts as a member (spec §7.5 said `ne 'Member'`).
+- **Guests:** guests are skipped by `userType = Guest` (any letter case); a null `userType` counts as a member (spec §7.5 said `ne 'Member'`).
+- **Full rounds sweep:** a round that lists every account (first run, full resync, expired delta token, changed attribute) departs this issuer's active accounts it did not list. The sweep is skipped, and reported, when the round has no member accounts or would depart more than max(5, 20% of the issuer's active linked accounts).
+- **Local passwords:** an account with local credentials is never departed by the sync (neither by a delta nor by the sweep); it is reported in `SyncReport.errors`, like the last administrator.
+- **Cursor and attribute:** `sync_cursors.delta_select` records the `$select` a delta link was started with. When `[entra_sync] attribute` changes, the next run reads every account again.
 - **Additions:**
   - `GraphConfig.timeout_seconds` and `max_retries`;
   - `SyncReport.errors: Vec<String>`;
