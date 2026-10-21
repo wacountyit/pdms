@@ -6,6 +6,8 @@ Phase 0, D-026 to D-040 while building Phase 1, and D-041 onward while
 building Phases 2–5. D-081 to D-089 were decided on 2026-10-14, when the
 county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
 §0. D-090 and D-091 were decided on 2026-10-15 (visibility follow-ups).
+D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
+finished 2026-10-21).
 Entries marked "design, not built" or "not done" are agreed but not yet
 implemented.
 
@@ -717,6 +719,48 @@ balances. No one can remove someone else's words, and soft-deleted text stays
 in the history and the audit log. Refused attempts are audited
 (`comment.post_denied`, `comment.edit_denied`, `comment.delete_denied`) and
 not published to webhooks. Amends D-072 and D-073.
+
+### D-092 UI direction D; R1 scope and order — Accepted (2026-10-15)
+The project owner chose direction "D" from four demo mockups (A Civic Modern,
+B Clean Workspace, C Executive Overview, D = A's layout in C's style): a
+sidebar shell and one visual system. Round 1 (R1) covers the new shell on
+every page plus five redesigned screens (sign-in, dashboard, documents list,
+document page, county overview), the branding admin page, and username
+sign-in. R1 is done before sub-projects 1–3 so there is a presentable shell
+to show county leadership. Round 2 (R2, the remaining pages) comes after
+sub-projects 1–3 so it covers the final features. See
+[the R1 spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md).
+
+### D-093 Branding is set on an admin page and is public before sign-in — Accepted (2026-10-15)
+Administrators set the county name, accent color, and seal under
+Administration → Branding (the settings permission); no developer or config
+edit is needed. The accent must give white text a contrast ratio of at least
+4.5:1 or it is refused; hover, link, and tint shades are derived. The seal is
+a PNG or JPEG of at most 512 KB, 16–2048 px per side, checked by its real
+file type (SVG is refused), and is stored in PADM's database. The seal and
+name appear on the sign-in page, so they are public to anyone who can reach
+PADM. One organization-name resolver supplies the name to page titles, the
+sidebar, notification emails, calendar feeds, webhooks, and records-request
+packages; a blank name falls back to `[org] name` in the config file.
+Changes apply at once in the saving process and within 60 seconds elsewhere.
+
+### D-094 Sign-in page layout and usernames for local accounts — Accepted (2026-10-15)
+The sign-in page shows username and password first, then "Sign in with
+Microsoft", which is always visible. If Microsoft sign-in is not configured,
+clicking it returns to the sign-in page with a "not set up yet" notice; if
+local sign-in is disabled in config, only the Microsoft button shows. Local
+accounts may have an optional username (2–64 characters of `A-Z a-z 0-9 . _
+-`, never `@`, unique ignoring case). The Username field accepts a username
+or an email. Every failed sign-in shows one generic message, so the page does
+not reveal which accounts exist.
+
+### D-095 Dashboard shows "Recently updated", not an activity feed — Accepted (2026-10-15)
+The dashboard lists recently updated documents (only ones the viewer can
+see) instead of an activity feed, because a feed built from the audit log
+would expose it. "Needs your attention" holds only the viewer's own tasks and
+approvals; "Coming up" and the tiles cover everything the viewer can see.
+There is no "Share" button: PADM has no sharing model apart from access
+grants. "Your access" moved to the account page.
 
 ## Open questions (configurable defaults; not blocking)
 

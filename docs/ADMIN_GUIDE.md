@@ -26,7 +26,7 @@ build takes several minutes).
 | Email | Optional: SMTP host, security (STARTTLS 587, TLS 465, or none for a trusted relay), port, username, password (hidden), from address. |
 | Outlook calendar | Optional: shared mailbox; can reuse the sign-in app registration (add `Calendars.ReadWrite`). See section 10. |
 | OCR, virus scanning | Optional extra containers (each about 1 GB). |
-| First administrator | Email and name. The password is generated and shown once at the end, with the **authenticator (TOTP) secret**: add it to an authenticator app right away. |
+| First administrator | Email, username (default `sysadmin`; preset `PDMS_INSTALL_ADMIN_USERNAME`; checked against the username rules below and shown in the summary), and name. The password is generated and shown once at the end, with the **authenticator (TOTP) secret**: add it to an authenticator app right away. |
 
 Files it writes:
 
@@ -101,17 +101,49 @@ group lookup arrives in Phase 4.
 ### Break-glass local administrators
 
 Local accounts are for emergencies, such as an Entra outage or
-misconfiguration. They require email, password (12+ characters), and an
+misconfiguration. They sign in with a username or an email, and require a password (12+ characters), and an
 authenticator code. Five failed attempts lock the account for 15 minutes, and
 sign-in attempts are rate-limited per IP.
 
 ```sh
-docker compose run --rm app create-admin --email it-admin@example.org --name "IT Admin"
+docker compose run --rm app create-admin --email it-admin@example.org --name "IT Admin" --username sysadmin
 ```
 
 Running this again for an existing email resets the password and TOTP secret,
 reactivates the account, and signs out its sessions. To turn local sign-in off
-entirely after SSO works, set `[auth.local] enabled = false`.
+entirely after SSO works, set `[auth.local] enabled = false`. The sign-in
+page then shows only the Microsoft button.
+
+### Sign-in page and usernames for local accounts
+
+The sign-in page asks for a username and password first, with **Sign in with
+Microsoft** always shown below. If Microsoft sign-in is not configured,
+clicking it returns to the sign-in page with "Microsoft sign-in isn't set up
+yet. Contact your administrator."
+
+A local account may have a **username**, which is optional:
+
+- 2–64 characters of letters, digits, `.`, `_`, and `-`; never `@`;
+- unique ignoring case (`SysAdmin` and `sysadmin` are the same);
+- the sign-in **Username** field accepts either the username or the email.
+
+Set or clear it:
+
+- **Admin page:** Administration → Users → the user. Only accounts with local
+  sign-in can have one. Removing an account's local sign-in also clears its
+  username.
+- **CLI:** `pdms create-admin --email <email> --name <name> --username <name>`
+  for a new account, or `pdms set-username --email <email> --username <name>`
+  for an existing one. In Docker, run them like the other commands:
+  `docker compose run --rm app set-username --email <email> --username <name>`.
+- **Installer:** `install.sh` asks "Administrator username" (default
+  `sysadmin`; preset with `PDMS_INSTALL_ADMIN_USERNAME`), validates it, and
+  prints it in the final summary.
+
+A failed sign-in always shows one generic message, so it never reveals whether
+an account exists: "Username or password is incorrect.", or "Username,
+password, or authenticator code is incorrect." when authenticator codes are
+required. Setting a username is audited as `user.username_set`.
 
 ## 3. Users, departments, and access
 
@@ -151,8 +183,49 @@ Every change is recorded in the audit log with before and after values.
 | Put a user in a department | User page → Departments |
 | Make someone a department head for one department | User page → Roles → *Department Head* for *that department* |
 | Give a department access to another's documents | Department page → Access, or Administration → Access grants |
+| Set a local account's username | Administration → Users → the user (see section 2) |
+| Change the county name, accent color, or seal | Administration → Branding (see below) |
 | Offboard someone | User page → Account status → *departed* (keeps their history and ownership) |
 | Rename a role for your organization | Administration → Roles (e.g. *Legal Counsel* → "General Counsel's Office") |
+
+### Branding
+
+Administration → **Branding** (requires the settings permission) sets how
+PADM presents your county. No config edit or restart is needed.
+
+| Field | Rules |
+|---|---|
+| County name | 1–120 characters. Leave blank to use `[org] name` from the config file. |
+| Accent color | Pick a color or type a hex code. White text on it must reach a 4.5:1 contrast ratio, or the page refuses it with a message (choose a darker color). Hover, link, and tint shades are derived automatically. |
+| Seal | PNG or JPEG, at most 512 KB, 16–2048 pixels per side. The real file type is checked, and SVG is refused. It is stored in PADM's database, so backups include it. |
+
+Two more actions: **Remove seal**, and **Reset to defaults** (asks you to
+confirm on a separate page).
+
+- **Public:** the seal and county name appear on the sign-in page, so anyone
+  who can reach PADM sees them. Do not upload anything you would not put on
+  your public website.
+- **Where the name is used:** page titles, the sidebar, notification emails,
+  calendar feeds, webhooks, and records-request packages.
+- **When changes apply:** immediately in the process that saved them, and
+  within 60 seconds in any other process (the web app and the worker are
+  separate processes).
+- **Audit entries:** `branding.updated`, `branding.seal_set`,
+  `branding.seal_removed`, `branding.reset`.
+
+### Preparing a demo for leadership
+
+To show PADM to county leadership on a test or demo server, after it is
+installed or updated:
+
+1. **Give the administrator a username**, so they can sign in as `sysadmin`:
+   `docker compose run --rm app set-username --email <admin email> --username sysadmin`
+2. **Brand it.** Administration → Branding: set the county name, accent color,
+   and seal. Placeholders are fine until the county decides.
+3. **Let leadership see the whole county.** The county overview (top of
+   **Reports**) and the dashboard show only what the viewer can see. For each
+   leadership account, go to Administration → Access grants and give it view
+   access to all departments with a global grant.
 
 ### Roles
 
