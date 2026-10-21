@@ -363,3 +363,19 @@ async fn with_entra_sync_on_token_groups_do_not_change_departments() {
             .unwrap();
     assert_eq!(name, "Gail Entra", "the token's name does not replace it");
 }
+
+#[tokio::test]
+async fn idp_mappings_page_says_they_are_not_applied_while_syncing() {
+    let notice = "These mappings are not applied while the Entra directory sync is on";
+    for on in [false, true] {
+        let mut cfg = config();
+        cfg.entra_sync.enabled = on;
+        let app = app_with(cfg).await;
+        let (_, secret) = user(&app.core, "admin@example.test", None, Some("admin")).await;
+        let mut b = Browser::new(&app);
+        b.login("admin@example.test", &secret).await;
+        let page = b.get("/admin/idp").await;
+        assert_eq!(page.status, 200);
+        assert_eq!(page.body.contains(notice), on, "sync on: {on}");
+    }
+}

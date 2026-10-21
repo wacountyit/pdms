@@ -739,6 +739,8 @@ struct IdpPage {
     departments: Vec<Department>,
     groups: Vec<Group>,
     roles: Vec<Role>,
+    /// The Entra sync is on, so sign-in does not apply these mappings.
+    entra_sync: bool,
 }
 
 pub async fn idp(
@@ -753,6 +755,7 @@ pub async fn idp(
         departments: directory::list_departments(db).await?,
         groups: directory::list_groups(db).await?,
         roles: directory::list_roles(db).await?,
+        entra_sync: state.core.config.entra_sync.enabled,
     };
     Ok(Html(page.render()?))
 }
