@@ -163,3 +163,18 @@ sync_interval_minutes = 15
 # [graph_calendar.department_mailboxes]
 # OPS = "ops-calendar@yourdomain.org"
 
+[graph]                         # Microsoft Graph as PADM itself (app registration "PADM Service")
+# tenant_id = ""                # Directory (tenant) ID
+# client_id = ""                # Application (client) ID
+# certificate: PEM certificate + private key, from `pdms gen-graph-cert`; give it as a file:
+#   PDMS_GRAPH__CERTIFICATE_FILE=/run/secrets/graph_certificate
+# authority_url = "https://login.microsoftonline.com"
+# api_url = "https://graph.microsoft.com/v1.0"
+# timeout_seconds = 60
+# max_retries = 4
+
+[entra_sync]                    # people and departments from Entra ID (needs [graph], auth.oidc.issuer_url, subject_claim = "oid")
+enabled = false
+run_at = "02:30"                # daily, in [org] timezone
+attribute = "department"        # the Entra user property that names the department
+include_guests = false

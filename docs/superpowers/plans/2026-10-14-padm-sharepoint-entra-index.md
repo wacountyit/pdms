@@ -83,9 +83,9 @@ one, they update this table in the same commit.
 | `pdms_core::Core.graph` | `Option<pdms_core::graph::GraphClient>`: `Some` when `[graph]` has `tenant_id`, `client_id`, `certificate` |
 | `pdms_core::directory::entra_sync` | `pub const SYNC_JOB: &str = "directory.entra_sync"`; `pub async fn run(core: &Core, ctx: &Ctx) -> CoreResult<SyncReport>`; `pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>>`; `pub struct SyncReport { pub created: u32, pub updated: u32, pub departed: u32, pub unmapped: u32, pub changed_departments: BTreeSet<Uuid> }` |
 | `pdms_core::directory::entra_values` | `list(db) -> CoreResult<Vec<EntraValue>>`, `upsert(db, ctx, value: &str, department_id: Uuid) -> CoreResult<()>`, `remove(db, ctx, value: &str) -> CoreResult<()>`, `unmapped(db) -> CoreResult<Vec<UnmappedValue>>`, `normalize(value: &str) -> String` |
-| DB | `department_entra_values`, `sync_cursors (name text PK, delta_link text, last_run timestamptz, last_error text)`, `users.entra_department`, `users.entra_synced_at`, `users.source user_source ('local','entra')` |
+| DB | `department_entra_values`, `sync_cursors (name text PK, delta_link text, last_run timestamptz, last_error text, last_summary jsonb, delta_select text)`, `users.entra_department`, `users.entra_synced_at`, `users.source user_source ('local','entra')` |
 | Worker | Handler for `SYNC_JOB`; daily schedule at `[entra_sync] run_at`. **P4 adds** "enqueue `sharepoint.reconcile_access` after a successful sync" inside this handler. |
-| CLI | `pdms sync-directory`; `pdms gen-graph-cert --out <file>` (writes PEM certificate + key, prints the public certificate to upload to Entra) |
+| CLI | `pdms sync-directory`; `pdms gen-graph-cert --out <file> [--days N] [--name CN]` (`--days` 30-1095; writes the PEM bundle, certificate + unencrypted key, mode 600, to `<file>` and the public certificate to `<file>.crt`; never overwrites; prints the `.crt` path and the thumbprint) |
 
 **Changes recorded when P2 was written** (the P2 plan is authoritative for exact signatures):
 
@@ -104,6 +104,12 @@ one, they update this table in the same commit.
   - `sync_cursors.last_summary jsonb`;
   - `entra_sync::{run_full, status, request_sync, schedule_daily, run_job, TICK_JOB, LOCK_KEY}`;
   - `oidc::resolve_identity`, `normalize_issuer`.
+- **Types:** `model::UserSource` was dropped; the sync writes `users.source` directly in SQL.
+- **Mapping:** a manual department membership in the mapped department satisfies the mapping.
+- **Config check:** `entra_sync.enabled` requires `[graph]`, `auth.oidc.issuer_url` and `auth.oidc.subject_claim = "oid"`.
+- **Sign-in:** when the sync is on, a first sign-in asks Entra about the person and is denied with `email_in_use` if an unlinked account has that email; a Graph error denies sign-in. The token never sets names or groups while the sync is on.
+- **Downloads:** download streams have no total deadline, so P3's large files are safe from it, but the download's pre-authenticated GET does not yet retry 429/503/504.
+- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 must be renumbered from D-097 when P4 is executed.
 - **Left to P4:** the Docker Compose secret and `install.sh` wiring for the certificate.
 - **Open behaviour:** an account that is departed and later re-enabled in Entra is **not** reactivated automatically; an admin reactivates it. A simultaneous first sign-in and nightly sync are resolved with `ON CONFLICT DO NOTHING`.
 
