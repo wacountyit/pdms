@@ -62,3 +62,50 @@ async fn department_values_map_case_and_spacing_insensitively() {
             .contains(&"directory.department_mapping_changed".to_owned())
     );
 }
+
+/// The issuer backfill from migration 0010, run as written in the file (tests
+/// start from a migrated database, so the statement is executed directly).
+#[tokio::test]
+async fn migration_backfill_normalizes_issuers_and_skips_collisions() {
+    let (_core, db) = core().await;
+    let sql = include_str!("../../../migrations/0010_entra_sync.sql");
+    let start = sql.find("UPDATE users u").unwrap();
+    let stmt = &sql[start..start + sql[start..].find(';').unwrap()];
+
+    let insert = |email: &'static str, issuer: &'static str, subject: &'static str| {
+        let owner = db.owner.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO users (id, display_name, email, oidc_issuer, oidc_subject)
+                 VALUES (gen_random_uuid(), 'T', $1, $2, $3)",
+            )
+            .bind(email)
+            .bind(issuer)
+            .bind(subject)
+            .execute(&owner)
+            .await
+            .unwrap();
+        }
+    };
+    insert("a@x.org", "https://login.example/t/v2.0/", "s1").await;
+    insert("b@x.org", "  https://login.example/t/v2.0  ", "s2").await;
+    insert("c@x.org", "https://login.example/t/v2.0", "s3").await;
+    // The same subject under both spellings: neither row may be changed.
+    insert("d@x.org", "https://other.example/", "dup").await;
+    insert("e@x.org", "https://other.example", "dup").await;
+
+    sqlx::query(stmt).execute(&db.owner).await.unwrap();
+
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT email, oidc_issuer FROM users WHERE email LIKE '_@x.org' ORDER BY email",
+    )
+    .fetch_all(&db.owner)
+    .await
+    .unwrap();
+    let issuer = |e: &str| rows.iter().find(|r| r.0 == e).unwrap().1.clone();
+    assert_eq!(issuer("a@x.org"), "https://login.example/t/v2.0");
+    assert_eq!(issuer("b@x.org"), "https://login.example/t/v2.0");
+    assert_eq!(issuer("c@x.org"), "https://login.example/t/v2.0");
+    assert_eq!(issuer("d@x.org"), "https://other.example/");
+    assert_eq!(issuer("e@x.org"), "https://other.example");
+}

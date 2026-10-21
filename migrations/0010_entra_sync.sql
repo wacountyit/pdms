@@ -9,8 +9,17 @@ ALTER TABLE users
     ADD COLUMN entra_department text,
     ADD COLUMN entra_synced_at  timestamptz;
 
--- Issuers compare without a trailing slash (auth::oidc::normalize_issuer).
-UPDATE users SET oidc_issuer = rtrim(oidc_issuer, '/') WHERE oidc_issuer LIKE '%/';
+-- Issuers compare trimmed and without a trailing slash (auth::oidc::normalize_issuer).
+-- A row whose normalized (issuer, subject) pair another row already holds
+-- is left as it is, so the unique key cannot abort the migration.
+UPDATE users u
+   SET oidc_issuer = rtrim(btrim(u.oidc_issuer), '/')
+ WHERE u.oidc_issuer <> rtrim(btrim(u.oidc_issuer), '/')
+   AND NOT EXISTS (
+       SELECT 1 FROM users o
+        WHERE o.id <> u.id
+          AND o.oidc_subject = u.oidc_subject
+          AND rtrim(btrim(o.oidc_issuer), '/') = rtrim(btrim(u.oidc_issuer), '/'));
 
 CREATE TABLE department_entra_values (
     value_normalized text PRIMARY KEY CHECK (value_normalized <> ''),
