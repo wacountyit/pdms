@@ -3,6 +3,7 @@
 <p>Webhooks send events (document changes, workflow decisions, appointments) to another system as they happen. Each webhook acts as a <em>service user</em>: it receives only events about what that user may see. Requests are signed; failures are retried with backoff and logged below.
 {% if !enabled %}<strong>Webhook delivery is turned off</strong> (<code>[integrations] webhooks_enabled</code>).{% endif %}
 {% if !providers.is_empty() %}Integration providers enabled: <code>{{ providers }}</code>.{% endif %}</p>
+<div class="table-wrap">
 <table>
   <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Acts as</th><th scope="col">State</th></tr></thead>
   <tbody>
@@ -11,6 +12,7 @@
   {% else %}<tr><td colspan="5">No webhooks.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <details {% if hooks.is_empty() %}open{% endif %}><summary>Add a webhook</summary>
 <form method="post" action="/admin/webhooks" class="grid-form">
   <input type="hidden" name="_csrf" value="{{ l.csrf }}">

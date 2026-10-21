@@ -449,7 +449,10 @@ thead th {
   font-weight: 600;
 }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* position: relative keeps absolutely positioned .visually-hidden text in
+   the table inside the scroll box; otherwise it widens the whole page. */
 .table-wrap {
+  position: relative;
   margin: 0 0 22px;
   overflow-x: auto;
   background: var(--surface);
@@ -457,6 +460,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-radius: 8px;
 }
 .table-wrap > table { margin: 0; }
+.table-wrap > table > caption { padding: 12px 12px 8px; }
 
 /* Status: one tone per class. .badge, .status and .cal-ev read the tone. */
 .status-critical, .badge-critical { --tone-dot: var(--crit-dot); --tone-fg: var(--crit-fg); --tone-tint: var(--crit-tint); }
@@ -708,10 +712,8 @@ button.link:hover { background: none; text-decoration-thickness: 2px; }
 .description { white-space: pre-wrap; }
 .appointee { margin: 12px 0; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .appointee h3 { margin-top: 0; }
-.candidates { max-height: 28rem; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.candidates { position: relative; max-height: 28rem; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .candidates table { margin: 0; }
-.table-scroll { margin: 0 0 22px; overflow-x: auto; }
-.table-scroll > table { margin: 0; }
 .report-table { font-size: 14px; }
 .report-table td { white-space: nowrap; }
 tr.file-version td:first-child { font-weight: 600; }
@@ -720,9 +722,9 @@ pre { padding: 8px; background: var(--thead); border-radius: 6px; font-size: 13p
 .text-preview { max-height: 16rem; overflow-y: auto; padding: 8px; background: var(--thead); border-radius: 6px; font-size: 13px; white-space: pre-wrap; }
 
 /* Facts and lists */
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; }
 .facts dt { color: var(--muted); font-weight: 600; }
-.facts dd { margin: 0; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
 .events { margin: 0; padding: 0; list-style: none; }
 .events li { padding: 10px 0; border-bottom: 1px solid var(--row); }
 .events li.projected { font-style: italic; }
@@ -751,6 +753,9 @@ span.label { font-weight: 600; }
 .inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
 .stack { display: flex; flex-direction: column; gap: 6px; }
 .stack button { margin-top: 12px; }
+.stack > button, .stack > .button { align-self: flex-start; } /* .block buttons stay full width */
+.stack > input:where(:not([type="checkbox"], [type="radio"])), .stack > select { max-width: 28rem; }
+.grid-form > div > input:first-child:where([type="text"]) { width: 100%; }
 .filters {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
@@ -775,6 +780,7 @@ span.label { font-weight: 600; }
 .doc-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), .doc-form select { width: 100%; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 label.check { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
+label.check > input { flex: none; }
 .tag-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tag-mode { margin-left: auto; }
 .decision textarea { width: 100%; }
@@ -793,6 +799,7 @@ details.round > summary { margin: 0; }
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 .tags { margin-top: 4px; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; list-style: none; }
@@ -806,6 +813,7 @@ details.round > summary { margin: 0; }
 .mention { color: var(--accent-link); font-weight: 600; }
 
 /* Audit changes */
+table.audit time, table.audit summary { white-space: nowrap; }
 table.diff { margin: 0; font-size: 13px; }
 table.diff .before { color: var(--crit-fg); text-decoration: line-through; }
 table.diff .after { color: var(--good-fg); }
@@ -865,9 +873,12 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cal-ev.overdue { font-weight: 700; }
 
 @media (max-width: 40rem) {
-  .grid-form { grid-template-columns: 1fr; }
+  /* minmax(0, ...) lets a select with long options shrink to the screen. */
+  .grid-form { grid-template-columns: minmax(0, 1fr); }
+  .grid-form select, .grid-form input:where(:not([type="checkbox"], [type="radio"])) { max-width: 100%; }
   body > main { padding: 22px 16px 32px; }
-  table { display: block; overflow-x: auto; }
+  /* Tables outside a .table-wrap scroll on their own. */
+  :not(.table-wrap) > table { position: relative; display: block; overflow-x: auto; }
   table.month td { height: auto; }
 }
 
@@ -898,7 +909,26 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .overview-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin: 0 0 16px; }
 .overview-filters > div { display: flex; flex-direction: column; gap: 4px; }
 .chart-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
-.chart-panel { min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.chart-panel { min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+/* Chart text is sized in viewBox units (600 wide), and the charts are usually
+   drawn at about half that width, so 13px would show as 6-7px. Step the size
+   up as the panel narrows to keep labels at roughly 11-15px on screen. The
+   department bars get a smaller step: their names must fit the fixed label
+   column on the left. */
+@container (max-width: 559px) {
+  .chart .chart-label { font-size: 16px; }
+  .chart .chart-value { font-size: 17px; }
+}
+@container (max-width: 459px) {
+  .chart .chart-label { font-size: 20px; }
+  .chart .chart-value { font-size: 22px; }
+  .chart-hbars .chart-label { font-size: 18px; }
+}
+@container (max-width: 359px) {
+  .chart .chart-label { font-size: 25px; transform: translateY(4px); } /* clear of the axis */
+  .chart .chart-value { font-size: 27px; }
+  .chart-hbars .chart-label { font-size: 21px; transform: none; }
+}
 .chart-panel h3 { margin: 0; font-size: 18px; }
 .chart-panel p { margin: 0; }
 .chart-link { font-size: 14px; font-weight: 600; margin-top: auto; padding-top: 6px; }
@@ -1042,14 +1072,19 @@ td.next-overdue { color: var(--crit-fg); font-weight: 700; }
 .timeline-list .date { color: var(--muted); font-variant-numeric: tabular-nums; }
 .timeline-list .status { white-space: normal; }
 @media (max-width: 40rem) {
-  /* The SVG scales with its width; keep its labels legible on phones. */
+  /* The SVG scales with its width; keep its labels legible and its marks
+     visible on phones (about a third of the desktop scale). */
   .timeline .chart-label { font-size: 32px; }
+  .timeline-axis, .timeline-today { stroke-width: 5; }
+  .timeline-overdue { y: 18px; height: 8px; }
+  .timeline-mark { r: 12px; stroke-width: 6; }
   .timeline-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
 /* Files */
 table.files tr.file-version td:first-child { font-weight: 400; }
 table.files .file-name { font-weight: 600; overflow-wrap: anywhere; }
+table.files .file-name + .status { margin-left: 4px; }
 table.files td.file-actions a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
 table.files td.file-actions .icon { width: 16px; height: 16px; }
 table.files td.file-actions .inline-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

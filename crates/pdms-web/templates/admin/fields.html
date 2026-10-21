@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <p>Custom fields appear on document forms. A field’s key and type never change; edits create a new version and never alter existing values. Deprecate a field to hide it from forms while keeping its values.</p>
+<div class="table-wrap">
 <table>
   <caption>Custom fields</caption>
   <thead><tr><th scope="col">Label</th><th scope="col">Key</th><th scope="col">Type</th><th scope="col">Applies to</th><th scope="col">Required</th><th scope="col">Version</th><th scope="col">Status</th></tr></thead>
@@ -12,6 +13,7 @@
   {% else %}<tr><td colspan="7">No custom fields yet.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <section aria-labelledby="new-field-h">
   <h2 id="new-field-h">Add a field</h2>
   <form method="post" action="/admin/fields" class="grid-form">

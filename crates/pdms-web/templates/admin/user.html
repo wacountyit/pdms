@@ -30,6 +30,7 @@
 
 <section aria-labelledby="dept-h">
   <h2 id="dept-h">Departments</h2>
+  <div class="table-wrap">
   <table>
     <thead><tr><th scope="col">Department</th><th scope="col">Primary</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
@@ -39,6 +40,7 @@
     {% else %}<tr><td colspan="4">No departments.</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
   <form method="post" action="/admin/users/{{ u.user.id }}/departments" class="inline">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="add-dept">Add to department</label>
@@ -55,6 +57,7 @@
 
 <section aria-labelledby="roles-h">
   <h2 id="roles-h">Roles</h2>
+  <div class="table-wrap">
   <table>
     <thead><tr><th scope="col">Role</th><th scope="col">Applies to</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
@@ -64,6 +67,7 @@
     {% else %}<tr><td colspan="4">No roles.</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
   <form method="post" action="/admin/users/{{ u.user.id }}/roles" class="inline">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="role">Assign role</label>

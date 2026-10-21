@@ -212,6 +212,10 @@ async fn inbox_tasks_and_rules_through_the_web() {
     let home = b.get("/").await;
     assert!(home.body.contains("class=\"count\""), "unread badge");
     assert!(
+        home.body.contains("Notifications <span class=\"count\">"),
+        "a space keeps screen readers from running the label into the count"
+    );
+    assert!(
         home.body
             .contains("<span class=\"visually-hidden\"> unread</span>"),
         "unread badge has screen-reader text"

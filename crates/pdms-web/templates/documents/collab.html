@@ -6,6 +6,7 @@
   {% else %}<p class="muted small">No text has been read from this document's file{% if collab.can_decide %} yet{% endif %}.</p>{% endif %}
   {% if collab.suggestions.is_empty() %}<p class="muted">No dates to confirm.</p>{% else %}
   <p class="small">These were found in the file. <strong>Nothing changes until you confirm it.</strong> Check each against the document before accepting.</p>
+  <div class="table-wrap">
   <table>
     <caption class="visually-hidden">Date suggestions</caption>
     <thead><tr><th scope="col">Field</th><th scope="col">Found</th><th scope="col">In context</th><th scope="col">Confidence</th><th scope="col"><span class="visually-hidden">Decision</span></th></tr></thead>
@@ -19,6 +20,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
   {% if collab.can_decide && d.current_version > 0 %}
   <form method="post" action="/documents/{{ d.id }}/text/reprocess" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Read the file again</button></form>

@@ -5,7 +5,7 @@
     <li><a href="/calendar" {% if l.section == "calendar" %}aria-current="page"{% endif %}>{% include "icons/calendar.html" %}Calendar</a></li>
     <li><a href="/positions" {% if l.section == "positions" %}aria-current="page"{% endif %}>{% include "icons/users.html" %}Appointments</a></li>
     <li><a href="/reports" {% if l.section == "reports" %}aria-current="page"{% endif %}>{% include "icons/chart-column.html" %}Reports</a></li>
-    <li><a href="/notifications" {% if l.section == "notifications" %}aria-current="page"{% endif %}>{% include "icons/bell.html" %}Notifications{% if l.unread > 0 %}<span class="count">{{ l.unread }}<span class="visually-hidden"> unread</span></span>{% endif %}</a></li>
+    <li><a href="/notifications" {% if l.section == "notifications" %}aria-current="page"{% endif %}>{% include "icons/bell.html" %}Notifications{% if l.unread > 0 %} <span class="count">{{ l.unread }}<span class="visually-hidden"> unread</span></span>{% endif %}</a></li>
   </ul>
   {% if l.can_exports || l.can_admin || l.can_audit %}
   <p class="nav-group-label">Manage</p>

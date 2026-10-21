@@ -14,7 +14,7 @@
   <div class="actions"><button type="submit">Run</button> <a class="button" href="{{ csv_link }}">Download CSV</a></div>
 </form>
 <p><strong>{{ r.rows.len() }}</strong> rows · {{ r.subtitle }}</p>
-<div class="table-scroll"><table class="report-table">
+<div class="table-wrap"><table class="report-table">
   <caption class="visually-hidden">{{ r.title }}</caption>
   <thead><tr>{% for c in r.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
   <tbody>

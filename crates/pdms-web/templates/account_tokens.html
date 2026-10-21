@@ -9,6 +9,7 @@
 </section>
 <p>API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PDMS API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
 {% if !enabled %}<p class="flash flash-error" role="alert">The API is turned off for this installation.</p>{% endif %}
+<div class="table-wrap">
 <table>
   <caption class="visually-hidden">Your API tokens</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -19,6 +20,7 @@
   {% else %}<tr><td colspan="8">No tokens.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 {% if enabled %}
 <h2>New token</h2>
 <form method="post" action="/account/tokens" class="grid-form">

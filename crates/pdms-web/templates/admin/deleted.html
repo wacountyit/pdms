@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <p>Deleted documents are hidden from everyone but kept with their files and history. Restoring one makes it visible again with its previous access settings.</p>
+<div class="table-wrap">
 <table>
   <caption>Deleted documents</caption>
   <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Deleted</th><th scope="col">By</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -11,4 +12,5 @@
   {% else %}<tr><td colspan="6">No deleted documents.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

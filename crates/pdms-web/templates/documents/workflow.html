@@ -5,6 +5,7 @@
   <details class="round" {% if loop.first %}open{% endif %}>
     <summary><span class="badge wf-{{ r.status }}">{{ r.status_label }}</span> {{ r.submitted }} <span class="muted small">(version {{ r.version_no }})</span></summary>
     {% if !r.note.is_empty() %}<p class="note">{{ r.note }}</p>{% endif %}
+    <div class="table-wrap">
     <table class="steps">
       <caption class="visually-hidden">Steps</caption>
       <thead><tr><th scope="col">Stage</th><th scope="col">Step</th><th scope="col">Assigned to</th><th scope="col">Status</th><th scope="col">Decision</th></tr></thead>
@@ -31,6 +32,7 @@
       {% endfor %}
       </tbody>
     </table>
+    </div>
     <h3 class="visually-hidden">Activity</h3>
     <ol class="activity">
       {% for e in r.events %}<li><span class="muted small">{{ e.when }}</span> {% if !e.who.is_empty() %}<strong>{{ e.who }}</strong>: {% endif %}{{ e.label }}{% if !e.comment.is_empty() %} — <q>{{ e.comment }}</q>{% endif %}</li>{% endfor %}

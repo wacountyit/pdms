@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="table-wrap">
 <table>
   <caption>Groups</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th><th scope="col">Synced from IdP</th></tr></thead>
@@ -9,6 +10,7 @@
   {% else %}<tr><td colspan="4">No groups yet.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <section aria-labelledby="new-group-h">
   <h2 id="new-group-h">Add a group</h2>
   <form method="post" action="/admin/groups" class="grid-form">

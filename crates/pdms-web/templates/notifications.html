@@ -6,6 +6,7 @@
   <form method="post" action="/notifications/ack-all" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge all</button></form>
   {% endif %}
 </div>
+<div class="table-wrap">
 <table>
   <caption class="visually-hidden">Notifications</caption>
   <thead><tr><th scope="col">Notice</th><th scope="col">About</th><th scope="col">Due</th><th scope="col">Received</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -20,4 +21,5 @@
   {% else %}<tr><td colspan="5">No notifications.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

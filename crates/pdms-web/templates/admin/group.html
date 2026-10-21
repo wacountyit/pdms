@@ -2,6 +2,7 @@
 {% block content %}
 <p><a href="/admin/groups">← All groups</a></p>
 <p>{{ g.description }}</p>
+<div class="table-wrap">
 <table>
   <caption>Members</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -12,6 +13,7 @@
   {% else %}<tr><td colspan="4">No members.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <form method="post" action="/admin/groups/{{ g.id }}/members" class="inline">
   <input type="hidden" name="_csrf" value="{{ l.csrf }}">
   <label for="u">Add member</label>

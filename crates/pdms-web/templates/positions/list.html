@@ -4,6 +4,7 @@
 {% if rows.is_empty() %}
 <p class="muted">{% if can_manage %}No positions yet. Add the first one below.{% else %}There are no positions you can see. Positions are visible to their department, their manager, and the appointments clerks.{% endif %}</p>
 {% else %}
+<div class="table-wrap">
 <table>
   <caption class="visually-hidden">Positions</caption>
   <thead><tr><th scope="col">Board or body</th><th scope="col">Position</th><th scope="col">Held by</th><th scope="col">Seats filled</th><th scope="col">Term</th><th scope="col">Next term end</th><th scope="col">Needs attention</th><th scope="col">Department</th></tr></thead>
@@ -20,6 +21,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
 {% if can_manage %}

@@ -2,6 +2,7 @@
 {% block content %}
 <p>A subscription gives Outlook (or any calendar app) a private web address that shows review, renewal, and expiration dates. It always shows what <em>you</em> can currently see, never includes Restricted documents, and stops working the moment you revoke it.</p>
 <p class="help">In Outlook: <strong>Add calendar → Subscribe from web</strong> (or <strong>From internet</strong>), then paste the address. Treat the address like a password.</p>
+<div class="table-wrap">
 <table>
   <caption>Your subscriptions</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Shows</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -15,6 +16,7 @@
   {% else %}<tr><td colspan="6">No subscriptions yet.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <section aria-labelledby="new-feed-h">
   <h2 id="new-feed-h">New subscription</h2>
   <form method="post" action="/calendar/feeds" class="grid-form">

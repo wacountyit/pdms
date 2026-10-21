@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="table-wrap">
 <table>
   <caption>Departments</caption>
   <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Members</th><th scope="col">Status</th></tr></thead>
@@ -9,6 +10,7 @@
   {% else %}<tr><td colspan="4">No departments yet.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 <section aria-labelledby="new-dept-h">
   <h2 id="new-dept-h">Add a department</h2>
   <p class="help">Members of a new department can view its documents by default. Grant more access on the department page.</p>

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <p><a href="/documents/{{ id }}">← Back to the document</a></p>
+<div class="table-wrap">
 <table class="audit">
   <caption>Every recorded action on this document, oldest first (times in {{ tz }})</caption>
   <thead><tr><th scope="col">#</th><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Details</th></tr></thead>
@@ -23,4 +24,5 @@
   {% else %}<tr><td colspan="5">No entries.</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

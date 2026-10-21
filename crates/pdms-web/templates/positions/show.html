@@ -178,6 +178,7 @@
 <section aria-labelledby="hist-h">
   <h2 id="hist-h">History</h2>
   {% if history.is_empty() %}<p class="muted">No earlier appointments.</p>{% else %}
+  <div class="table-wrap">
   <table>
     <caption class="visually-hidden">Earlier appointments</caption>
     <thead><tr><th scope="col">Person</th><th scope="col">Term</th><th scope="col">Ended</th><th scope="col">Appointed by</th><th scope="col">Requirements</th></tr></thead>
@@ -189,6 +190,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </section>
 {% endblock %}

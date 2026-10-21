@@ -8,9 +8,9 @@
 <form method="post" action="/admin/outlook/sync" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit">Synchronize now</button></form>
 {% if !failing.is_empty() %}
 <h3>Problems</h3>
-<table><thead><tr><th scope="col">Date</th><th scope="col">Last error</th></tr></thead><tbody>
+<div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Last error</th></tr></thead><tbody>
 {% for f in failing %}<tr><td><code>{{ f.0 }}</code></td><td class="small">{{ f.1 }}</td></tr>{% endfor %}
-</tbody></table>
+</tbody></table></div>
 {% endif %}
 {% else %}
 <p>Off. Calendar subscriptions (ICS) work without it. To have PDMS create and maintain Outlook events in a shared calendar, set <code>[graph_calendar] enabled = true</code> with an Entra ID app registration; see the administrator's guide.</p>

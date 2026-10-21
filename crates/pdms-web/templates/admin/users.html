@@ -5,6 +5,7 @@
   <input id="q" name="q" type="search" value="{{ q }}" placeholder="Name or email">
   <button type="submit">Search</button>
 </form>
+<div class="table-wrap">
 <table>
   <caption>Users{% if !q.is_empty() %} matching “{{ q }}”{% endif %}</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Departments</th><th scope="col">Sign-in</th><th scope="col">Last sign-in</th></tr></thead>
@@ -23,6 +24,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 
 <section aria-labelledby="new-user-h">
   <h2 id="new-user-h">Add a user</h2>
