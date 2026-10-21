@@ -1,0 +1,10 @@
+<svg class="chart" viewBox="0 0 {{ chart.width }} 28" role="img" aria-label="{{ chart.aria }}">
+  {% for s in chart.segments %}
+  <rect class="{{ s.class }}" x="{{ s.x }}" y="0" width="{{ s.w }}" height="28" rx="4"><title>{{ s.label }}: {{ s.count }}</title></rect>
+  {% endfor %}
+</svg>
+<ul class="chart-legend">
+  {% for s in chart.segments %}
+  <li><span class="legend-dot legend-{{ s.class }}" aria-hidden="true"></span>{{ s.label }}<span class="legend-count">{{ s.count }}</span></li>
+  {% endfor %}
+</ul>

@@ -598,6 +598,7 @@ mod tests {
             external_id: "DOC-1".into(),
             title: "T".into(),
             type_name: "Policy".into(),
+            department_id: Uuid::nil(),
             department_name: "IT".into(),
             owner_name: "O".into(),
             status,

@@ -886,6 +886,24 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .chart-grid { stroke: var(--border); stroke-width: 1; }
 .chart-label { fill: var(--muted); font-size: 13px; }
 .chart-value { fill: var(--ink); font-size: 14px; font-weight: 600; }
+.chart-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chart-legend li { display: flex; align-items: center; gap: 10px; }
+.chart-legend .legend-count { margin-left: auto; font-weight: 600; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex: none; background: var(--neutral-dot); }
+.legend-chart-seg-good { background: var(--good-dot); }
+.legend-chart-seg-info { background: var(--info-dot); }
+.legend-chart-seg-warning { background: var(--warn-dot); }
+.legend-chart-seg-critical { background: var(--crit-dot); }
+.legend-chart-seg-neutral { background: var(--neutral-dot); }
+.overview-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin: 0 0 16px; }
+.overview-filters > div { display: flex; flex-direction: column; gap: 4px; }
+.chart-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
+.chart-panel { min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.chart-panel h3 { margin: 0; font-size: 18px; }
+.chart-panel p { margin: 0; }
+.chart-link { font-size: 14px; font-weight: 600; margin-top: auto; padding-top: 6px; }
+.board-summary { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.board-summary li { display: flex; justify-content: space-between; gap: 12px; }
 
 /* ==========================================================================
    7. Print

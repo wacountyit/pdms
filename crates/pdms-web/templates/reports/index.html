@@ -1,5 +1,89 @@
 {% extends "base.html" %}
+{% block heading %}
+<div class="dash-header">
+  <div>
+    <h1>Reports</h1>
+    <p class="muted">Everything you can see, as of {{ o.as_of }}</p>
+  </div>
+</div>
+{% endblock %}
 {% block content %}
+<section class="panel" aria-labelledby="overview-h">
+  <div class="panel-head"><h2 id="overview-h">County overview</h2></div>
+  <form method="get" action="/reports" class="overview-filters">
+    <div>
+      <label for="ov-months">Period</label>
+      <select id="ov-months" name="months">
+        <option value="6"{% if o.months == 6 %} selected{% endif %}>Next 6 months</option>
+        <option value="12"{% if o.months == 12 %} selected{% endif %}>Next 12 months</option>
+      </select>
+    </div>
+    <div>
+      <label for="ov-dept">Department</label>
+      <select id="ov-dept" name="department">
+        <option value="">All I can see</option>
+        {% for d in o.departments %}<option value="{{ d.0 }}"{% if d.2 %} selected{% endif %}>{{ d.1 }}</option>{% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="primary">Apply</button>
+  </form>
+  {% if o.capped %}<p class="muted small">Based on the first 20,000 documents you can see.</p>{% endif %}
+
+  <div class="dash-tiles">
+    <a class="tile" href="/documents"><span class="label">Documents</span><span class="value">{{ o.documents.value }}</span><span class="sub">{{ o.documents.sub }}</span></a>
+    <a class="tile tile-critical" href="/reports/overdue"><span class="label">Overdue</span><span class="value">{{ o.overdue.value }}</span><span class="sub">{{ o.overdue.sub }}</span></a>
+    <a class="tile tile-warning" href="/reports/upcoming?days=90"><span class="label">Due in 90 days</span><span class="value">{{ o.due90.value }}</span><span class="sub">{{ o.due90.sub }}</span></a>
+    <a class="tile tile-info" href="/documents?status=in_review"><span class="label">In review</span><span class="value">{{ o.in_review.value }}</span><span class="sub">{{ o.in_review.sub }}</span></a>
+  </div>
+
+  <div class="chart-grid-2">
+    <section class="chart-panel" aria-labelledby="ch-due">
+      <h3 id="ch-due">Due by month</h3>
+      <p class="muted small">Next {{ o.months }} months · {{ o.due_total }} item{% if o.due_total != 1 %}s{% endif %}</p>
+      {% let chart = o.due_chart %}
+      {% include "charts/vbars.html" %}
+      <a class="chart-link" href="{{ o.due_table }}">View as table</a>
+    </section>
+
+    <section class="chart-panel" aria-labelledby="ch-status">
+      <h3 id="ch-status">Documents by status</h3>
+      <p class="muted small">{{ o.status_chart.total }} document{% if o.status_chart.total != 1 %}s{% endif %}</p>
+      {% if o.status_chart.total == 0 %}
+      <p class="muted">No documents yet.</p>
+      {% else %}
+      {% let chart = o.status_chart %}
+      {% include "charts/stacked.html" %}
+      {% endif %}
+      <a class="chart-link" href="/documents">View as table</a>
+    </section>
+
+    <section class="chart-panel" aria-labelledby="ch-over">
+      <h3 id="ch-over">Overdue by department</h3>
+      <p class="muted small">Items past their date</p>
+      {% if let Some(c) = o.overdue_chart %}
+      {% let chart = c %}
+      {% let bar_class = "chart-seg-critical" %}
+      {% include "charts/hbars.html" %}
+      {% else %}
+      <p class="muted">Nothing is overdue.</p>
+      {% endif %}
+      <a class="chart-link" href="/reports/overdue">View as table</a>
+    </section>
+
+    {% if let Some(b) = o.boards %}
+    <section class="chart-panel" aria-labelledby="ch-boards">
+      <h3 id="ch-boards">Boards and commissions</h3>
+      <p class="muted small">Seats you can see</p>
+      <ul class="board-summary">
+        {% for r in b.rows %}<li><span>{{ r.label }}</span><strong>{{ r.count }}</strong></li>{% endfor %}
+      </ul>
+      <a class="chart-link" href="/positions">View as table</a>
+    </section>
+    {% endif %}
+  </div>
+</section>
+
+<h2>All reports</h2>
 <p>Every report shows only what you are allowed to see, and can be downloaded as CSV (downloads are recorded).</p>
 <ul class="events">
   {% for r in reports %}<li><a href="/reports/{{ r.key }}"><strong>{{ r.title }}</strong></a><br><span class="muted small">{{ r.description }}</span></li>{% endfor %}

@@ -561,3 +561,91 @@ async fn overdue_review_task_row_has_primary_action() {
     );
     assert!(attn.contains("Start review"));
 }
+
+/// Department A with one document, and department B with a Department-visible,
+/// a Restricted and a County-wide document; alice belongs to A.
+async fn overview_fixture(app: &App) -> (Uuid, Uuid, Vec<u8>) {
+    let a = directory::create_department(&app.core.db, &system(), "AAA", "Dept Alpha")
+        .await
+        .unwrap();
+    let bdept = directory::create_department(&app.core.db, &system(), "BBB", "Dept Bravo")
+        .await
+        .unwrap();
+    let (alice, secret) = user(&app.core, "alice@x.org", Some(a), None).await;
+    let (bob, _) = user(&app.core, "bob@x.org", Some(bdept), None).await;
+    let soon = Some(today(app) + chrono::Duration::days(10));
+    let m = || MetadataInput {
+        next_review_date: soon,
+        ..Default::default()
+    };
+    doc(app, a, alice, "Alpha doc", "policy", m()).await;
+    for (title, vis) in [
+        ("Bravo dept doc", pdms_authz::Visibility::Department),
+        ("Bravo restricted doc", pdms_authz::Visibility::Restricted),
+        ("Bravo countywide doc", pdms_authz::Visibility::CountyWide),
+    ] {
+        let id = doc(app, bdept, bob, title, "policy", m()).await;
+        documents::set_visibility(&app.core, &system(), id, vis)
+            .await
+            .unwrap();
+    }
+    (a, bdept, secret)
+}
+
+fn tile_value(body: &str, label: &str) -> String {
+    regex::Regex::new(&format!(r#"(?s){label}</span><span class="value">(\d+)<"#))
+        .unwrap()
+        .captures(body)
+        .unwrap_or_else(|| panic!("no {label} tile"))[1]
+        .to_owned()
+}
+
+#[tokio::test]
+async fn overview_counts_respect_visibility() {
+    let app = app().await;
+    let (_, _, secret) = overview_fixture(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = b.get("/reports").await;
+    assert_eq!(r.status, StatusCode::OK);
+    // Alpha's own document plus Bravo's County-wide one.
+    assert_eq!(tile_value(&r.body, "Documents"), "2");
+    assert!(r.body.contains("2 documents"));
+    assert!(r.body.contains("Documents by status: Active 2"));
+    // Only visible departments are offered.
+    assert!(r.body.contains("Dept Alpha") && r.body.contains("Dept Bravo"));
+    assert!(!r.body.contains("Bravo dept doc"));
+}
+
+#[tokio::test]
+async fn overview_charts_render_as_svg_with_labels() {
+    let app = app().await;
+    let (_, _, secret) = overview_fixture(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = b.get("/reports").await;
+    assert!(r.body.contains(r#"role="img""#));
+    assert!(r.body.contains(r#"aria-label="Items due per month:"#));
+    assert!(r.body.matches("View as table").count() >= 3);
+    assert!(r.body.contains("Nothing is overdue."));
+    assert!(r.body.contains("All reports"));
+    assert!(!r.body.contains("style=\""));
+}
+
+#[tokio::test]
+async fn overview_period_and_department_filters() {
+    let app = app().await;
+    let (a, _, secret) = overview_fixture(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let labels = |body: &str| body.matches(r#"class="chart-label""#).count();
+    assert_eq!(labels(&b.get("/reports").await.body), 6);
+    assert_eq!(labels(&b.get("/reports?months=12").await.body), 12);
+    assert_eq!(labels(&b.get("/reports?months=7").await.body), 6);
+    let f = b.get(&format!("/reports?department={a}")).await;
+    assert_eq!(tile_value(&f.body, "Documents"), "1");
+    let bogus = b
+        .get(&format!("/reports?department={}", Uuid::new_v4()))
+        .await;
+    assert_eq!(tile_value(&bogus.body, "Documents"), "2");
+}

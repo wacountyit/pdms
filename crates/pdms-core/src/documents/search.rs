@@ -208,6 +208,7 @@ pub struct DocumentSummary {
     pub external_id: String,
     pub title: String,
     pub type_name: String,
+    pub department_id: Uuid,
     pub department_name: String,
     pub owner_name: String,
     pub status: DocumentStatus,
@@ -270,7 +271,7 @@ fn query(
            JOIN users o ON o.id = d.owner_id
           WHERE d.deleted_at IS NULL AND "
     } else {
-        "SELECT d.id, d.external_id, d.title, t.name AS type_name, dep.name AS department_name,
+        "SELECT d.id, d.external_id, d.title, t.name AS type_name, d.department_id, dep.name AS department_name,
                 o.display_name AS owner_name, d.status, d.execution_date, d.effective_date,
                 d.last_review_date, d.next_review_date, d.renewal_date, d.expiration_date,
                 coalesce(d.review_interval_months, t.review_interval_months) AS review_interval_months,
