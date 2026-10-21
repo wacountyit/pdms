@@ -23,6 +23,7 @@ pub mod directory;
 pub mod documents;
 pub mod error;
 pub mod exports;
+pub mod graph;
 pub mod graph_calendar;
 pub mod integrations;
 pub mod integrity;
