@@ -224,8 +224,23 @@ installed or updated:
    and seal. Placeholders are fine until the county decides.
 3. **Let leadership see the whole county.** The county overview (top of
    **Reports**) and the dashboard show only what the viewer can see. For each
-   leadership account, go to Administration → Access grants and give it view
-   access to all departments with a global grant.
+   leadership account:
+   - **Documents.** Administration → Access grants → **Grant access**. Set
+     *Applies to* to **All documents except Restricted ones**, *Grant to* to
+     the account (under *Users*), *Permission* to `view`, and give a reason.
+     Restricted documents stay hidden unless granted per document (on the
+     document's page).
+   - **Boards and commissions.** That summary appears only for accounts that
+     can see positions. An account sees a position if it belongs to the
+     position's department or manages it. To see every position, it needs an
+     organization-wide **Auditor**, **Appointments Clerk** or
+     **Administrator** role (these hold the "view all appointments"
+     capability).
+     - Auditor is read-only for boards, but it also opens the audit log and
+       the access review reports.
+     - Appointments Clerk can also change boards and appointments.
+     - To assign one: Administration → Users → the account → **Assign role**,
+       for *Whole organization*.
 
 ### Roles
 
