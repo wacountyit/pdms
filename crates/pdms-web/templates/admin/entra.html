@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+{% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
+{% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
+<p>People and their departments come from Microsoft Entra ID. Each night PADM reads every enabled member account: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below.</p>
+
+<section class="panel" aria-labelledby="sync-h">
+  <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
+  <dl class="facts">
+    <dt>Last run</dt><dd>{{ last_run }}</dd>
+    <dt>Result</dt><dd>{{ summary }}</dd>
+    {% if !last_error.is_empty() %}<dt>Last error</dt><dd><span class="status status-critical">{{ last_error }}</span></dd>{% endif %}
+  </dl>
+  {% if !problems.is_empty() %}
+  <h3>Needs attention</h3>
+  <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+  {% endif %}
+  <div class="toolbar">
+    <form method="post" action="/admin/entra/sync">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <button type="submit" class="button primary">Sync now</button>
+    </form>
+    <form method="post" action="/admin/entra/sync">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <input type="hidden" name="full" value="true">
+      <button type="submit" class="button">Full resync</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="map-h">
+  <h2 id="map-h">Department mapping</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Entra {{ attribute }} value</th><th scope="col">PADM department</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for v in values %}
+      <tr><td>{{ v.value }}</td><td>{{ v.department_name }}</td>
+      <td><form method="post" action="/admin/entra/values/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="value" value="{{ v.value }}"><button type="submit" class="button small danger">Remove</button></form></td></tr>
+    {% else %}<tr><td colspan="3">No mappings yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <form method="post" action="/admin/entra/values" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="ev">Value, as it appears in Entra</label><input id="ev" name="value" required maxlength="200">
+    <label for="ed">Department</label>
+    <select id="ed" name="department_id" required>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
+    <span></span><button type="submit" class="button primary">Save mapping</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="unmapped-h">
+  <h2 id="unmapped-h">Values with no department</h2>
+  <p class="help">These people can sign in but see only what is shared with them. Map the value above, or correct the account in Entra (it is read when the account is synced).</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Value</th><th scope="col">People</th></tr></thead>
+    <tbody>
+    {% for u in unmapped %}
+      <tr><td>{% if u.value.is_empty() %}<em>(blank)</em>{% else %}{{ u.value }}{% endif %}</td><td>{{ u.users }}</td></tr>
+    {% else %}<tr><td colspan="2">Every synced person has a mapped department.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
