@@ -7,7 +7,10 @@ building Phases 2–5. D-081 to D-089 were decided on 2026-10-14, when the
 county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
 §0. D-090 and D-091 were decided on 2026-10-15 (visibility follow-ups).
 D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
-finished 2026-10-21).
+finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
+D-096 was decided while building plan P2 (Entra sync, 2026-10-21).
+New entries take the next number after the highest one on `main` and in
+open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
 implemented.
 
@@ -730,6 +733,14 @@ sign-in. R1 is done before sub-projects 1–3 so there is a presentable shell
 to show county leadership. Round 2 (R2, the remaining pages) comes after
 sub-projects 1–3 so it covers the final features. See
 [the R1 spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md).
+
+**Update 2026-10-21:** R1 is built and merged.
+- The owner started R2 now, with a second contributor, in parallel with
+  sub-projects 1–3 rather than after them.
+- R2 therefore coordinates with the work that touches the same screens: plan
+  P2's Entra ID sync page, P4's SharePoint page, and sub-project 3's
+  removal of the Outlook sync and change to tags.
+- See [the R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
 
 ### D-093 Branding is set on an admin page and is public before sign-in — Accepted (2026-10-15)
 Administrators set the county name, accent color, and seal under

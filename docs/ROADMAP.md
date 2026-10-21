@@ -21,9 +21,11 @@ images are still named `pdms`.
 - **Original phases 0–5:** built and tested (see the Status table in the
   README).
   - At commit `cbc9c70`, `cargo fmt --check` and `cargo clippy -D warnings`
-    are clean.
-  - `cargo test --workspace` gives 228 passed, 0 failed, and 2 ignored. The
-    ignored ones are the opt-in real-OCR and real-ClamAV tests.
+    are clean, and `cargo test --workspace` gives 228 passed, 0 failed, and
+    2 ignored.
+  - On `main` on 2026-10-21, after P1, UI redesign R1 and P2, it gives 391
+    passed, 0 failed, and 2 ignored.
+  - The ignored ones are the opt-in real-OCR and real-ClamAV tests.
 - **Test deployment:** installed on the county's development server with
   `install.sh`.
   - It uses the bundled Caddy (HTTPS with an internal certificate), OCR,
@@ -46,6 +48,28 @@ images are still named `pdms`.
   county overview; branding admin page; usernames for local accounts
   (D-092 to D-095). The
   [admin guide](ADMIN_GUIDE.md) explains branding, usernames, and demo setup.
+- **Plan P2, Entra user sync** (2026-10-21, merged in
+  [PR #1](https://github.com/wacountyit/pdms/pull/1)):
+  - the certificate-based Graph client;
+  - the nightly and on-demand Entra sync, with Department mapping and
+    departures;
+  - SSO by Entra object ID only;
+  - the Administration → Entra ID sync page.
+
+  It adds migration `0010` and decision D-096. It is installed on the test
+  server with the sync off; the admin guide's "Entra ID user sync" section
+  explains how to turn it on.
+
+### 0.1a In progress
+
+- **UI redesign R2** (from 2026-10-21): start with the
+  [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
+  - It lists every remaining screen, R1's design system and constraints, and
+    the R1 follow-ups to fold in.
+  - It also lists the files R2 shares with work still to come: P3/P4,
+    sub-project 3, and the security fixes.
+  - [`CLAUDE.md`](../CLAUDE.md) at the repository root has the rules and
+    commands for anyone, or any Claude session, working in this repository.
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -80,11 +104,11 @@ Work through these in order unless noted. Each one gets its own spec and plan.
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | final P1 review |
 | 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility), P3 (storage), P4 (access, change detection, operations) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
-| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
+| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
-| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | Not started; after 1–3 so it covers the final features | — |
+| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | **Designing** (from 2026-10-21, a second contributor). On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them, so R2 coordinates with them (brief §7) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md); the R2 spec and plan come next |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 
@@ -290,6 +314,7 @@ Ordered by likely value; adjust after the pilot. Where these overlap the sub-pro
 ## 6. Making changes
 
 - **Code:** Rust workspace; see README "Develop". Before handing over a change: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`, and after query or migration changes `cargo sqlx prepare --workspace -- --all-targets`.
-- **Database changes:** add a new migration file (`migrations/0008_…`); never edit an applied one.
-- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md` (next number after the last entry, currently D-089).
+- **Database changes:** add a new migration file; never edit one that is on `main`. Take the next number after the highest on `main` **and** in open PRs. On 2026-10-21, `main` ends at `0010`. Plans P3 and P4 expect `0011` and `0012`, and renumber at their own pre-flight if other work takes those numbers first.
+- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md`. Take the next number after the highest on `main` and in open PRs. On 2026-10-21, `main` ends at D-096. Plan P4 expects D-097 onward and renumbers the same way.
+- **Working with Claude:** [`CLAUDE.md`](../CLAUDE.md) at the repository root has these rules and the commands in one place.
 - **Versions:** tag releases (`v1.0.0` for go-live), keep a `CHANGELOG.md`, and upgrade servers with `git pull && ./install.sh` after a backup.

@@ -25,8 +25,9 @@ packaged as a single Docker image.
 
 **What's next:** the PADM plan (SharePoint document storage, Entra user sync, a UI
 redesign, and more), with what is done and what remains, is in
-[docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand-updated-2026-10-14).
-Start there if you are picking up the work.
+[docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand-updated-2026-10-21).
+Start there if you are picking up the work, and read [CLAUDE.md](CLAUDE.md)
+for the rules and commands that apply to every change.
 
 ## Install
 
@@ -141,6 +142,8 @@ migrations/          SQL migrations
 deploy/              database bootstrap, reverse-proxy samples, backup and restore scripts,
                      the OCR sidecar (deploy/ocr)
 docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP, ROADMAP; superpowers/specs (designs)
+                     and superpowers/plans (implementation plans)
+tools/               developer tools (ui-screenshots: page screenshots for UI work)
 ```
 
 ## Documentation
@@ -149,7 +152,9 @@ docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP, ROADMAP; supe
 - [docs/DECISIONS.md](docs/DECISIONS.md): decision log and open questions
 - [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md): installation, SSO, users and access, documents, reminders, workflow, appointments, records requests, reports, API and webhooks, audit, operations
 - [docs/ROADMAP.md](docs/ROADMAP.md): testing plan, pilot, go-live checklist, known gaps, and future additions
-- [docs/superpowers/specs/](docs/superpowers/specs/): design specs for planned work (one per sub-project)
+- [docs/superpowers/specs/](docs/superpowers/specs/): design specs for planned work (one per sub-project), and [plans/](docs/superpowers/plans/) for their step-by-step implementation plans
+- [CLAUDE.md](CLAUDE.md): rules and commands for contributors and Claude sessions (public-repo rules, numbering, checks to run)
+- [tools/ui-screenshots/](tools/ui-screenshots/README.md): screenshots of every page with layout checks, for UI work
 - [docs/BACKUP.md](docs/BACKUP.md): what to back up, consistent backups (including enterprise backup systems), restore, and `verify-integrity`
 - API reference: `/api/docs` on a running server, and `/api/v1/openapi.json`
 

@@ -1,14 +1,18 @@
 # PADM UI redesign, round 1 (R1): design
 
 - **Date:** 2026-10-15
-- **Status:** Draft for owner review
+- **Status:** approved by the owner, then built and merged to `main` on
+  2026-10-21. ROADMAP §0.3 row 5a links the plan. This spec now serves as the
+  reference for the design system that R2 builds on.
 - **Direction:** "D". The project owner chose it from four demo directions
   (A Civic Modern, B Clean Workspace, C Executive Overview, D = A's layout in
   C's style). The demos are mockups only and are not part of this repository.
 - **Roadmap:** sub-project 5 ("UI redesign") is split into R1 (this spec) and
   R2 (the remaining pages). The owner moved R1 ahead of sub-projects 1–3 so
-  there is a presentable shell to show county leadership. R2 still comes
-  after 1–3.
+  there is a presentable shell to show county leadership.
+  - R2 was planned to come after 1–3. On 2026-10-21 the owner started it in
+    parallel instead; see the [R2 brief](2026-10-21-ui-redesign-r2-brief.md)
+    and D-092's update.
 
 ## 1. Purpose
 

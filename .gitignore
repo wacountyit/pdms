@@ -64,3 +64,8 @@ records-request-*.zip
 ._*
 Thumbs.db
 desktop.ini
+
+# --- UI screenshot runs (tools/ui-screenshots) ----------------------------------
+/tools/ui-screenshots/out/
+/tools/ui-screenshots/ids.json
+/tools/ui-screenshots/.pylib/
