@@ -180,6 +180,17 @@ pub async fn update(core: &Core, ctx: &Ctx, org_name: &str, accent: &str) -> Cor
             "The county name must be 120 characters or fewer.",
         ));
     }
+    // The name goes into page titles, emails, calendar feeds and webhooks;
+    // a line break or other control character has no place in any of them.
+    // (Surrounding whitespace was already trimmed off.)
+    if name
+        .as_ref()
+        .is_some_and(|n| n.chars().any(char::is_control))
+    {
+        return Err(CoreError::validation(
+            "The county name can't contain control characters.",
+        ));
+    }
     let accent = match non_empty(accent) {
         Some(a) => Some(
             color::validate_accent(&a)

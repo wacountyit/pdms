@@ -77,6 +77,44 @@ async fn update_validates_normalizes_and_audits() {
 }
 
 #[tokio::test]
+async fn county_name_refuses_control_characters() {
+    let (core, _db) = core().await;
+    let sys = system();
+    let before = audit_actions(&core).await.len();
+    for bad in [
+        "Line\nBreak County",
+        "Carriage\rReturn County",
+        "Tab\tCounty",
+        "Bell\u{7}County",
+        "Escape\u{1b}[31mCounty",
+        "Delete\u{7f}County",
+        "Next\u{85}Line County",
+    ] {
+        match branding::update(&core, &sys, bad, "").await {
+            Err(CoreError::Validation(m)) => {
+                assert_eq!(
+                    m, "The county name can't contain control characters.",
+                    "{bad:?}"
+                );
+            }
+            other => panic!("{bad:?} was accepted: {other:?}"),
+        }
+    }
+    // Nothing was saved or audited.
+    assert_eq!(branding::load(&core.db).await.unwrap().org_name, None);
+    assert_eq!(audit_actions(&core).await.len(), before);
+    // Ordinary punctuation and accented letters are fine, and surrounding
+    // whitespace is trimmed rather than refused.
+    branding::update(&core, &sys, " Sample-Ñandú County (O'Day) \n", "")
+        .await
+        .unwrap();
+    assert_eq!(
+        branding::org_name(&core).await,
+        "Sample-Ñandú County (O'Day)"
+    );
+}
+
+#[tokio::test]
 async fn accent_too_light_is_refused_in_service() {
     let (core, _db) = core().await;
     match branding::update(&core, &system(), "", "#F5D76E").await {

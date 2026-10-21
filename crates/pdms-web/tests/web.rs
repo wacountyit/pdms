@@ -501,7 +501,30 @@ async fn microsoft_button_when_sso_off_shows_notice() {
     assert!(page.body.contains("Sign in with Microsoft"));
     let r = b.get("/auth/oidc/start?next=%2F").await;
     assert_eq!(r.status, StatusCode::SEE_OTHER);
-    assert_eq!(r.location(), "/login?notice=sso_off");
+    assert_eq!(r.location(), "/login?notice=sso_off&next=%2F");
+    // Where the person was going survives the detour, URL-encoded...
+    let r = b
+        .get("/auth/oidc/start?next=%2Fdocuments%3Fstatus%3Doverdue")
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        r.location(),
+        "/login?notice=sso_off&next=%2Fdocuments%3Fstatus%3Doverdue"
+    );
+    let kept = b.get(r.location()).await;
+    assert!(
+        kept.body
+            .contains(r#"name="next" value="/documents?status=overdue""#),
+        "{}",
+        kept.body
+    );
+    // ...but only a safe local path: anything else becomes "/".
+    for bad in ["https%3A%2F%2Fevil.example", "%2F%2Fevil.example", ""] {
+        let r = b.get(&format!("/auth/oidc/start?next={bad}")).await;
+        assert_eq!(r.location(), "/login?notice=sso_off&next=%2F", "{bad}");
+    }
+    let r = b.get("/auth/oidc/start").await;
+    assert_eq!(r.location(), "/login?notice=sso_off&next=%2F");
     let back = b.get("/login?notice=sso_off").await;
     assert!(
         back.body

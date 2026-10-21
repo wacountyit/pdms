@@ -439,6 +439,13 @@ async fn create_admin(
         .await?
         .into_iter()
         .find(|u| u.email.eq_ignore_ascii_case(email));
+
+    // Validate the username before anything changes (reactivating or creating
+    // the user), so a bad or taken one cannot leave the account half set up.
+    if let Some(username) = username {
+        directory::check_username(&core.db, username, existing.as_ref().map(|u| u.id)).await?;
+    }
+
     let user_id = match existing {
         Some(u) => {
             if u.status != UserStatus::Active {
@@ -452,12 +459,6 @@ async fn create_admin(
         }
         None => directory::create_user(&core.db, &ctx, name, email, None).await?,
     };
-
-    // Validate the username before anything changes, so a bad one cannot leave
-    // the account half set up.
-    if let Some(username) = username {
-        directory::check_username(&core.db, username, Some(user_id)).await?;
-    }
 
     let secret = totp::generate_secret();
     directory::set_local_credentials(

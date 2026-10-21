@@ -232,8 +232,11 @@ pub async fn oidc_start(
     Query(q): Query<NextQuery>,
 ) -> AppResult<Response> {
     let Some(oidc) = state.oidc.clone() else {
-        // The button is always shown; explain instead of a 404.
-        return Ok(Redirect::to("/login?notice=sso_off").into_response());
+        // The button is always shown; explain instead of a 404, and keep
+        // where the person was going (only a safe local path survives).
+        let next = safe_return_to(q.next.as_deref().unwrap_or("/"));
+        let next: String = url::form_urlencoded::byte_serialize(next.as_bytes()).collect();
+        return Ok(Redirect::to(&format!("/login?notice=sso_off&next={next}")).into_response());
     };
     rate_limit(&state, &client)?;
     let (url, flow) = oidc.begin(q.next.as_deref().unwrap_or("/"));
