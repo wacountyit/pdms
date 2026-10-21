@@ -260,8 +260,16 @@ fn query(
     perm: Permission,
     defs: &[FieldDef],
     limit: Option<(i64, i64)>,
+    counts_only: bool,
 ) -> CoreResult<QueryBuilder<Postgres>> {
-    let mut qb = QueryBuilder::new(
+    let mut qb = QueryBuilder::new(if counts_only {
+        "SELECT d.status, count(*) AS n
+           FROM documents d
+           JOIN document_types t ON t.id = d.document_type_id
+           JOIN departments dep ON dep.id = d.department_id
+           JOIN users o ON o.id = d.owner_id
+          WHERE d.deleted_at IS NULL AND "
+    } else {
         "SELECT d.id, d.external_id, d.title, t.name AS type_name, dep.name AS department_name,
                 o.display_name AS owner_name, d.status, d.execution_date, d.effective_date,
                 d.last_review_date, d.next_review_date, d.renewal_date, d.expiration_date,
@@ -276,8 +284,8 @@ fn query(
            JOIN document_types t ON t.id = d.document_type_id
            JOIN departments dep ON dep.id = d.department_id
            JOIN users o ON o.id = d.owner_id
-          WHERE d.deleted_at IS NULL AND ",
-    );
+          WHERE d.deleted_at IS NULL AND "
+    });
     // Authorization first: system contexts see everything, everyone else
     // only what the policy engine allows.
     match ctx.principal() {
@@ -309,6 +317,7 @@ fn query(
         qb.push(" AND d.owner_id = ").push_bind(v);
     }
     match f.status {
+        _ if counts_only => {}
         Some(s) => {
             qb.push(" AND d.status = ").push_bind(s);
         }
@@ -416,6 +425,11 @@ fn query(
         }
     }
 
+    if counts_only {
+        qb.push(" GROUP BY d.status");
+        return Ok(qb);
+    }
+
     let dir = if f.descending { " DESC" } else { " ASC" };
     qb.push(" ORDER BY ");
     match &f.sort {
@@ -476,7 +490,7 @@ pub async fn all(
     limit: i64,
 ) -> CoreResult<Vec<DocumentSummary>> {
     let defs = fields::list(&core.db).await?;
-    let mut qb = query(core, ctx, f, perm, &defs, Some((limit, 0)))?;
+    let mut qb = query(core, ctx, f, perm, &defs, Some((limit, 0)), false)?;
     Ok(qb.build_query_as().fetch_all(&core.db).await?)
 }
 
@@ -492,6 +506,7 @@ pub async fn search(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResult<Se
         Permission::View,
         &defs,
         Some((per_page, (page - 1) * per_page)),
+        false,
     )?;
     let items: Vec<DocumentSummary> = qb.build_query_as().fetch_all(&core.db).await?;
     Ok(SearchResults {
@@ -500,6 +515,19 @@ pub async fn search(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResult<Se
         page,
         per_page,
     })
+}
+
+/// Visible documents per status, for the list's tabs. Applies every filter
+/// except `status`, `include_archived` and paging, with the same visibility
+/// predicate as [`search`]. Statuses with no documents are absent.
+pub async fn status_counts(
+    core: &Core,
+    ctx: &Ctx,
+    f: &DocumentFilter,
+) -> CoreResult<Vec<(DocumentStatus, i64)>> {
+    let defs = fields::list(&core.db).await?;
+    let mut qb = query(core, ctx, f, Permission::View, &defs, None, true)?;
+    Ok(qb.build_query_as().fetch_all(&core.db).await?)
 }
 
 pub const MAX_EXPORT: i64 = 10_000;
@@ -516,6 +544,7 @@ pub async fn export_csv(core: &Core, ctx: &Ctx, f: &DocumentFilter) -> CoreResul
         Permission::Export,
         &defs,
         Some((MAX_EXPORT, 0)),
+        false,
     )?;
     let items: Vec<DocumentSummary> = qb.build_query_as().fetch_all(&core.db).await?;
 

@@ -1471,3 +1471,52 @@ async fn demo_seed_shows_all_three_visibilities() {
         ]
     );
 }
+
+#[tokio::test]
+async fn status_counts_respect_visibility() {
+    let (core, _db) = core().await;
+    let (dept_a, alice) = editing_department(&core, "AAA", "alice@x.org").await;
+    let (dept_b, bob) = editing_department(&core, "BBB", "bob@x.org").await;
+    let other = type_id(&core, "other").await;
+    let ctx_a = as_user(&core, alice).await;
+    let ctx_b = as_user(&core, bob).await;
+    for (title, v) in [
+        ("B internal", Visibility::Department),
+        ("B restricted", Visibility::Restricted),
+        ("B county", Visibility::CountyWide),
+    ] {
+        new_doc_with(&core, &ctx_b, meta(other, dept_b, title), bob, v).await;
+    }
+    documents::create(
+        &core,
+        &ctx_a,
+        NewDocument {
+            visibility: Default::default(),
+            metadata: meta(other, dept_a, "A draft"),
+            owner_id: alice,
+            status: DocumentStatus::Draft,
+            tags: vec![],
+            file: None,
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut counts = search::status_counts(&core, &ctx_a, &DocumentFilter::default())
+        .await
+        .unwrap();
+    counts.sort_by_key(|(s, _)| s.as_str());
+    assert_eq!(
+        counts,
+        vec![(DocumentStatus::Active, 1), (DocumentStatus::Draft, 1)]
+    );
+    // Status and paging are ignored; other filters still apply.
+    let f = DocumentFilter {
+        status: Some(DocumentStatus::Draft),
+        q: Some("county".into()),
+        ..Default::default()
+    };
+    let counts = search::status_counts(&core, &ctx_a, &f).await.unwrap();
+    assert_eq!(counts, vec![(DocumentStatus::Active, 1)]);
+}

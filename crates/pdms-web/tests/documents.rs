@@ -536,3 +536,141 @@ async fn unknown_visibility_value_is_rejected() {
         .unwrap();
     assert_eq!(n, 0, "nothing created");
 }
+
+async fn seed(
+    app: &App,
+    dept: Uuid,
+    owner: Uuid,
+    title: &str,
+    status: pdms_core::documents::status::DocumentStatus,
+    review: Option<chrono::NaiveDate>,
+    renewal: Option<chrono::NaiveDate>,
+) {
+    use pdms_core::documents::{MetadataInput, NewDocument};
+    let t = type_id(app, "policy").await.parse().unwrap();
+    pdms_core::documents::create(
+        &app.core,
+        &system(),
+        NewDocument {
+            visibility: Default::default(),
+            metadata: MetadataInput {
+                title: title.into(),
+                document_type_id: t,
+                department_id: dept,
+                next_review_date: review,
+                renewal_date: renewal,
+                ..Default::default()
+            },
+            owner_id: owner,
+            status,
+            tags: vec![],
+            file: None,
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// The `<a>` element (href, inner html) whose href carries `status=<value>`.
+fn tab<'a>(body: &'a str, value: &str) -> (&'a str, &'a str) {
+    let needle = format!("status={value}\"");
+    let end = body
+        .find(&needle)
+        .unwrap_or_else(|| panic!("no {value} tab"));
+    let start = body[..end].rfind("<a href=\"").unwrap();
+    let close = body[end..].find("</a>").unwrap() + end;
+    (&body[start..end], &body[end..close])
+}
+
+#[tokio::test]
+async fn status_tabs_show_counts_and_keep_filters() {
+    use pdms_core::documents::status::DocumentStatus as S;
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "HR", "alice@x.org").await;
+    seed(&app, dept, uid, "Safety plan", S::Active, None, None).await;
+    seed(&app, dept, uid, "Safety manual", S::Active, None, None).await;
+    seed(&app, dept, uid, "Safety draft", S::Draft, None, None).await;
+    seed(&app, dept, uid, "Budget memo", S::Active, None, None).await;
+    seed(&app, dept, uid, "Safety old", S::Active, None, None).await;
+    sqlx::query("UPDATE documents SET status = 'archived' WHERE title = 'Safety old'")
+        .execute(&app.core.db)
+        .await
+        .unwrap();
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let t = type_id(&app, "policy").await;
+    let page = b
+        .get(&format!("/documents?q=Safety&type={t}&page=1&sort=title"))
+        .await;
+    for value in [
+        "active",
+        "in_review",
+        "renewal_due",
+        "overdue",
+        "draft",
+        "expired",
+    ] {
+        let (href, _) = tab(&page.body, value);
+        assert!(href.contains("q=Safety"), "{value}: {href}");
+        assert!(href.contains(&format!("type={t}")), "{value}: {href}");
+        assert!(href.contains("sort=title"), "{value}: {href}");
+        assert!(!href.contains("page="), "{value}: {href}");
+    }
+    let (_, inner) = tab(&page.body, "active");
+    assert!(inner.contains("Active") && inner.contains(">2<"), "{inner}");
+    let (_, inner) = tab(&page.body, "draft");
+    assert!(inner.contains(">1<"), "{inner}");
+    // "All" excludes archived, has no status param, and is the current tab.
+    let tabs = page.body.find("class=\"tabs\"").unwrap();
+    let all = page.body[tabs..].find("aria-current=\"page\"").unwrap() + tabs;
+    let all = &page.body[all..all + 120];
+    assert!(all.contains("All") && all.contains(">3<"), "{all}");
+    assert!(
+        page.body.contains("<details class=\"disclosure\" open"),
+        "sort is a More filter"
+    );
+    let plain = b.get("/documents?q=Safety").await;
+    assert!(!plain.body.contains("<details class=\"disclosure\" open"));
+    // Choosing a tab marks it current and opens nothing else.
+    let page = b.get("/documents?status=archived").await;
+    assert!(page.body.contains("Safety old") && !page.body.contains("Budget memo"));
+    assert!(page.body.contains("<details class=\"disclosure\" open"));
+}
+
+#[tokio::test]
+async fn next_date_column_shows_overdue_and_labels() {
+    use pdms_core::documents::status::DocumentStatus as S;
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "HR", "alice@x.org").await;
+    let today = chrono::Utc::now().date_naive();
+    let day = chrono::Days::new(40);
+    seed(
+        &app,
+        dept,
+        uid,
+        "Late one",
+        S::Active,
+        Some(today - day),
+        None,
+    )
+    .await;
+    seed(
+        &app,
+        dept,
+        uid,
+        "Renews soon",
+        S::Active,
+        None,
+        Some(today + day),
+    )
+    .await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let body = b.get("/documents").await.body;
+    assert!(body.contains("Next date") && !body.contains("<th scope=\"col\">Next review"));
+    assert!(body.contains("Overdue · "), "{body}");
+    assert!(body.contains("Renewal · "));
+    let empty = b.get("/documents?q=zzzznothing").await.body;
+    assert!(empty.contains("Clear filters"));
+}

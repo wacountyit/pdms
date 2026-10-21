@@ -28,6 +28,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::middleware::DeferredCsrf;
+use crate::next_date::{NextDate, next_date};
 use crate::session::CurrentUser;
 use crate::state::AppState;
 use crate::upload;
@@ -319,6 +320,44 @@ impl ListQuery {
 
     /// The query string without paging, for export and page links.
     fn base_query(&self) -> String {
+        self.query_string(true)
+    }
+
+    /// Whether any control inside "More filters" is in use.
+    fn more_open(&self) -> bool {
+        let rare_status = matches!(
+            DocumentStatus::parse(&self.status),
+            Some(s) if !matches!(
+                s,
+                DocumentStatus::Active
+                    | DocumentStatus::InReview
+                    | DocumentStatus::RenewalDue
+                    | DocumentStatus::Overdue
+                    | DocumentStatus::Draft
+                    | DocumentStatus::Expired
+            )
+        );
+        let used = [
+            &self.date_field,
+            &self.from,
+            &self.to,
+            &self.cf,
+            &self.cf_value,
+            &self.cf_min,
+            &self.cf_max,
+            &self.sort,
+            &self.dir,
+            &self.mine,
+            &self.archived,
+        ]
+        .into_iter()
+        .any(|v| !v.is_empty());
+        rare_status || used || !self.tag.is_empty()
+    }
+
+    /// Query string without paging, optionally without the status filter
+    /// (tab links add their own).
+    fn query_string(&self, with_status: bool) -> String {
         let mut pairs: Vec<(&str, String)> = vec![];
         let mut add = |k: &'static str, v: &str| {
             if !v.is_empty() {
@@ -328,7 +367,9 @@ impl ListQuery {
         add("q", &self.q);
         add("type", &self.doc_type);
         add("department", &self.department);
-        add("status", &self.status);
+        if with_status {
+            add("status", &self.status);
+        }
         add("mine", &self.mine);
         add("tag_mode", &self.tag_mode);
         add("date_field", &self.date_field);
@@ -357,21 +398,43 @@ pub struct Row {
     pub owner_name: String,
     pub status: &'static str,
     pub status_label: &'static str,
-    pub next_review: String,
-    pub renewal: String,
-    pub expiration: String,
-    pub visibility: &'static str,
+    pub status_class: &'static str,
+    pub next: Option<NextDate>,
+    pub next_text: String,
+    pub next_overdue: bool,
+    pub visibility_label: &'static str,
+    pub visibility_strong: bool,
     pub tags: Vec<(String, String)>,
+}
+
+pub struct TabView {
+    pub label: &'static str,
+    pub count: i64,
+    pub href: String,
+    pub current: bool,
+}
+
+/// Tone class for a status in the list: the dot-and-word `.status` badge.
+fn status_class(s: DocumentStatus) -> &'static str {
+    match s {
+        DocumentStatus::Active => "good",
+        DocumentStatus::InReview => "info",
+        DocumentStatus::RenewalDue => "warning",
+        DocumentStatus::Overdue => "critical",
+        _ => "neutral",
+    }
 }
 
 #[derive(Template)]
 #[template(path = "documents/list.html")]
 struct ListPage {
+    tabs: Vec<TabView>,
+    more_open: bool,
+    showing: String,
     l: Layout,
     q: ListQuery,
     query: String,
     rows: Vec<Row>,
-    total: i64,
     page: i64,
     pages: i64,
     types: Vec<DocumentType>,
@@ -391,36 +454,91 @@ pub async fn list(
 ) -> AppResult<Html<String>> {
     let filter = q.filter(user.session.user_id)?;
     let results = search::search(&state.core, &user.ctx, &filter).await?;
+    let counts = search::status_counts(&state.core, &user.ctx, &filter).await?;
+    let count_of = |s: DocumentStatus| counts.iter().find(|(c, _)| *c == s).map_or(0, |(_, n)| *n);
+    let all_count: i64 = counts
+        .iter()
+        .filter(|(s, _)| *s != DocumentStatus::Archived)
+        .map(|(_, n)| *n)
+        .sum();
+    let tab_base = q.query_string(false);
+    let tab_href = |status: Option<DocumentStatus>| {
+        let sep = if tab_base.is_empty() { "" } else { "&" };
+        match status {
+            Some(s) => format!("/documents?{tab_base}{sep}status={}", s.as_str()),
+            None => format!("/documents?{tab_base}"),
+        }
+    };
+    let current = DocumentStatus::parse(&q.status);
+    let mut tabs = vec![TabView {
+        label: "All",
+        count: all_count,
+        href: tab_href(None),
+        current: current.is_none(),
+    }];
+    for s in [
+        DocumentStatus::Active,
+        DocumentStatus::InReview,
+        DocumentStatus::RenewalDue,
+        DocumentStatus::Overdue,
+        DocumentStatus::Draft,
+        DocumentStatus::Expired,
+    ] {
+        tabs.push(TabView {
+            label: s.label(),
+            count: count_of(s),
+            href: tab_href(Some(s)),
+            current: current == Some(s),
+        });
+    }
+    let today = pdms_core::schedule::local_today(Utc::now(), state.core.config.timezone());
+    let first = (results.page - 1) * results.per_page + 1;
+    let showing = if results.total == 0 {
+        "Showing 0 of 0".to_owned()
+    } else {
+        let last = (first + results.items.len() as i64 - 1).max(first);
+        format!("Showing {first}\u{2013}{last} of {}", results.total)
+    };
     let db = &state.core.db;
     let pages = ((results.total + results.per_page - 1) / results.per_page).max(1);
     let page = ListPage {
         l: Layout::new(&state, &user, flash, "Documents", "documents"),
+        tabs,
+        more_open: q.more_open(),
+        showing,
         query: q.base_query(),
         rows: results
             .items
             .into_iter()
-            .map(|d| Row {
-                id: d.id,
-                external_id: d.external_id,
-                title: d.title,
-                type_name: d.type_name,
-                department_name: d.department_name,
-                owner_name: d.owner_name,
-                status: d.status.as_str(),
-                status_label: d.status.label(),
-                next_review: fmt_date(d.next_review_date),
-                renewal: fmt_date(d.renewal_date),
-                expiration: fmt_date(d.expiration_date),
-                visibility: d.visibility.label(),
-                tags: d
-                    .tags
-                    .0
-                    .into_iter()
-                    .map(|t| (tag_class(t.id), t.name))
-                    .collect(),
+            .map(|d| {
+                let next = next_date(today, d.next_review_date, d.renewal_date, d.expiration_date);
+                Row {
+                    id: d.id,
+                    external_id: d.external_id,
+                    title: d.title,
+                    type_name: d.type_name,
+                    department_name: d.department_name,
+                    owner_name: d.owner_name,
+                    status: d.status.as_str(),
+                    status_label: d.status.label(),
+                    status_class: status_class(d.status),
+                    next_text: next.as_ref().map_or_else(
+                        || "\u{2014}".to_owned(),
+                        |n| format!("{} \u{b7} {}", n.label, fmt_date(Some(n.date))),
+                    ),
+                    next_overdue: next.as_ref().is_some_and(|n| n.overdue),
+                    next,
+                    visibility_label: d.visibility.label(),
+                    visibility_strong: d.visibility != Visibility::Department,
+                    tags: d
+                        .tags
+                        .0
+                        .into_iter()
+                        .map(|t| (tag_class(t.id), t.name))
+                        .collect(),
+                }
             })
             .collect(),
-        total: results.total,
         page: results.page,
         pages,
         types: types::list_types(db).await?,

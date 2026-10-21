@@ -147,8 +147,9 @@ async fn nav_is_rendered_for_sidebar_and_menu_with_one_current_item_each() {
     assert!(docs.body.contains("<nav aria-label=\"Main (menu)\">"));
     // The menu copy starts closed.
     assert!(!docs.body.contains("<details class=\"menu-toggle\" open"));
-    // Documents is the current page in both copies, and nothing else is.
-    assert_eq!(docs.body.matches("aria-current=\"page\"").count(), 2);
+    // Documents is the current page in both copies, and nothing else is
+    // except the list's own "All" status tab.
+    assert_eq!(docs.body.matches("aria-current=\"page\"").count(), 3);
     assert_eq!(
         docs.body
             .matches("<a href=\"/documents\" aria-current=\"page\">")

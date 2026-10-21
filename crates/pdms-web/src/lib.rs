@@ -5,6 +5,7 @@
 pub mod dashboard;
 pub mod error;
 pub mod middleware;
+pub mod next_date;
 pub mod routes;
 pub mod session;
 pub mod state;
