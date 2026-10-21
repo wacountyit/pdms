@@ -674,3 +674,303 @@ async fn next_date_column_shows_overdue_and_labels() {
     let empty = b.get("/documents?q=zzzznothing").await.body;
     assert!(empty.contains("Clear filters"));
 }
+
+// ---------------------------------------------------------------------------
+// The document page (direction D)
+// ---------------------------------------------------------------------------
+
+fn local_today(app: &App) -> chrono::NaiveDate {
+    pdms_core::schedule::local_today(chrono::Utc::now(), app.core.config.timezone())
+}
+
+/// Run the planner as of this morning: date-driven statuses and review tasks.
+async fn plan_now(app: &App) {
+    let morning = local_today(app).and_hms_opt(16, 0, 0).unwrap().and_utc();
+    pdms_core::notifications::plan(&app.core, morning)
+        .await
+        .unwrap();
+}
+
+async fn doc_id(app: &App, title: &str) -> Uuid {
+    sqlx::query_scalar("SELECT id FROM documents WHERE title = $1")
+        .bind(title)
+        .fetch_one(&app.core.db)
+        .await
+        .unwrap()
+}
+
+/// The value of the key-number tile labelled `label`, if shown.
+fn key_number(body: &str, label: &str) -> Option<String> {
+    let re = regex::Regex::new(&format!(
+        r#"<dt class="label">{}</dt>\s*<dd class="value">([^<]*)</dd>\s*<dd class="sub">([^<]*)</dd>"#,
+        regex::escape(label)
+    ))
+    .unwrap();
+    re.captures(body)
+        .map(|c| format!("{} | {}", c[1].trim(), c[2].trim()))
+}
+
+#[tokio::test]
+async fn document_page_keeps_every_action() {
+    use pdms_core::documents::status::DocumentStatus as S;
+    let app = app().await;
+    let (dept, uid, _) = editor(&app, "OPS", "alice@x.org").await;
+    let (admin, admin_secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    // Administrators view and manage permissions everywhere; give this one
+    // edit and delete too, so every part of the page applies.
+    for p in [Permission::Edit, Permission::Delete] {
+        acl::grant(
+            &app.core.db,
+            &system(),
+            Subject::User(admin),
+            Scope::Department(dept),
+            p,
+            None,
+            "t",
+        )
+        .await
+        .unwrap();
+    }
+    // No retention rule, so nothing blocks deletion and its form shows.
+    sqlx::query("UPDATE document_types SET retention_policy_id = NULL")
+        .execute(&app.core.db)
+        .await
+        .unwrap();
+    seed(&app, dept, uid, "Fleet policy", S::Active, None, None).await;
+    let id = doc_id(&app, "Fleet policy").await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &admin_secret).await;
+    let page = b.get(&format!("/documents/{id}")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    let body = page.body.as_str();
+
+    let manage = body
+        .find("<details class=\"disclosure\" id=\"manage\">")
+        .expect("a closed Manage disclosure");
+    let manage_end = body[manage..].find("</details>").unwrap() + manage;
+    assert!(body[manage..manage_end].contains("Manage this document"));
+    for path in ["status", "tags", "versions"] {
+        let action = format!("action=\"/documents/{id}/{path}\"");
+        let at = body.find(&action).unwrap_or_else(|| panic!("no {action}"));
+        assert!(at < manage, "{action} stays outside Manage");
+    }
+    for path in ["visibility", "grants", "owner", "retention", "delete"] {
+        let action = format!("action=\"/documents/{id}/{path}\"");
+        let at = body.find(&action).unwrap_or_else(|| panic!("no {action}"));
+        assert!(at > manage && at < manage_end, "{action} is inside Manage");
+    }
+    assert!(body.contains(&format!("action=\"/documents/{id}/rules\"")));
+    assert!(body.contains(&format!("action=\"/documents/{id}/comments\"")));
+    assert!(body.contains(&format!("href=\"/documents/{id}/edit\"")));
+    assert!(body.contains(&format!("href=\"/documents/{id}/history\"")));
+
+    // "On this page" links only to sections that exist: no dates here.
+    for anchor in ["reviews", "files", "comments", "manage"] {
+        assert!(body.contains(&format!("href=\"#{anchor}\"")), "{anchor}");
+        assert!(body.contains(&format!("id=\"{anchor}\"")), "{anchor}");
+    }
+    assert!(!body.contains("href=\"#dates\"") && !body.contains("id=\"dates\""));
+    assert!(
+        !body.contains(">Start review</a>"),
+        "admin is not the owner"
+    );
+}
+
+#[tokio::test]
+async fn start_review_button_only_for_owner_with_due_review() {
+    use pdms_core::documents::status::DocumentStatus as S;
+    let app = app().await;
+    let (dept, alice, alice_secret) = editor(&app, "OPS", "alice@x.org").await;
+    let today = local_today(&app);
+    let days = chrono::Days::new;
+    seed(
+        &app,
+        dept,
+        alice,
+        "Late review",
+        S::Active,
+        Some(today - days(10)),
+        None,
+    )
+    .await;
+    seed(
+        &app,
+        dept,
+        alice,
+        "Soon review",
+        S::Active,
+        Some(today + days(20)),
+        None,
+    )
+    .await;
+    seed(
+        &app,
+        dept,
+        alice,
+        "Later review",
+        S::Active,
+        Some(today + days(60)),
+        None,
+    )
+    .await;
+    plan_now(&app).await;
+    let late = doc_id(&app, "Late review").await;
+    let soon = doc_id(&app, "Soon review").await;
+    let later = doc_id(&app, "Later review").await;
+
+    let mut a = Browser::new(&app);
+    a.login("alice@x.org", &alice_secret).await;
+    let start = "<a class=\"button primary\" href=\"#reviews\">Start review</a>";
+    for d in [late, soon] {
+        let page = a.get(&format!("/documents/{d}")).await;
+        assert!(page.body.contains(start), "{}", page.body);
+    }
+    let page = a.get(&format!("/documents/{later}")).await;
+    assert!(page.body.contains("Review due "), "the task exists");
+    assert!(!page.body.contains(">Start review</a>"), "due in 60 days");
+
+    // Carol can view the overdue document but does not own it.
+    let board = directory::create_department(&app.core.db, &system(), "BOARD", "Clerk")
+        .await
+        .unwrap();
+    let (_, carol_secret) = user(&app.core, "carol@x.org", Some(board), None).await;
+    pdms_core::documents::share(
+        &app.core,
+        &system(),
+        late,
+        Subject::Department(board),
+        Permission::View,
+        None,
+        "review",
+    )
+    .await
+    .unwrap();
+    let mut c = Browser::new(&app);
+    c.login("carol@x.org", &carol_secret).await;
+    let page = c.get(&format!("/documents/{late}")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(!page.body.contains(">Start review</a>"));
+    assert!(page.body.contains("Days overdue"));
+    assert!(
+        !page.body.contains("id=\"manage\"") && !page.body.contains("href=\"#manage\""),
+        "nothing to manage, so no disclosure and no link"
+    );
+}
+
+#[tokio::test]
+async fn key_numbers_show_versions_and_overdue() {
+    use pdms_core::signatures::{self, NewSignatory, SignedRecord};
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let doc = create_via_form(
+        &mut b,
+        &app,
+        dept,
+        uid,
+        "Facilities agreement",
+        Some(("orig.pdf", &pdf("orig"))),
+    )
+    .await
+    .location()
+    .to_owned();
+    let csrf = b.get(&doc).await.csrf();
+    let r = b
+        .multipart(
+            &format!("{doc}/versions"),
+            &[
+                ("_csrf", csrf.as_str()),
+                ("kind", "amendment"),
+                ("note", "Amendment No. 1"),
+                ("milestone_date", "2014-06-01"),
+            ],
+            Some(("amendment.pdf", &pdf("amend"))),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    // A details-only version carries the amendment's file forward.
+    let r = b
+        .post(
+            &format!("{doc}/versions/1/restore"),
+            &[("_csrf", csrf.as_str()), ("part", "metadata")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    let id: Uuid = doc.trim_start_matches("/documents/").parse().unwrap();
+    let today = local_today(&app);
+    sqlx::query("UPDATE documents SET next_review_date = $1 WHERE id = $2")
+        .bind(today - chrono::Days::new(40))
+        .bind(id)
+        .execute(&app.core.db)
+        .await
+        .unwrap();
+    plan_now(&app).await;
+    let mut signers = Vec::new();
+    for name in ["Jordan Presiding", "Morgan Partner"] {
+        let s = signatures::add(
+            &app.core,
+            &system(),
+            id,
+            NewSignatory {
+                name: name.into(),
+                title: "Signer".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        signers.push(s);
+    }
+    signatures::record_signed(
+        &app.core,
+        &system(),
+        signers[0],
+        SignedRecord {
+            signed_on: Some("2014-06-03".parse().unwrap()),
+            note: String::new(),
+            file: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let page = b.get(&doc).await;
+    let body = page.body.as_str();
+    assert_eq!(
+        key_number(body, "Versions").as_deref(),
+        Some("2 | Latest Jun 1, 2014"),
+        "{body}"
+    );
+    let overdue = key_number(body, "Days overdue").unwrap();
+    assert!(overdue.starts_with("40 | Review was due "), "{overdue}");
+    assert!(key_number(body, "Missed review cycles").is_some());
+    assert!(
+        key_number(body, "Days until review").is_none(),
+        "overdue replaces days until"
+    );
+    assert_eq!(
+        key_number(body, "Signatures").as_deref(),
+        Some("1 of 2 | 1 pending")
+    );
+    assert!(body.contains("Signed Jun 3, 2014") && body.contains("Awaiting signature"));
+    // Files: the amendment's upload holds the current file.
+    assert_eq!(body.matches(">Current</span>").count(), 1);
+    assert!(body.contains(
+        "<span class=\"file-name\">amendment.pdf</span> <span class=\"status status-good\">Current</span>"
+    ));
+
+    // Key dates: the SVG is decorative, the ordered list is the accessible version.
+    assert!(body.contains(
+        "<svg class=\"timeline\" viewBox=\"0 0 1000 64\" aria-hidden=\"true\" focusable=\"false\">"
+    ));
+    assert!(body.contains("href=\"#dates\"") && body.contains("id=\"dates\""));
+    let list = body.find("<ol class=\"timeline-list\">").unwrap();
+    let list = &body[list..list + body[list..].find("</ol>").unwrap()];
+    assert!(
+        list.contains("Effective") && list.contains("May 1, 2013"),
+        "{list}"
+    );
+    assert!(list.contains("Amendment No. 1") && list.contains("Jun 1, 2014"));
+    assert!(list.contains("Review missed"), "{list}");
+}

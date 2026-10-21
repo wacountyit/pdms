@@ -1,0 +1,59 @@
+{# The signatures section of the document page, after Files (spec §11). #}
+{% if wf.requires_signatures || !wf.signatories.is_empty() || wf.can_manage_signatures %}
+<section aria-labelledby="sign-h" id="signatures" class="panel">
+  <h2 id="sign-h">Signatures {% if !wf.signatories.is_empty() %}<span class="muted small">({{ wf.signatures_summary() }})</span>{% endif %}</h2>
+  <p class="muted small">Tracks who must sign and whether they have. Upload the signed copy when recording a signature; it is kept as a “Signed copy” version.</p>
+  {% if wf.signatories.is_empty() %}<p class="muted">{% if wf.requires_signatures %}This document type requires signatures. No signers have been added yet.{% else %}No signers.{% endif %}</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Signers</caption>
+    <thead><tr><th scope="col">Signer</th><th scope="col">Status</th><th scope="col">Details</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for s in wf.signatories %}
+      <tr>
+        <td>{{ s.who }}{% if !s.email.is_empty() %}<br><span class="muted small">{{ s.email }}</span>{% endif %}</td>
+        <td><span class="status status-{{ s.tone }}">{{ s.state }}</span></td>
+        <td class="small">{{ s.detail }}{% if let Some(v) = s.signed_version %}<br><a href="/documents/{{ d.id }}/versions/{{ v }}/download">Signed copy (version {{ v }})</a>{% endif %}{% if !s.note.is_empty() %}<br>{{ s.note }}{% endif %}</td>
+        <td>
+          {% if s.can_request %}<form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/request" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">{% if s.status == "requested" %}Ask again{% else %}Request{% endif %}</button></form>{% endif %}
+          {% if s.can_remove %}<form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Remove</button></form>{% endif %}
+          {% if s.can_record %}
+          <details><summary>Record signature</summary>
+            <form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/signed" enctype="multipart/form-data" class="stack">
+              <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+              <label for="so-{{ s.id }}">Signed on</label><input id="so-{{ s.id }}" name="signed_on" type="date" value="{{ wf.today }}" max="{{ wf.today }}">
+              <label for="sf-{{ s.id }}">Signed copy (optional)</label><input id="sf-{{ s.id }}" name="file" type="file">
+              <label for="sn-{{ s.id }}">Note</label><input id="sn-{{ s.id }}" name="note" maxlength="1000">
+              <div><button type="submit" class="primary small">Record as signed</button></div>
+            </form>
+            <form method="post" action="/documents/{{ d.id }}/signatories/{{ s.id }}/declined" class="stack">
+              <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+              <label for="sd-{{ s.id }}">Or record that they declined</label><input id="sd-{{ s.id }}" name="text" maxlength="1000" placeholder="Reason">
+              <div><button type="submit" class="small">Record as declined</button></div>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if wf.can_manage_signatures %}
+  <details><summary>Add a signer</summary>
+    <form method="post" action="/documents/{{ d.id }}/signatories" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label for="sg-user">User here (optional)</label>
+      <select id="sg-user" name="user"><option value="">— Someone outside this system —</option>{% for u in wf.signers %}<option value="{{ u.0 }}">{{ u.1 }}</option>{% endfor %}</select>
+      <label for="sg-name">Name</label><input id="sg-name" name="name" maxlength="200" aria-describedby="sg-name-help">
+      <span></span><span id="sg-name-help" class="help">Leave blank to use the chosen user's name.</span>
+      <label for="sg-title">Title</label><input id="sg-title" name="title" maxlength="200" placeholder="e.g. Board Chair">
+      <label for="sg-org">Organization</label><input id="sg-org" name="organization" maxlength="200" placeholder="e.g. the other party">
+      <label for="sg-email">Email</label><input id="sg-email" name="email" type="email" maxlength="320">
+      <span></span><button type="submit">Add signer</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endif %}

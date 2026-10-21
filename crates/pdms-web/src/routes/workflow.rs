@@ -59,7 +59,10 @@ pub struct SignatoryRow {
     pub who: String,
     pub email: String,
     pub status: &'static str,
-    pub status_label: &'static str,
+    /// "Signed {date}", "Awaiting signature" or "Declined", with its status
+    /// tone (good, warning, critical).
+    pub state: String,
+    pub tone: &'static str,
     pub detail: String,
     pub note: String,
     pub signed_version: Option<i32>,
@@ -178,16 +181,25 @@ pub async fn panel_view(
             who: s.describe(),
             email: s.email.clone(),
             status: s.status.as_str(),
-            status_label: s.status.label(),
+            state: match s.status {
+                SignatureStatus::Signed => format!("Signed {}", fmt_date(s.signed_on)),
+                SignatureStatus::Declined => "Declined".to_owned(),
+                SignatureStatus::Pending | SignatureStatus::Requested => {
+                    "Awaiting signature".to_owned()
+                }
+            },
+            tone: match s.status {
+                SignatureStatus::Signed => "good",
+                SignatureStatus::Declined => "critical",
+                SignatureStatus::Pending | SignatureStatus::Requested => "warning",
+            },
             detail: match s.status {
-                SignatureStatus::Signed => format!(
-                    "Signed {}{}",
-                    fmt_date(s.signed_on),
-                    s.recorded_by
-                        .as_ref()
-                        .map(|b| format!(" · recorded by {b}"))
-                        .unwrap_or_default()
-                ),
+                // The state already says when it was signed.
+                SignatureStatus::Signed => s
+                    .recorded_by
+                    .as_ref()
+                    .map(|b| format!("Recorded by {b}"))
+                    .unwrap_or_default(),
                 SignatureStatus::Requested => format!(
                     "Requested {}{}",
                     s.requested_at

@@ -1,4 +1,4 @@
-<section aria-labelledby="suggest-h" id="suggestions">
+<section aria-labelledby="suggest-h" id="suggestions" class="panel">
   <h2 id="suggest-h">Dates found in the file{% if collab.pending > 0 %} <span class="badge wf-in_progress">{{ collab.pending }} to confirm</span>{% endif %}</h2>
   {% if let Some(t) = collab.text %}
     <p class="muted small">Version {{ t.version_no }} read {{ collab.text_when }} ({% if t.method == "ocr" %}OCR{% else if t.method == "pdf_text" %}text in the PDF{% else if t.method == "docx" %}Word document{% else %}{{ t.method }}{% endif %}, {{ t.char_count }} characters{% if t.status != "done" %}: {{ t.status }}{% endif %}{% if let Some(e) = t.error %} — {{ e }}{% endif %}). The text is included in search.</p>
@@ -25,7 +25,7 @@
   {% endif %}
 </section>
 
-<section aria-labelledby="comments-h" id="comments">
+<section aria-labelledby="comments-h" id="comments" class="panel">
   <h2 id="comments-h">Comments {% if collab.count > 0 %}<span class="muted small">({{ collab.count }})</span>{% endif %}</h2>
   {% for t in collab.threads %}
   <article class="comment" id="comment-{{ t.c.id }}">

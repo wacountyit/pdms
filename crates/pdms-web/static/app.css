@@ -705,7 +705,6 @@ button.link:hover { background: none; text-decoration-thickness: 2px; }
 .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 28px; }
 @media (max-width: 52rem) { .two-col { grid-template-columns: 1fr; } }
 .columns { columns: 3 14rem; }
-.doc-header .toolbar { margin-top: 8px; }
 .description { white-space: pre-wrap; }
 .appointee { margin: 12px 0; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .appointee h3 { margin-top: 0; }
@@ -971,3 +970,87 @@ td.nowrap { white-space: nowrap; }
 td.strong { font-weight: 700; }
 td.next-overdue { color: var(--crit-fg); font-weight: 700; }
 .table-wrap .item-link { font-weight: 600; color: var(--ink); }
+
+/* ==========================================================================
+   Document page (spec §11): header, key numbers, key-dates timeline, main
+   column and side panel, and the "Manage this document" disclosure.
+   ========================================================================== */
+
+/* Header: breadcrumb, badges, title, actions, "On this page" links. */
+.doc-head { margin: 0 0 22px; }
+.doc-title-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.doc-title { flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.doc-title h1 { margin: 0; overflow-wrap: anywhere; }
+.doc-title .description { margin: 0; color: var(--muted); }
+.doc-badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
+.badge.badge-outline { background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-border); color: var(--ink); }
+.doc-actions { display: flex; flex-wrap: wrap; gap: 10px; max-width: 100%; }
+.doc-actions .button { max-width: 100%; overflow-wrap: anywhere; }
+.on-this-page { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 16px 0 0; font-size: 14px; }
+.on-this-page-label { color: var(--muted); font-weight: 600; }
+.on-this-page ul { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; }
+.on-this-page a { display: inline-flex; align-items: center; min-height: 32px; font-weight: 600; }
+
+/* Key numbers: tiles in a <dl>. */
+.key-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 0 0 22px; }
+.key-numbers dd { margin: 0; }
+.key-numbers .tile-critical .value { color: var(--crit-fg); }
+
+/* Main column and side panel. */
+.doc-layout { display: flex; flex-wrap: wrap; gap: 0 22px; align-items: flex-start; }
+.doc-main { flex: 999 1 520px; min-width: 0; }
+.doc-side { flex: 1 1 300px; min-width: 0; }
+.doc-side .grid-form, .doc-side .field-row { grid-template-columns: minmax(0, 1fr); }
+.doc-side select, .doc-side input:where(:not([type="checkbox"], [type="radio"])) { max-width: 100%; }
+.doc-review > section > h2:first-child { margin-top: 0; }
+.doc-review > section + section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--row); }
+
+/* Key dates: an aria-hidden SVG (viewBox 0 0 1000 64) over the <ol> list
+   that carries the same events for assistive technology. Colors come only
+   from these classes. */
+.timeline-wrap { padding: 0 10px; }
+.timeline { display: block; width: 100%; height: auto; overflow: visible; }
+.timeline-axis { stroke: var(--control-border); stroke-width: 2; }
+.timeline-overdue { fill: var(--crit-dot); }
+.timeline-today { stroke: var(--ink); stroke-width: 2; }
+.timeline-mark { stroke-width: 3; }
+.timeline-event { fill: var(--ink); stroke: var(--surface); }
+.timeline-missed { fill: var(--surface); stroke: var(--crit-dot); }
+.timeline-future { fill: var(--surface); stroke: var(--ink); }
+.timeline .chart-label { font-size: 18px; }
+.timeline .timeline-today-label { fill: var(--ink); font-weight: 600; }
+.timeline-list { margin: 16px 0 0; padding: 0; list-style: none; }
+.timeline-list li { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--row); }
+.timeline-list .date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.timeline-list .status { white-space: normal; }
+@media (max-width: 40rem) {
+  /* The SVG scales with its width; keep its labels legible on phones. */
+  .timeline .chart-label { font-size: 32px; }
+  .timeline-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+
+/* Files */
+table.files tr.file-version td:first-child { font-weight: 400; }
+table.files .file-name { font-weight: 600; overflow-wrap: anywhere; }
+table.files td.file-actions a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+table.files td.file-actions .icon { width: 16px; height: 16px; }
+table.files td.file-actions .inline-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* Side panel: details, reminders. */
+.detail-list { display: flex; flex-direction: column; margin: 0; }
+.detail-list > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--row); }
+.detail-list > div:first-child { padding-top: 0; border-top: 0; }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.reminder-list { margin: 0 0 12px; padding: 0; list-style: none; }
+.reminder-list li { padding: 8px 0; border-top: 1px solid var(--row); }
+.reminder-list li:first-child { padding-top: 0; border-top: 0; }
+.reminder-list .small { display: block; }
+
+/* Manage this document */
+.manage-part > h2 { margin-top: 18px; }
+.manage-part + .manage-part { margin-top: 22px; border-top: 1px solid var(--row); }
+
+@media print {
+  .on-this-page { display: none !important; }
+}

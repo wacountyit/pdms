@@ -11,7 +11,7 @@ use axum::extract::{Multipart, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum_extra::extract::{Form, Query};
-use chrono::{NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use pdms_authz::{Capability, Permission, Subject, Visibility};
 use pdms_core::directory::{self, Department, Group, Role, UserSummary};
 use pdms_core::documents::fields::{FieldDef, FieldType};
@@ -31,6 +31,7 @@ use crate::middleware::DeferredCsrf;
 use crate::next_date::{NextDate, next_date};
 use crate::session::CurrentUser;
 use crate::state::AppState;
+use crate::timeline::{MarkKind, Timeline};
 use crate::upload;
 use crate::views::{FlashMsg, Layout, done, fmt_date, fmt_time, human_size, iso_date, tag_class};
 
@@ -798,6 +799,8 @@ pub struct VersionRow {
     pub version_no: i32,
     pub kind: &'static str,
     pub file_changed: bool,
+    /// This version's file is the document's current file.
+    pub is_current: bool,
     pub has_file: bool,
     pub file_name: String,
     pub size: String,
@@ -815,6 +818,18 @@ pub struct GrantRow {
     pub expires: String,
     pub reason: String,
 }
+
+/// A tile in the document page's key-numbers row.
+pub struct KeyNumber {
+    pub label: String,
+    pub value: String,
+    pub sub: String,
+    /// Tile stripe (`tile-{class}`), or empty for none.
+    pub class: &'static str,
+}
+
+/// One line of the key-dates list: (date, what, missed).
+pub type KeyDate = (String, String, bool);
 
 #[derive(Template)]
 #[template(path = "documents/show.html")]
@@ -858,6 +873,16 @@ struct ShowPage {
     new_rule: crate::routes::schedule::RuleFormView,
     wf: crate::routes::workflow::WorkflowView,
     collab: crate::routes::collab::CollabView,
+    key_numbers: Vec<KeyNumber>,
+    /// The key dates, oldest first. (`events` already names the reminder
+    /// event options that `rule_form.html` reads.)
+    key_dates: Vec<KeyDate>,
+    timeline: Option<Timeline>,
+    /// "2013 to today" (or to the last future date).
+    timeline_span: String,
+    start_review: bool,
+    /// "On this page" links: (fragment id, label), only for sections shown.
+    section_links: Vec<(&'static str, &'static str)>,
 }
 
 pub struct TaskRow {
@@ -892,6 +917,7 @@ fn version_row(state: &AppState, v: documents::VersionInfo) -> VersionRow {
         version_no: v.version_no,
         kind: v.kind.label(),
         file_changed: v.file_changed,
+        is_current: false,
         has_file: v.blob_sha256.is_some(),
         file_name: v.file_name.unwrap_or_default(),
         size: human_size(v.size_bytes),
@@ -904,6 +930,173 @@ fn version_row(state: &AppState, v: documents::VersionInfo) -> VersionRow {
         by: v.created_by_name.unwrap_or_else(|| "System".into()),
         when: fmt_time(state.tz, v.created_at),
     }
+}
+
+/// A file version's date on the key-dates timeline: its milestone date (the
+/// day an amendment or signed copy took effect), else the day it was uploaded.
+fn version_date(v: &documents::VersionInfo, tz: chrono_tz::Tz) -> NaiveDate {
+    v.milestone_date
+        .unwrap_or_else(|| v.created_at.with_timezone(&tz).date_naive())
+}
+
+/// The document's key dates, oldest first: the effective date, each file
+/// version, each missed review cycle, and the next review, renewal and
+/// expiration.
+fn key_events(
+    d: &documents::Document,
+    versions: &[documents::VersionInfo],
+    missed: &[NaiveDate],
+    tz: chrono_tz::Tz,
+    today: NaiveDate,
+) -> Vec<(NaiveDate, String, MarkKind)> {
+    let mut ev = Vec::new();
+    if let Some(e) = d.effective_date {
+        ev.push((e, "Effective".to_owned(), MarkKind::Event));
+    }
+    for v in versions.iter().filter(|v| v.file_changed) {
+        let text = if v.note.is_empty() {
+            format!("Version {} uploaded", v.version_no)
+        } else {
+            v.note.clone()
+        };
+        ev.push((version_date(v, tz), text, MarkKind::Event));
+    }
+    ev.extend(
+        missed
+            .iter()
+            .map(|m| (*m, "Review missed".to_owned(), MarkKind::Missed)),
+    );
+    // A past next-review date is the first missed cycle, already listed.
+    let review = d.next_review_date.filter(|r| !missed.contains(r));
+    for (date, ahead, past) in [
+        (review, "Next review", "Review"),
+        (d.renewal_date, "Renewal", "Renewal"),
+        (d.expiration_date, "Expires", "Expired"),
+    ] {
+        match date {
+            Some(date) if date >= today => ev.push((date, ahead.to_owned(), MarkKind::Future)),
+            Some(date) => ev.push((date, past.to_owned(), MarkKind::Event)),
+            None => {}
+        }
+    }
+    ev.sort_by_key(|e| e.0);
+    ev
+}
+
+/// 1263 -> "1,263".
+fn group_digits(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    if n < 0 {
+        out.push('-');
+    }
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// "every year", "every 5 years", "every 6 months".
+fn every(months: i32) -> String {
+    match months {
+        1 => "every month".to_owned(),
+        12 => "every year".to_owned(),
+        m if m % 12 == 0 => format!("every {} years", m / 12),
+        m => format!("every {m} months"),
+    }
+}
+
+/// The key-numbers row: only the tiles that apply.
+fn key_numbers(
+    d: &documents::Document,
+    open_tasks: &[pdms_core::reviews::Task],
+    missed: &[NaiveDate],
+    versions: &[documents::VersionInfo],
+    wf: &crate::routes::workflow::WorkflowView,
+    tz: chrono_tz::Tz,
+    today: NaiveDate,
+) -> Vec<KeyNumber> {
+    let mut out = Vec::new();
+    // The most overdue open task or missed review cycle.
+    let overdue = open_tasks
+        .iter()
+        .filter(|t| t.due_date < today)
+        .map(|t| (t.due_date, t.kind.label()))
+        .chain(
+            missed
+                .iter()
+                .filter(|m| **m < today)
+                .map(|m| (*m, "Review")),
+        )
+        .min_by_key(|(due, _)| *due);
+    if let Some((due, kind)) = overdue {
+        out.push(KeyNumber {
+            label: "Days overdue".to_owned(),
+            value: group_digits((today - due).num_days()),
+            sub: format!("{kind} was due {}", fmt_date(Some(due))),
+            class: "critical",
+        });
+    } else if let Some((date, kind, sub)) = [
+        (d.next_review_date, "review", "Review due"),
+        (d.renewal_date, "renewal", "Renewal due"),
+        (d.expiration_date, "expiration", "Expires"),
+    ]
+    .into_iter()
+    .filter_map(|(date, kind, sub)| date.filter(|x| *x >= today).map(|x| (x, kind, sub)))
+    .min_by_key(|(date, _, _)| *date)
+    {
+        out.push(KeyNumber {
+            label: format!("Days until {kind}"),
+            value: group_digits((date - today).num_days()),
+            sub: format!("{sub} {}", fmt_date(Some(date))),
+            class: "",
+        });
+    }
+    if !missed.is_empty() {
+        let interval = d.review_interval_months.or(d.type_review_interval_months);
+        out.push(KeyNumber {
+            label: "Missed review cycles".to_owned(),
+            value: group_digits(missed.len() as i64),
+            sub: match interval {
+                Some(m) if m > 0 => format!("Reviewed {}", every(m)),
+                _ => format!("Review was due {}", fmt_date(missed.first().copied())),
+            },
+            class: "",
+        });
+    }
+    let files: Vec<&documents::VersionInfo> = versions.iter().filter(|v| v.file_changed).collect();
+    if let Some(latest) = files.iter().max_by_key(|v| v.version_no) {
+        out.push(KeyNumber {
+            label: "Versions".to_owned(),
+            value: group_digits(files.len() as i64),
+            sub: format!("Latest {}", fmt_date(Some(version_date(latest, tz)))),
+            class: "",
+        });
+    }
+    if !wf.signatories.is_empty() {
+        let total = wf.signatories.len();
+        let pending = wf
+            .signatories
+            .iter()
+            .filter(|s| matches!(s.status, "pending" | "requested"))
+            .count();
+        out.push(KeyNumber {
+            label: "Signatures".to_owned(),
+            value: format!("{} of {total}", wf.signed),
+            sub: if pending > 0 {
+                format!("{pending} pending")
+            } else if wf.signed == total {
+                "All signed".to_owned()
+            } else {
+                format!("{} declined", total - wf.signed)
+            },
+            class: "",
+        });
+    }
+    out
 }
 
 pub async fn show(
@@ -1016,9 +1209,72 @@ pub async fn show(
     let wf = crate::routes::workflow::panel_view(&state, &user, id, d.document_type_id, can_edit)
         .await?;
     let collab = crate::routes::collab::collab_view(&state, &user, id, can_edit).await?;
+
+    // Header, key numbers and key dates.
+    let today = pdms_core::schedule::local_today(Utc::now(), state.tz);
+    let events = key_events(&d, &versions, &sched.missed, state.tz, today);
+    let mut timeline = crate::timeline::build(today, &events);
+    if let Some(t) = timeline.as_mut() {
+        // Keep the "Today" label clear of the year labels.
+        let today_x = t.today_x;
+        t.ticks.retain(|(x, _)| (x - today_x).abs() >= 120.0);
+    }
+    let timeline_span = match (events.first(), events.last()) {
+        (Some(first), Some(last)) if last.0 > today => {
+            format!("{} to {}", first.0.year(), last.0.year())
+        }
+        (Some(first), _) => format!("{} to today", first.0.year()),
+        _ => String::new(),
+    };
+    let key_dates: Vec<KeyDate> = events
+        .iter()
+        .map(|(date, text, kind)| {
+            (
+                fmt_date(Some(*date)),
+                text.clone(),
+                *kind == MarkKind::Missed,
+            )
+        })
+        .collect();
+    let key_numbers = key_numbers(
+        &d,
+        &sched.open_tasks,
+        &sched.missed,
+        &versions,
+        &wf,
+        state.tz,
+        today,
+    );
+    // The owner's review task is due within 30 days or overdue.
+    let start_review = user.ctx.user_id() == Some(d.owner_id)
+        && sched.open_tasks.iter().any(|t| {
+            t.kind == pdms_core::notifications::rules::DueEvent::Review
+                && (t.due_date - today).num_days() <= 30
+        });
+    let can_delete = perms.contains(Permission::Delete);
+    let can_set_visibility = is_owner || can_manage;
+    let mut section_links = Vec::new();
+    if !key_dates.is_empty() {
+        section_links.push(("dates", "Key dates"));
+    }
+    section_links.extend([
+        ("reviews", "Review & approval"),
+        ("files", "Files"),
+        ("comments", "Comments"),
+    ]);
+    if can_set_visibility || can_manage || can_retention || can_delete {
+        section_links.push(("manage", "Manage"));
+    }
+    // The upload that holds the current file. Later details-only versions
+    // carry the same file forward, so this is the newest file version.
+    let current_file_no = versions
+        .iter()
+        .find(|v| v.file_changed && v.blob_sha256.is_some())
+        .map(|v| v.version_no);
+
     let page = ShowPage {
         visibility_options: visibility_options(),
-        can_set_visibility: is_owner || can_manage,
+        can_set_visibility,
         l: Layout::new(&state, &user, flash, &d.title, "documents"),
         status_class: d.status.as_str(),
         status_label: d.status.label(),
@@ -1051,7 +1307,13 @@ pub async fn show(
         current_file: view.current_file.map(|v| version_row(&state, v)),
         versions: versions
             .into_iter()
-            .map(|v| version_row(&state, v))
+            .map(|v| {
+                let is_current = Some(v.version_no) == current_file_no;
+                VersionRow {
+                    is_current,
+                    ..version_row(&state, v)
+                }
+            })
             .collect(),
         // Documents enter review by being submitted (the workflow section),
         // and leave it through the workflow while one is in progress.
@@ -1063,7 +1325,7 @@ pub async fn show(
             .map(|(s, _)| (s.as_str(), s.label()))
             .collect(),
         can_edit,
-        can_delete: perms.contains(Permission::Delete),
+        can_delete,
         can_manage,
         can_retention,
         can_timeline: user.can(Capability::ViewAudit) || is_owner || can_manage,
@@ -1121,6 +1383,12 @@ pub async fn show(
         wf,
         collab,
         d,
+        key_numbers,
+        key_dates,
+        timeline,
+        timeline_span,
+        start_review,
+        section_links,
     };
     Ok(Html(page.render()?))
 }
@@ -1690,5 +1958,17 @@ mod tests {
             h.contains("filename*=UTF-8''R%C3%A9sum%C3%A9%20%22final%22.pdf"),
             "{h}"
         );
+    }
+
+    #[test]
+    fn key_number_text() {
+        assert_eq!(group_digits(0), "0");
+        assert_eq!(group_digits(999), "999");
+        assert_eq!(group_digits(1263), "1,263");
+        assert_eq!(group_digits(-1234567), "-1,234,567");
+        assert_eq!(every(12), "every year");
+        assert_eq!(every(60), "every 5 years");
+        assert_eq!(every(6), "every 6 months");
+        assert_eq!(every(1), "every month");
     }
 }

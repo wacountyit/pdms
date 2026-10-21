@@ -1,73 +1,73 @@
 {% extends "base.html" %}
-{% block content %}
-<div class="doc-header">
-  <p class="muted"><code>{{ d.external_id }}</code> · {{ d.type_name }} · {{ d.department_name }}</p>
-  <p>
-    <span class="badge status-{{ status_class }}">{{ status_label }}</span>
-    {% if d.visibility.as_str() == "restricted" %}<span class="badge confidential">Restricted</span>{% endif %}
-    {% if d.visibility.as_str() == "county_wide" %}<span class="badge">County-wide</span>{% endif %}
-    {% if d.legal_hold %}<span class="badge hold">Legal hold</span>{% endif %}
-  </p>
-  <div class="toolbar">
-    {% if let Some(f) = current_file %}<a class="button primary" href="/documents/{{ d.id }}/download">Download {{ f.file_name }}</a>{% endif %}
-    {% if can_edit %}<a class="button" href="/documents/{{ d.id }}/edit">Edit details</a>{% endif %}
-    {% if can_timeline %}<a class="button" href="/documents/{{ d.id }}/history">Audit history</a>{% endif %}
+{% block heading %}
+<header class="doc-head">
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol><li><a href="/documents">Documents</a></li><li aria-current="page">{{ d.external_id }}</li></ol>
+  </nav>
+  <div class="doc-title-row">
+    <div class="doc-title">
+      <p class="doc-badges">
+        <span class="badge badge-neutral">{{ d.type_name }}</span>
+        <span class="badge status-{{ status_class }}">{{ status_label }}</span>
+        {% if d.visibility.as_str() == "restricted" %}<span class="badge badge-outline">Restricted</span>{% endif %}
+        {% if d.visibility.as_str() == "county_wide" %}<span class="badge badge-outline">County-wide</span>{% endif %}
+        {% if d.legal_hold %}<span class="badge hold">Legal hold</span>{% endif %}
+      </p>
+      <h1>{{ d.title }}</h1>
+      {% if !d.description.is_empty() %}<p class="description">{{ d.description }}</p>{% endif %}
+    </div>
+    <div class="doc-actions">
+      {% if start_review %}<a class="button primary" href="#reviews">Start review</a>{% endif %}
+      {% if let Some(f) = current_file %}<a class="button{% if !start_review %} primary{% endif %}" href="/documents/{{ d.id }}/download">{% include "icons/download.html" %}Download {{ f.file_name }}</a>{% endif %}
+      {% if can_edit %}<a class="button" href="/documents/{{ d.id }}/edit">{% include "icons/pencil.html" %}Edit details</a>{% endif %}
+      {% if can_timeline %}<a class="button" href="/documents/{{ d.id }}/history">{% include "icons/history.html" %}History</a>{% endif %}
+    </div>
   </div>
-</div>
-
-{% if !d.description.is_empty() %}<p class="description">{{ d.description }}</p>{% endif %}
-
-<div class="two-col">
-<section aria-labelledby="details-h">
-  <h2 id="details-h">Details</h2>
-  <dl class="facts">
-    <dt>Primary owner</dt><dd>{{ d.owner_name }}</dd>
-    {% for x in dates %}<dt>{{ x.0 }}</dt><dd>{% if x.1.is_empty() %}<span class="muted">—</span>{% else %}{{ x.1 }}{% endif %}</dd>{% endfor %}
-    <dt>Review cycle</dt><dd>{{ review_interval }}</dd>
-    <dt>Retention</dt><dd>{% if let Some(p) = d.retention_policy_name %}{{ p }}{% else %}<span class="muted">No policy</span>{% endif %}</dd>
-    <dt>Created</dt><dd>{{ created }}</dd>
-    <dt>Last updated</dt><dd>{{ updated }}</dd>
+  <nav class="on-this-page" aria-label="On this page">
+    <span class="on-this-page-label">On this page</span>
+    <ul>{% for s in section_links %}<li><a href="#{{ s.0 }}">{{ s.1 }}</a></li>{% endfor %}</ul>
+  </nav>
+</header>
+{% endblock %}
+{% block content %}
+{% if !key_numbers.is_empty() %}
+<section aria-label="Key numbers">
+  <dl class="key-numbers">
+    {% for k in key_numbers %}
+    <div class="tile{% if !k.class.is_empty() %} tile-{{ k.class }}{% endif %}"><dt class="label">{{ k.label }}</dt><dd class="value">{{ k.value }}</dd><dd class="sub">{{ k.sub }}</dd></div>
+    {% endfor %}
   </dl>
-  {% if !custom.is_empty() %}
-  <h3>Additional fields</h3>
-  <dl class="facts">
-    {% for c in custom %}<dt>{{ c.label }}</dt><dd>{{ c.value }}{% if !c.note.is_empty() %} <span class="muted small">({{ c.note }})</span>{% endif %}</dd>{% endfor %}
-  </dl>
-  {% endif %}
 </section>
+{% endif %}
 
-<section aria-labelledby="tags-h">
-  <h2 id="tags-h">Tags</h2>
-  <ul class="tag-list">
-    {% for t in tags %}
-    <li><span class="{{ t.1 }}">{{ t.2 }}</span>
-      {% if can_edit %}<form method="post" action="/documents/{{ d.id }}/tags/{{ t.0 }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="link small" aria-label="Remove tag {{ t.2 }}">×</button></form>{% endif %}
-    </li>
-    {% else %}<li class="muted">No tags.</li>{% endfor %}
-  </ul>
-  {% if can_edit %}
-  <form method="post" action="/documents/{{ d.id }}/tags" class="inline">
-    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="tag-name">Add tag</label><input id="tag-name" name="name" maxlength="200" required>
-    <button type="submit">Add</button>
-  </form>
-  {% endif %}
+<div class="doc-layout">
+<div class="doc-main">
 
-  {% if !next.is_empty() %}
-  <h2>Status</h2>
-  <form method="post" action="/documents/{{ d.id }}/status" class="stack">
-    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="status-note">Note (optional)</label>
-    <input id="status-note" name="note" maxlength="1000">
-    <div class="toolbar">{% for s in next %}<button type="submit" name="status" value="{{ s.0 }}">Move to {{ s.1 }}</button>{% endfor %}</div>
-  </form>
+{% if !key_dates.is_empty() %}
+<section aria-labelledby="dates-h" id="dates" class="panel">
+  <div class="panel-head"><h2 id="dates-h">Key dates</h2><span class="muted small">{{ timeline_span }}</span></div>
+  {% if let Some(tl) = timeline %}
+  <div class="timeline-wrap">
+    <svg class="timeline" viewBox="0 0 1000 64" aria-hidden="true" focusable="false">
+      <line class="timeline-axis" x1="0" y1="22" x2="1000" y2="22"></line>
+      {% if let Some(ox) = tl.overdue_from_x %}<rect class="timeline-overdue" x="{{ "{:.1}"|format(ox) }}" y="20" width="{{ "{:.1}"|format(tl.today_x - ox) }}" height="4" rx="2"></rect>{% endif %}
+      <line class="timeline-today" x1="{{ "{:.1}"|format(tl.today_x) }}" y1="8" x2="{{ "{:.1}"|format(tl.today_x) }}" y2="36"></line>
+      {% for m in tl.marks %}<circle cx="{{ "{:.1}"|format(m.x) }}" cy="22" r="7" class="timeline-mark timeline-{{ m.kind.as_str() }}"><title>{{ m.title }}</title></circle>{% endfor %}
+      {% for t in tl.ticks %}<text class="chart-label" x="{{ "{:.1}"|format(t.0) }}" y="58" text-anchor="{% if t.0 < 30.0 %}start{% else if t.0 > 970.0 %}end{% else %}middle{% endif %}">{{ t.1 }}</text>{% endfor %}
+      <text class="chart-label timeline-today-label" x="{{ "{:.1}"|format(tl.today_x) }}" y="58" text-anchor="{% if tl.today_x < 30.0 %}start{% else if tl.today_x > 970.0 %}end{% else %}middle{% endif %}">Today</text>
+    </svg>
+  </div>
   {% endif %}
+  <ol class="timeline-list">
+    {% for e in key_dates %}
+    <li><span class="date">{{ e.0 }}</span>{% if e.2 %}<span class="status status-critical">{{ e.1 }}</span>{% else %}<span>{{ e.1 }}</span>{% endif %}</li>
+    {% endfor %}
+  </ol>
 </section>
-</div>
+{% endif %}
 
+<div class="panel doc-review">
 {% include "documents/workflow.html" %}
-
-{% include "documents/collab.html" %}
 
 <section aria-labelledby="reviews-h" id="reviews">
   <h2 id="reviews-h">Reviews and renewals</h2>
@@ -100,6 +100,7 @@
   </div>
   {% else %}<p class="muted">No open review or renewal tasks. Tasks appear as due dates approach.</p>{% endfor %}
   {% if !task_history.is_empty() %}
+  <div class="table-wrap">
   <table>
     <caption>Completed reviews and renewals</caption>
     <thead><tr><th scope="col">What</th><th scope="col">Was due</th><th scope="col">Status</th><th scope="col">Details</th><th scope="col">Notes</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -110,23 +111,117 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </section>
+</div>
 
-<section aria-labelledby="notif-h" id="notifications">
-  <h2 id="notif-h">Reminders</h2>
-  <table>
-    <thead><tr><th scope="col">Event</th><th scope="col">Schedule</th><th scope="col">Send by</th><th scope="col">Notify</th><th scope="col">From</th></tr></thead>
+<section aria-labelledby="files-h" id="files" class="panel">
+  <h2 id="files-h">Files</h2>
+  <div class="table-wrap">
+  <table class="files">
+    <caption class="visually-hidden">Version history</caption>
+    <thead><tr><th scope="col">File</th><th scope="col">Version</th><th scope="col">Size</th><th scope="col">Uploaded</th><th scope="col">By</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
-    {% for sec in rule_sections %}
-      {% for rv in sec.rules %}
-      <tr><td>{{ sec.event_label }}</td><td>{{ rv.rule.summary() }}</td><td>{{ rv.rule.channel_labels() }}</td><td>{{ rv.rule.recipient_labels() }}</td><td><span class="muted small">{{ sec.source_label }}</span></td></tr>
-      {% else %}
-      <tr><td>{{ sec.event_label }}</td><td colspan="4" class="muted">No reminders</td></tr>
-      {% endfor %}
+    {% for v in versions %}
+      <tr {% if v.file_changed %}class="file-version"{% endif %}>
+        <td>{% if v.has_file %}{% if v.file_changed %}<span class="file-name">{{ v.file_name }}</span>{% if v.is_current %} <span class="status status-good">Current</span>{% endif %}{% else %}<span class="muted">{{ v.file_name }} (unchanged)</span>{% endif %}{% else %}<span class="muted">No file</span>{% endif %}
+          <div class="muted small">{{ v.kind }}{% if !v.note.is_empty() %} · {{ v.note }}{% endif %}{% if !v.milestone.is_empty() %} · Milestone {{ v.milestone }}{% endif %}{% if v.file_changed && !v.sha.is_empty() %} · <code>{{ v.sha }}</code>{% endif %}</div></td>
+        <td>{{ v.version_no }}</td>
+        <td class="nowrap">{% if v.file_changed %}{{ v.size }}{% endif %}</td>
+        <td class="nowrap">{{ v.when }}</td>
+        <td>{{ v.by }}</td>
+        <td class="file-actions">{% if v.has_file && v.file_changed %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/download">{% include "icons/download.html" %}Download<span class="visually-hidden"> version {{ v.version_no }}, {{ v.file_name }}</span></a>{% endif %}
+          {% if can_edit && v.version_no != d.current_version %}
+          <form method="post" action="/documents/{{ d.id }}/versions/{{ v.version_no }}/restore" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+            {% if v.file_changed %}<button type="submit" name="part" value="file" class="small">Restore file</button>{% endif %}
+            <button type="submit" name="part" value="metadata" class="small">Restore details</button>
+          </form>{% endif %}</td>
+      </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+  {% if can_edit %}
+  <h3>Upload a new version</h3>
+  <form method="post" action="/documents/{{ d.id }}/versions" enctype="multipart/form-data" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="v-kind">Kind</label>
+    <select id="v-kind" name="kind"><option value="revision">Revision</option><option value="amendment">Amendment</option><option value="signed_copy">Signed copy</option></select>
+    <label for="v-file">File</label><input id="v-file" name="file" type="file" required aria-describedby="v-file-help">
+    <span></span><span id="v-file-help" class="help">Up to {{ max_upload_mb }} MB. Earlier versions are always kept.</span>
+    <label for="v-note">Note</label><input id="v-note" name="note" maxlength="1000" placeholder="e.g. Amendment 1">
+    <label for="v-milestone">Milestone date</label><input id="v-milestone" name="milestone_date" type="date">
+    <span></span><button type="submit" class="primary">Upload</button>
+  </form>
+  {% endif %}
+</section>
+
+{% include "documents/signatures.html" %}
+
+{% include "documents/collab.html" %}
+
+</div>
+
+<aside class="doc-side" aria-label="About this document">
+<section aria-labelledby="details-h" class="panel">
+  <h2 id="details-h">Details</h2>
+  <dl class="detail-list">
+    <div><dt>Primary owner</dt><dd>{{ d.owner_name }}</dd></div>
+    <div><dt>Department</dt><dd>{{ d.department_name }}</dd></div>
+    <div><dt>Who can see it</dt><dd>{{ d.visibility.label() }}</dd></div>
+    {% for c in custom %}<div><dt>{{ c.label }}</dt><dd>{{ c.value }}{% if !c.note.is_empty() %} <span class="muted small">({{ c.note }})</span>{% endif %}</dd></div>{% endfor %}
+    <div><dt>Review cycle</dt><dd>{{ review_interval }}</dd></div>
+    {% for x in dates %}<div><dt>{{ x.0 }}</dt><dd>{% if x.1.is_empty() %}<span class="muted">—</span>{% else %}{{ x.1 }}{% endif %}</dd></div>{% endfor %}
+    <div><dt>Retention</dt><dd>{% if let Some(p) = d.retention_policy_name %}{{ p }}{% else %}<span class="muted">No policy</span>{% endif %}</dd></div>
+    <div><dt>Created</dt><dd>{{ created }}</dd></div>
+    <div><dt>Last updated</dt><dd>{{ updated }}</dd></div>
+  </dl>
+</section>
+
+<section aria-labelledby="tags-h" class="panel">
+  <h2 id="tags-h">Tags</h2>
+  <ul class="tag-list">
+    {% for t in tags %}
+    <li><span class="{{ t.1 }}">{{ t.2 }}</span>
+      {% if can_edit %}<form method="post" action="/documents/{{ d.id }}/tags/{{ t.0 }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="link small" aria-label="Remove tag {{ t.2 }}">×</button></form>{% endif %}
+    </li>
+    {% else %}<li class="muted">No tags.</li>{% endfor %}
+  </ul>
+  {% if can_edit %}
+  <form method="post" action="/documents/{{ d.id }}/tags" class="inline">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="tag-name">Add tag</label><input id="tag-name" name="name" maxlength="200" required>
+    <button type="submit">Add</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if !next.is_empty() %}
+<section aria-labelledby="status-h" class="panel">
+  <h2 id="status-h">Status</h2>
+  <form method="post" action="/documents/{{ d.id }}/status" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="status-note">Note (optional)</label>
+    <input id="status-note" name="note" maxlength="1000">
+    <div class="toolbar">{% for s in next %}<button type="submit" name="status" value="{{ s.0 }}">Move to {{ s.1 }}</button>{% endfor %}</div>
+  </form>
+</section>
+{% endif %}
+
+<section aria-labelledby="notif-h" id="notifications" class="panel">
+  <h2 id="notif-h">Reminders</h2>
+  <ul class="reminder-list">
+    {% for sec in rule_sections %}
+      {% for rv in sec.rules %}
+      <li><span class="label">{{ sec.event_label }}:</span> {{ rv.rule.summary() }}
+        <span class="muted small">Send by {{ rv.rule.channel_labels() }} · Notify {{ rv.rule.recipient_labels() }} · From {{ sec.source_label }}</span></li>
+      {% else %}
+      <li><span class="label">{{ sec.event_label }}:</span> <span class="muted">No reminders</span></li>
+      {% endfor %}
+    {% endfor %}
+  </ul>
   {% if let Some(opts) = opts %}
   {% for sec in rule_sections %}{% if sec.is_document %}{% for rv in sec.rules %}
   <details class="card">
@@ -155,45 +250,15 @@
   </details>
   {% endif %}
 </section>
+</aside>
+</div>
 
-<section aria-labelledby="versions-h">
-  <h2 id="versions-h">Version history</h2>
-  <table>
-    <thead><tr><th scope="col">Version</th><th scope="col">Change</th><th scope="col">File</th><th scope="col">Note</th><th scope="col">Milestone</th><th scope="col">By</th><th scope="col">When</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-    <tbody>
-    {% for v in versions %}
-      <tr {% if v.file_changed %}class="file-version"{% endif %}>
-        <td>{{ v.version_no }}</td>
-        <td>{{ v.kind }}</td>
-        <td>{% if v.has_file %}{% if v.file_changed %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/download">{{ v.file_name }}</a> <span class="muted small">{{ v.size }} · <code>{{ v.sha }}</code></span>{% else %}<span class="muted small">{{ v.file_name }} (unchanged)</span>{% endif %}{% endif %}</td>
-        <td>{{ v.note }}</td><td>{{ v.milestone }}</td><td>{{ v.by }}</td><td>{{ v.when }}</td>
-        <td>{% if can_edit && v.version_no != d.current_version %}
-          <form method="post" action="/documents/{{ d.id }}/versions/{{ v.version_no }}/restore" class="inline-form">
-            <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-            {% if v.file_changed %}<button type="submit" name="part" value="file" class="small">Restore file</button>{% endif %}
-            <button type="submit" name="part" value="metadata" class="small">Restore details</button>
-          </form>{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% if can_edit %}
-  <h3>Upload a new version</h3>
-  <form method="post" action="/documents/{{ d.id }}/versions" enctype="multipart/form-data" class="grid-form">
-    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="v-kind">Kind</label>
-    <select id="v-kind" name="kind"><option value="revision">Revision</option><option value="amendment">Amendment</option><option value="signed_copy">Signed copy</option></select>
-    <label for="v-file">File</label><input id="v-file" name="file" type="file" required aria-describedby="v-file-help">
-    <span></span><span id="v-file-help" class="help">Up to {{ max_upload_mb }} MB. Earlier versions are always kept.</span>
-    <label for="v-note">Note</label><input id="v-note" name="note" maxlength="1000" placeholder="e.g. Amendment 1">
-    <label for="v-milestone">Milestone date</label><input id="v-milestone" name="milestone_date" type="date">
-    <span></span><button type="submit" class="primary">Upload</button>
-  </form>
-  {% endif %}
-</section>
+{% if can_set_visibility || can_manage || can_retention || can_delete %}
+<details class="disclosure" id="manage">
+  <summary>Manage this document</summary>
 
 {% if can_set_visibility %}
-<section aria-labelledby="visibility-h">
+<section aria-labelledby="visibility-h" class="manage-part">
   <h2 id="visibility-h">Who can see it</h2>
   <form method="post" action="/documents/{{ d.id }}/visibility" class="stack">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
@@ -209,8 +274,9 @@
 {% endif %}
 
 {% if can_manage %}
-<section aria-labelledby="access-h">
+<section aria-labelledby="access-h" class="manage-part">
   <h2 id="access-h">Access</h2>
+  <div class="table-wrap">
   <table>
     <caption>Shared with</caption>
     <thead><tr><th scope="col">Who</th><th scope="col">Permission</th><th scope="col">Expires</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -221,6 +287,7 @@
     {% else %}<tr><td colspan="5">Not shared with anyone individually.</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
   <form method="post" action="/documents/{{ d.id }}/grants" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="s-subject">Share with</label>
@@ -248,7 +315,7 @@
 {% endif %}
 
 {% if can_retention %}
-<section aria-labelledby="ret-h">
+<section aria-labelledby="ret-h" class="manage-part">
   <h2 id="ret-h">Retention</h2>
   <form method="post" action="/documents/{{ d.id }}/retention" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
@@ -262,7 +329,7 @@
 {% endif %}
 
 {% if can_delete %}
-<section aria-labelledby="del-h">
+<section aria-labelledby="del-h" class="manage-part">
   <h2 id="del-h">Delete</h2>
   {% if let Some(why) = deletion_block %}
   <p>{{ why }}</p>
@@ -275,5 +342,7 @@
   </form>
   {% endif %}
 </section>
+{% endif %}
+</details>
 {% endif %}
 {% endblock %}

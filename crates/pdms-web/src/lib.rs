@@ -9,6 +9,7 @@ pub mod next_date;
 pub mod routes;
 pub mod session;
 pub mod state;
+pub mod timeline;
 pub mod upload;
 pub mod views;
 
