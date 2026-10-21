@@ -826,7 +826,20 @@ async fn start_review_button_only_for_owner_with_due_review() {
         assert!(page.body.contains(start), "{}", page.body);
     }
     let page = a.get(&format!("/documents/{later}")).await;
-    assert!(page.body.contains("Review due "), "the task exists");
+    // The open task's card, not the "Days until review" tile's "Review due …".
+    let card = format!(
+        "<h3>Review due {} <span class=\"badge task-open\">Open</span></h3>",
+        (today + days(60)).format("%b %-d, %Y")
+    );
+    assert!(page.body.contains(&card), "the task exists: {card}");
+    // Its only key date is ahead, so today starts the timeline's axis.
+    assert!(
+        page.body
+            .contains("<line class=\"timeline-today\" x1=\"0.0\"")
+    );
+    assert!(page.body.contains(
+        "<circle cx=\"1000.0\" cy=\"22\" r=\"7\" class=\"timeline-mark timeline-future\">"
+    ));
     assert!(!page.body.contains(">Start review</a>"), "due in 60 days");
 
     // Carol can view the overdue document but does not own it.

@@ -42,8 +42,9 @@ pub struct Timeline {
 }
 
 /// `events`: (date, description, kind). Returns None when there are no events.
+/// The axis runs from min(earliest event, today) to max(latest event, today).
 pub fn build(today: NaiveDate, events: &[(NaiveDate, String, MarkKind)]) -> Option<Timeline> {
-    let first = events.iter().map(|e| e.0).min()?;
+    let first = events.iter().map(|e| e.0).min()?.min(today);
     let last = events.iter().map(|e| e.0).max()?.max(today);
     let span = (last - first).num_days().max(1) as f64;
     let x = |d: NaiveDate| ((d - first).num_days() as f64 / span * WIDTH).clamp(0.0, WIDTH);
@@ -135,5 +136,24 @@ mod tests {
         assert!(t.today_x < WIDTH);
         assert_eq!(t.marks[1].x, WIDTH);
         assert_eq!(build(d("2026-10-15"), &[]), None);
+    }
+
+    #[test]
+    fn today_starts_the_axis_when_every_date_is_ahead() {
+        let ev = vec![
+            (d("2027-01-01"), "Effective".to_string(), MarkKind::Future),
+            (d("2027-06-01"), "Next review".to_string(), MarkKind::Future),
+        ];
+        let t = build(d("2026-10-15"), &ev).unwrap();
+        assert_eq!(t.today_x, 0.0);
+        assert!(t.marks[0].x > 0.0, "the first date is after today");
+        assert_eq!(t.marks[1].x, WIDTH);
+        let single = build(
+            d("2026-10-15"),
+            &[(d("2026-11-04"), "Next review".to_string(), MarkKind::Future)],
+        )
+        .unwrap();
+        assert_eq!(single.today_x, 0.0);
+        assert_eq!(single.marks[0].x, WIDTH);
     }
 }

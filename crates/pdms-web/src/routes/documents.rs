@@ -1219,11 +1219,18 @@ pub async fn show(
         let today_x = t.today_x;
         t.ticks.retain(|(x, _)| (x - today_x).abs() >= 120.0);
     }
+    // The same axis as the timeline: min(first, today) to max(last, today).
     let timeline_span = match (events.first(), events.last()) {
-        (Some(first), Some(last)) if last.0 > today => {
-            format!("{} to {}", first.0.year(), last.0.year())
+        (Some(first), Some(last)) => {
+            let (start, end) = (first.0.min(today), last.0.max(today));
+            if end == today {
+                format!("{} to today", start.year())
+            } else if start.year() == end.year() {
+                start.year().to_string()
+            } else {
+                format!("{} to {}", start.year(), end.year())
+            }
         }
-        (Some(first), _) => format!("{} to today", first.0.year()),
         _ => String::new(),
     };
     let key_dates: Vec<KeyDate> = events
