@@ -95,12 +95,14 @@ one, they update this table in the same commit.
 - **Grants:** migration 0010 also grants `DELETE` on `department_entra_values` (spec §6 listed SELECT, INSERT, UPDATE), because removing a mapping needs it.
 - **Departures:** audited as the existing `user.status_changed`, which `set_user_status` writes. There is no `directory.user_departed` (spec §11 adjusted).
 - **Guests:** guests are skipped by `userType = Guest` (any letter case); a null `userType` counts as a member (spec §7.5 said `ne 'Member'`).
-- **Full rounds sweep:** a round that lists every account (first run, full resync, expired delta token, changed attribute) departs this issuer's active accounts it did not list. The sweep is skipped, and reported, when the round has no member accounts or would depart more than max(5, 20% of the issuer's active linked accounts).
-- **Local passwords:** an account with local credentials is never departed by the sync (neither by a delta nor by the sweep); it is reported in `SyncReport.errors`, like the last administrator.
-- **Cursor and attribute:** `sync_cursors.delta_select` records the `$select` a delta link was started with. When `[entra_sync] attribute` changes, the next run reads every account again.
+- **Full rounds sweep:** a round that lists every account (first run, full resync, expired delta token, changed attribute or `include_guests`) departs this issuer's active accounts it did not list that were created before the round started. The sweep is skipped, and reported with the names of up to 20 accounts, when the round has no member accounts or would depart more than max(5, 20% of the issuer's active linked accounts); the last administrator, whom `set_user_status` keeps, does not count.
+- **Local passwords:** a linked account with local credentials is departed like any other (by a delta or by the sweep), and the run adds a line to `SyncReport.errors` saying it had a local password. The last administrator is still kept and reported.
+- **Cursor and attribute:** `sync_cursors.delta_select` records what a delta link was started with: the `$select`, plus `;guests` when `include_guests` is on. When `[entra_sync] attribute` or `include_guests` changes, the next run reads every account again.
+- **Mapping changes:** `entra_values::upsert` and `remove` re-apply the mapping at once, in the same transaction, to active synced people whose stored Department value matches (same `idp` rule and `user.idp_memberships_synced` audit as the sync). **P4:** a mapping change should also queue a folder-access reconcile.
+- **Turned off:** `entra_sync::run`, `run_full` and `pdms sync-directory` are refused unless `[entra_sync] enabled`; a queued job that finds the sync off finishes without retrying.
 - **Additions:**
   - `GraphConfig.timeout_seconds` and `max_retries`;
-  - `SyncReport.errors: Vec<String>`;
+  - `SyncReport.errors: Vec<String>`; `SyncReport` is `#[serde(default)]`, so a stored summary still reads after a later plan adds a field;
   - `sync_cursors.last_summary jsonb`;
   - `entra_sync::{run_full, status, request_sync, schedule_daily, run_job, TICK_JOB, LOCK_KEY}`;
   - `oidc::resolve_identity`, `normalize_issuer`.

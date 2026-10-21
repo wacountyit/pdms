@@ -780,10 +780,13 @@ The directory sync (D-086) follows these rules. It never reactivates an
 account and never links accounts by email. A full round also departs people
 the directory no longer lists, but holds back and reports if no member
 accounts come back or if more than max(5, 20%) of linked accounts would be
-departed. Accounts with a local password and the last administrator are
-never departed automatically; they are reported. While it is on, group
-mappings from the identity provider are not applied and the token never sets
-names or groups; configuration requires `auth.oidc.subject_claim = "oid"`.
+departed. The last administrator is never departed automatically; it is
+reported. A linked account that also has a local password is departed like
+any other and reported, because a departed employee with a working password
+is the larger risk; the break-glass account has no directory link and is
+never touched. While it is on, group mappings from the identity provider are
+not applied and the token never sets names or groups; configuration requires
+`auth.oidc.subject_claim = "oid"`, and runs are refused while it is off.
 
 ## Open questions (configurable defaults; not blocking)
 

@@ -286,7 +286,8 @@ the group's page. Review them before you turn the sync on.
 
 With the sync on, people and their departments come from Entra ID instead
 of token group claims. Each night (at `[entra_sync] run_at`, default 02:30 in
-the `[org]` timezone) PADM reads the member accounts from Entra ID:
+the `[org]` timezone) PADM picks up the changes made in Entra ID since the
+last run (the first run reads every account):
 
 - new people are created, so they have access before their first sign-in;
 - names, emails, and departments are updated;
@@ -303,7 +304,9 @@ department; case, spacing, and `&` versus "and" do not matter. People with a
 blank or unmapped value can sign in but see only what is shared with them;
 the page lists those values with counts. Make the Department field part of
 account creation. A department membership you add by hand in the mapped
-department counts as satisfying the mapping.
+department counts as satisfying the mapping. A mapping you add, change, or
+remove applies at once to the people already synced with that value; you do
+not need a full resync.
 
 Roles (administrator, legal counsel, records officer, auditor, appointments
 clerk, department head) are still assigned in PADM. Memberships you add by
@@ -313,15 +316,21 @@ never sets a person's name or groups.
 **Departures and safeguards.**
 
 - A full round reads every account: the first run, an expired delta token,
-  **Full resync**, or a changed `[entra_sync] attribute`. It also departs
-  people from this identity provider whom Entra no longer lists.
+  **Full resync**, or a changed `[entra_sync] attribute` or `include_guests`.
+  It also departs people from this identity provider whom Entra no longer
+  lists (not people whose account was created while the round was running).
+  Turning `include_guests` off departs the guest accounts synced earlier.
 - The round holds back and reports instead of departing anyone if Entra
   returns no member accounts, or if it would depart more than 20% of linked
-  accounts (at least 5). Check Entra. If the departures are real, depart those
-  people by hand.
-- An account that has a local password is never departed by the sync. The
-  last administrator is never departed automatically. Both are listed under
-  **Needs attention** on the page.
+  accounts (at least 5). The report names the accounts it would have departed
+  (up to 20). Check Entra and the Graph permissions. If the departures are
+  real, depart those people by hand on their pages (Administration → Users).
+- An account that also has a local password is departed like any other, so
+  the password no longer signs in; it is listed under **Needs attention** so
+  you know. The break-glass administrator has no Entra link, so the sync never
+  touches it.
+- The last administrator is never departed automatically; it is listed under
+  **Needs attention** instead.
 
 **Sign-in.** People are matched by Entra object ID, never by email. An Entra
 account whose email equals an existing unlinked PADM account (for example the
@@ -331,10 +340,12 @@ the sync on, a first sign-in asks Entra about the person; if Entra cannot be
 reached, sign-in is refused rather than trusting the token alone.
 
 **The status page.** **Administration → Entra ID sync** shows the last run, a
-summary, and the last error (shown only when the last run failed). Problems
-with individual accounts are listed under **Needs attention**. **Sync now**
-queues a run; if a sync is already running, the queued run is skipped. **Full
-resync** reads every account again.
+summary, the last error (shown only when the last run failed), and the
+certificate thumbprint. The summary counts people without a mapped department
+only among those the run read; the **Values with no department** table covers
+everyone. Problems with individual accounts are listed under **Needs
+attention**. **Sync now** queues a run; if a sync is already running, the
+queued run is skipped. **Full resync** reads every account again.
 
 **Setup.**
 
@@ -377,9 +388,15 @@ resync** reads every account again.
    The sync needs `[graph]`, `auth.oidc.issuer_url`, and
    `auth.oidc.subject_claim = "oid"`; PADM refuses to start otherwise. Restart,
    then press **Sync now**. `pdms sync-directory` runs a sync from the command
-   line; `pdms sync-directory --full` reads every account again.
+   line; `pdms sync-directory --full` reads every account again. Both refuse
+   to run while `enabled = false`.
 4. Renew the certificate before it expires: create a new one, upload its
-   `.crt` to the app registration, replace the file, and restart.
+   `.crt` to the app registration, replace the file, and restart. The
+   **Certificate thumbprint** on **Administration → Entra ID sync** is the one
+   PADM is using: after the restart it should equal the SHA-256 thumbprint
+   `pdms gen-graph-cert` printed for the new certificate (Entra ID may list a
+   different, SHA-1 thumbprint). Then remove the old certificate from the app
+   registration.
 
 ## 4. Documents
 
