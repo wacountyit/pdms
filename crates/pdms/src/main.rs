@@ -444,20 +444,33 @@ fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Res
     if !(30..=1095).contains(&days) {
         bail!("--days must be 30–1095");
     }
-    let g = pdms_core::graph::cert::generate(name, days)?;
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
+    let mut public_name = out.as_os_str().to_owned();
+    public_name.push(".crt");
+    let public = PathBuf::from(public_name);
+    for path in [out, public.as_path()] {
+        if path.symlink_metadata().is_ok() {
+            bail!(
+                "{} already exists; refusing to overwrite it",
+                path.display()
+            );
+        }
     }
-    opts.open(out)
-        .with_context(|| format!("creating {} (it must not exist yet)", out.display()))?
-        .write_all(g.pem.as_bytes())?;
-    let public = out.with_extension("crt");
-    std::fs::write(&public, &g.certificate_pem)
-        .with_context(|| format!("writing {}", public.display()))?;
+    let g = pdms_core::graph::cert::generate(name, days)?;
+    let create = |path: &std::path::Path, mode: u32| {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(mode);
+        }
+        #[cfg(not(unix))]
+        let _ = mode;
+        opts.open(path)
+            .with_context(|| format!("creating {} (it must not exist yet)", path.display()))
+    };
+    create(out, 0o600)?.write_all(g.pem.as_bytes())?;
+    create(&public, 0o644)?.write_all(g.certificate_pem.as_bytes())?;
     println!(
         "Certificate and private key: {} (secret: give it to PADM as PDMS_GRAPH__CERTIFICATE_FILE)",
         out.display()
@@ -559,4 +572,45 @@ async fn create_admin(
         "\nStore the secret securely; it is not shown again. Run this command again to reset."
     );
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::write_graph_cert;
+
+    fn scratch() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("padm-cert-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn an_existing_public_certificate_file_is_left_untouched() {
+        let d = scratch();
+        let out = d.join("graph.pem");
+        std::fs::write(d.join("graph.pem.crt"), "keep me").unwrap();
+        assert!(write_graph_cert(&out, 30, "PADM test").is_err());
+        assert_eq!(
+            std::fs::read_to_string(d.join("graph.pem.crt")).unwrap(),
+            "keep me"
+        );
+        assert!(!out.exists(), "no key is written when the .crt exists");
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn out_ending_in_crt_keeps_the_key_and_writes_a_separate_public_file() {
+        let d = scratch();
+        let out = d.join("x.crt");
+        write_graph_cert(&out, 30, "PADM test").unwrap();
+        assert!(
+            std::fs::read_to_string(&out)
+                .unwrap()
+                .contains("PRIVATE KEY")
+        );
+        let public = std::fs::read_to_string(d.join("x.crt.crt")).unwrap();
+        assert!(!public.contains("PRIVATE KEY"));
+        std::fs::remove_dir_all(d).unwrap();
+    }
 }
