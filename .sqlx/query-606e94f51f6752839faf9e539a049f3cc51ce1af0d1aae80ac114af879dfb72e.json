@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id, u.display_name, u.email, u.oidc_subject AS \"oidc_subject!\",\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u WHERE u.oidc_issuer = $1 AND u.status = 'active'\n            ORDER BY u.display_name",
+  "query": "SELECT u.id, u.display_name, u.email, u.oidc_subject AS \"oidc_subject!\",\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u\n            WHERE u.oidc_issuer = $1 AND u.status = 'active' AND u.created_at < $2\n            ORDER BY u.display_name",
   "describe": {
     "columns": [
       {
@@ -56,7 +56,8 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -67,5 +68,5 @@
       null
     ]
   },
-  "hash": "01fe8f5a0582c1770e5499d0ed333c0abb9142e46212f6e5d1546d4f4d6bfdb8"
+  "hash": "606e94f51f6752839faf9e539a049f3cc51ce1af0d1aae80ac114af879dfb72e"
 }

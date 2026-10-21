@@ -7,9 +7,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use pdms_audit::{AuditEvent, AuditValue, Category};
 use pdms_authz::Capability;
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
+use super::entra_sync;
 use crate::context::Ctx;
 use crate::error::{CoreError, CoreResult};
 
@@ -67,7 +68,8 @@ pub async fn lookup(db: &PgPool, value: Option<&str>) -> CoreResult<Option<Uuid>
     .await?)
 }
 
-/// Map a value to a department (replacing any earlier mapping of the same value).
+/// Map a value to a department (replacing any earlier mapping of the same
+/// value). People already synced with that value get the department at once.
 pub async fn upsert(db: &PgPool, ctx: &Ctx, value: &str, department_id: Uuid) -> CoreResult<()> {
     ctx.require(Capability::ManageDirectory)?;
     let display = value.trim();
@@ -100,26 +102,25 @@ pub async fn upsert(db: &PgPool, ctx: &Ctx, value: &str, department_id: Uuid) ->
     )
     .execute(&mut *tx)
     .await?;
-    pdms_audit::append(
-        &mut tx,
-        vec![
-            AuditEvent::new(
-                Category::Admin,
-                "directory.department_mapping_changed",
-                ctx.actor.clone(),
-                "department",
-            )
-            .object(department_id, Some(&dept))
-            .department(Some(department_id))
-            .change("department", before, dept.clone())
-            .context("entra_value", display),
-        ],
-    )
-    .await?;
+    let mut events = vec![
+        AuditEvent::new(
+            Category::Admin,
+            "directory.department_mapping_changed",
+            ctx.actor.clone(),
+            "department",
+        )
+        .object(department_id, Some(&dept))
+        .department(Some(department_id))
+        .change("department", before, dept.clone())
+        .context("entra_value", display),
+    ];
+    events.extend(reapply(&mut tx, ctx, &n, Some(department_id)).await?);
+    pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
 }
 
+/// Remove a mapping. People synced with that value lose its department at once.
 pub async fn remove(db: &PgPool, ctx: &Ctx, value: &str) -> CoreResult<()> {
     ctx.require(Capability::ManageDirectory)?;
     let n = normalize(value);
@@ -133,24 +134,56 @@ pub async fn remove(db: &PgPool, ctx: &Ctx, value: &str) -> CoreResult<()> {
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(CoreError::NotFound)?;
-    pdms_audit::append(
-        &mut tx,
-        vec![
-            AuditEvent::new(
-                Category::Admin,
-                "directory.department_mapping_changed",
-                ctx.actor.clone(),
-                "department",
-            )
-            .object(row.department_id, Some(&row.name))
-            .department(Some(row.department_id))
-            .change("department", row.name.as_str(), AuditValue::Null)
-            .context("entra_value", row.value_display),
-        ],
-    )
-    .await?;
+    let mut events = vec![
+        AuditEvent::new(
+            Category::Admin,
+            "directory.department_mapping_changed",
+            ctx.actor.clone(),
+            "department",
+        )
+        .object(row.department_id, Some(&row.name))
+        .department(Some(row.department_id))
+        .change("department", row.name.as_str(), AuditValue::Null)
+        .context("entra_value", row.value_display),
+    ];
+    events.extend(reapply(&mut tx, ctx, &n, None).await?);
+    pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// Apply a changed mapping of `normalized` (now `want`) to the active synced
+/// people whose stored Department value is it, as the sync would; a delta
+/// round reads only people whose Entra account changed. Returns the audit
+/// events for the people whose memberships changed.
+async fn reapply(
+    conn: &mut PgConnection,
+    ctx: &Ctx,
+    normalized: &str,
+    want: Option<Uuid>,
+) -> CoreResult<Vec<AuditEvent>> {
+    let people = sqlx::query!(
+        r#"SELECT id, display_name, entra_department AS "entra_department!"
+             FROM users
+            WHERE source = 'entra' AND status = 'active' AND entra_department IS NOT NULL
+            ORDER BY id"#
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut events = Vec::new();
+    for p in people
+        .iter()
+        .filter(|p| normalize(&p.entra_department) == normalized)
+    {
+        let department = Some(p.entra_department.as_str());
+        if let Some((_, event)) =
+            entra_sync::set_idp_department(conn, ctx, p.id, &p.display_name, department, want)
+                .await?
+        {
+            events.push(event);
+        }
+    }
+    Ok(events)
 }
 
 /// Department values of active Entra people that map to nothing, most people first.

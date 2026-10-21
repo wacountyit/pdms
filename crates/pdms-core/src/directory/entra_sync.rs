@@ -10,12 +10,14 @@
 //! - disabled or removed accounts become `departed` (sessions revoked) through
 //!   `set_user_status`, which also refuses to remove the last administrator;
 //! - a round that lists every account (the first, a full resync, an expired
-//!   delta token, a changed attribute) also departs this issuer's active
-//!   accounts it did not list, unless the round looks wrong (no members, or
-//!   more than max(5, 20%) of them missing);
-//! - accounts with a local password are never departed by the sync, only reported;
+//!   delta token, a changed attribute or `include_guests`) also departs this
+//!   issuer's active accounts it did not list and that existed when the round
+//!   started, unless the round looks wrong (no members, or more than
+//!   max(5, 20%) of them missing);
+//! - accounts with a local password are departed like any other, and reported;
 //! - guests (`userType` = `Guest`) are skipped unless `include_guests`;
-//!   nobody is ever reactivated.
+//! - nobody is ever reactivated, and runs happen only while
+//!   `[entra_sync] enabled` is true.
 //!
 //! Accounts are matched by issuer and Entra object ID only, never by email.
 
@@ -23,7 +25,7 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
 use pdms_audit::{AuditEvent, AuditValue, Category};
-use pdms_authz::Capability;
+use pdms_authz::{Capability, role_keys};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{PgConnection, PgPool};
@@ -47,7 +49,10 @@ pub const LOCK_KEY: i64 = 0x5041_444d_454e_5452;
 const CURSOR: &str = "entra.users";
 const BASE_SELECT: &str = "id,displayName,mail,userPrincipalName,accountEnabled,userType";
 
+/// Stored as `sync_cursors.last_summary`; missing fields default, so a
+/// summary written before a field was added still reads.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SyncReport {
     pub created: u32,
     pub updated: u32,
@@ -84,6 +89,28 @@ fn select_list(attribute: &str) -> String {
         BASE_SELECT.to_owned()
     } else {
         format!("{BASE_SELECT},{attribute}")
+    }
+}
+
+/// What a delta link was started with, kept in `sync_cursors.delta_select`:
+/// the `$select`, followed by `;guests` when guests are included. A link
+/// keeps its original `$select`, and a delta lists only changed accounts, so
+/// guests skipped before would not come back; a different key means a full round.
+fn cursor_key(select: &str, include_guests: bool) -> String {
+    if include_guests {
+        format!("{select};guests")
+    } else {
+        select.to_owned()
+    }
+}
+
+fn require_enabled(core: &Core) -> CoreResult<()> {
+    if core.config.entra_sync.enabled {
+        Ok(())
+    } else {
+        Err(CoreError::validation(
+            "Entra sync is turned off ([entra_sync] enabled = false)",
+        ))
     }
 }
 
@@ -154,6 +181,10 @@ pub async fn run_full(core: &Core, ctx: &Ctx) -> CoreResult<SyncReport> {
 
 async fn run_inner(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<SyncReport> {
     ctx.require(Capability::ManageDirectory)?;
+    // Configuration checks the sign-in settings the sync needs only while it
+    // is on (subject_claim = "oid"); a run without them could duplicate or
+    // depart SSO accounts.
+    require_enabled(core)?;
     let graph = graph(core)?;
     let issuer = entra_issuer(&core.config)?;
     let mut lock = core.db.begin().await?;
@@ -183,13 +214,19 @@ async fn sync_all(
     issuer: &str,
     full: bool,
 ) -> CoreResult<SyncReport> {
+    // Before the first Graph request: accounts created after this (a first
+    // sign-in during the round) may be missing from its listing.
+    let started = sqlx::query_scalar!(r#"SELECT now() AS "now!""#)
+        .fetch_one(&core.db)
+        .await?;
     let attribute = core.config.entra_sync.attribute.as_str();
     let select = select_list(attribute);
+    let key = cursor_key(&select, core.config.entra_sync.include_guests);
     let initial = format!("/users/delta?$select={select}");
     let saved = if full {
         None
     } else {
-        saved_link(&core.db, &select).await?
+        saved_link(&core.db, &key).await?
     };
     // A round started from `initial` lists every account; a delta round only changes.
     let (page, complete): (DeltaPage<Value>, bool) = match saved {
@@ -221,7 +258,7 @@ async fn sync_all(
         }
     }
     if complete {
-        sweep(core, ctx, issuer, &seen, members, &mut report).await?;
+        sweep(core, ctx, issuer, started, &seen, members, &mut report).await?;
     }
     for e in &report.errors {
         tracing::warn!(problem = %e, "Entra sync");
@@ -239,7 +276,7 @@ async fn sync_all(
                 last_error = NULL, last_summary = EXCLUDED.last_summary",
         CURSOR,
         page.delta_link,
-        select,
+        key,
         summary
     )
     .execute(&mut *tx)
@@ -268,10 +305,10 @@ async fn sync_all(
     Ok(report)
 }
 
-/// The saved delta link, if it was started with the same `$select`: a link
-/// keeps its original `$select`, so after the attribute changes, changed
-/// people would come back without it.
-async fn saved_link(db: &PgPool, select: &str) -> CoreResult<Option<String>> {
+/// The saved delta link, if it was started with the same [`cursor_key`]:
+/// after the attribute changes, changed people would come back without it,
+/// and after `include_guests` changes, guests would not be read again.
+async fn saved_link(db: &PgPool, key: &str) -> CoreResult<Option<String>> {
     let row = sqlx::query!(
         "SELECT delta_link, delta_select FROM sync_cursors WHERE name = $1",
         CURSOR
@@ -279,9 +316,11 @@ async fn saved_link(db: &PgPool, select: &str) -> CoreResult<Option<String>> {
     .fetch_optional(db)
     .await?;
     Ok(match row {
-        Some(r) if r.delta_select.as_deref() == Some(select) => r.delta_link,
+        Some(r) if r.delta_select.as_deref() == Some(key) => r.delta_link,
         Some(r) if r.delta_link.is_some() => {
-            tracing::info!("the Entra sync attribute changed; reading every account again");
+            tracing::info!(
+                "the Entra sync attribute or include_guests changed; reading every account again"
+            );
             None
         }
         _ => None,
@@ -290,12 +329,14 @@ async fn saved_link(db: &PgPool, select: &str) -> CoreResult<Option<String>> {
 
 /// After a round that listed every account: depart this issuer's active
 /// accounts it did not list (deleted while no delta could report it, or
-/// before the sync was on). Held back, and reported, when the round looks
-/// wrong: no member accounts, or more missing than max(5, 20%).
+/// before the sync was on) and that existed when the round started. Held
+/// back, and reported, when the round looks wrong: no member accounts, or
+/// more departures than max(5, 20%).
 async fn sweep(
     core: &Core,
     ctx: &Ctx,
     issuer: &str,
+    started: DateTime<Utc>,
     seen: &BTreeSet<String>,
     members: usize,
     report: &mut SyncReport,
@@ -303,9 +344,11 @@ async fn sweep(
     let linked = sqlx::query!(
         r#"SELECT u.id, u.display_name, u.email, u.oidc_subject AS "oidc_subject!",
                   EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
-             FROM users u WHERE u.oidc_issuer = $1 AND u.status = 'active'
+             FROM users u
+            WHERE u.oidc_issuer = $1 AND u.status = 'active' AND u.created_at < $2
             ORDER BY u.display_name"#,
-        issuer
+        issuer,
+        started
     )
     .fetch_all(&core.db)
     .await?;
@@ -316,21 +359,57 @@ async fn sweep(
     if missing.is_empty() {
         return Ok(());
     }
-    if members == 0 {
-        report.errors.push(format!(
-            "Entra listed no member accounts, so the {} PADM account(s) it did not list \
-             were not deactivated; check the Graph permissions, then run a full sync",
-            missing.len()
-        ));
-        return Ok(());
-    }
+    // `set_user_status` keeps the last active administrator: when every one
+    // of them is missing, the last of them in this order stays, so it does
+    // not count as a departure.
+    let admins = sqlx::query_scalar!(
+        r#"SELECT DISTINCT ra.user_id FROM role_assignments ra
+             JOIN roles r ON r.id = ra.role_id JOIN users u ON u.id = ra.user_id
+            WHERE r.key = $1 AND ra.department_id IS NULL AND u.status = 'active'"#,
+        role_keys::ADMIN
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let kept = admins
+        .iter()
+        .all(|a| missing.iter().any(|r| r.id == *a))
+        .then(|| missing.iter().rev().find(|r| admins.contains(&r.id)))
+        .flatten()
+        .map(|r| r.id);
+    let departing: Vec<_> = missing.iter().filter(|r| Some(r.id) != kept).collect();
     let limit = (linked.len() / 5).max(5);
-    if missing.len() > limit {
-        report.errors.push(format!(
+    let held = if departing.is_empty() {
+        None
+    } else if members == 0 {
+        Some(format!(
+            "Entra listed no member accounts, so the {} linked PADM account(s) it did not list \
+             were not departed",
+            departing.len()
+        ))
+    } else if departing.len() > limit {
+        Some(format!(
             "{} of {} linked PADM accounts are not in Entra (more than {limit} at once), \
-             so none was deactivated; check the Graph permissions, then run a full sync",
-            missing.len(),
+             so none was departed",
+            departing.len(),
             linked.len()
+        ))
+    } else {
+        None
+    };
+    if let Some(held) = held {
+        const NAMED: usize = 20;
+        let mut names = departing
+            .iter()
+            .take(NAMED)
+            .map(|r| format!("{} <{}>", r.display_name, r.email))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if departing.len() > NAMED {
+            names = format!("{names} and {} more", departing.len() - NAMED);
+        }
+        report.errors.push(format!(
+            "{held}: {names}. Check Entra and the Graph permissions; if the departures are \
+             real, depart those people by hand on their pages"
         ));
         return Ok(());
     }
@@ -355,7 +434,8 @@ struct Linked<'a> {
 }
 
 /// Depart someone Entra no longer has as an enabled member. The last
-/// administrator and accounts with a local password are reported instead.
+/// administrator is reported instead; a departed account that had a local
+/// password is reported too, so an administrator knows.
 async fn depart(
     core: &Core,
     ctx: &Ctx,
@@ -364,15 +444,15 @@ async fn depart(
     report: &mut SyncReport,
 ) -> CoreResult<()> {
     let (name, email) = (who.name, who.email);
-    if who.local_login {
-        report.errors.push(format!(
-            "{name} <{email}> {why} but was not deactivated: the account has a local password, \
-             so an administrator decides"
-        ));
-        return Ok(());
-    }
     match super::set_user_status(&core.db, ctx, who.id, UserStatus::Departed).await {
-        Ok(()) => report.departed += 1,
+        Ok(()) => {
+            report.departed += 1;
+            if who.local_login {
+                report.errors.push(format!(
+                    "{name} <{email}> {why} and was departed; the account also had a local password"
+                ));
+            }
+        }
         Err(CoreError::Conflict(reason)) => report.errors.push(format!(
             "{name} <{email}> {why} but was not deactivated: {reason}"
         )),
@@ -561,34 +641,22 @@ async fn apply(
         }
     };
 
-    let moved = set_idp_department(&mut tx, id, want).await?;
-    if let Some((before, after)) = &moved {
-        report
-            .changed_departments
-            .extend(before.iter().chain(after.iter()).copied());
-        events.push(
-            AuditEvent::new(
-                Category::Permission,
-                "user.idp_memberships_synced",
-                ctx.actor.clone(),
-                "user",
-            )
-            .object(id, Some(&name))
-            .change(
-                "departments",
-                department_names(&mut tx, before).await?,
-                department_names(&mut tx, after).await?,
-            )
-            .context("entra_department", u.department.clone()),
-        );
-    }
+    let moved =
+        match set_idp_department(&mut tx, ctx, id, &name, u.department.as_deref(), want).await? {
+            Some((departments, event)) => {
+                report.changed_departments.extend(departments);
+                events.push(event);
+                true
+            }
+            None => false,
+        };
     if !events.is_empty() {
         pdms_audit::append(&mut tx, events).await?;
     }
     tx.commit().await?;
     if created {
         report.created += 1;
-    } else if changed || moved.is_some() {
+    } else if changed || moved {
         report.updated += 1;
     }
     if want.is_none() {
@@ -615,14 +683,20 @@ fn email_conflict(
     }
 }
 
-/// Make `want` the person's only `idp` department. A `manual` membership in
-/// `want` already satisfies it, so no `idp` row is added then. Returns the
-/// `idp` departments (before, after) when they changed.
-async fn set_idp_department(
+/// Make `want` the person's only `idp` department, for the sync and for
+/// mapping changes (`entra_values`). A `manual` membership in `want` already
+/// satisfies it, so no `idp` row is added then; `manual` rows are never
+/// touched. When anything changed, returns the departments that gained or
+/// lost the person and the `user.idp_memberships_synced` event, which the
+/// caller appends in the same transaction.
+pub(super) async fn set_idp_department(
     conn: &mut PgConnection,
+    ctx: &Ctx,
     user_id: Uuid,
+    name: &str,
+    entra_department: Option<&str>,
     want: Option<Uuid>,
-) -> CoreResult<Option<(BTreeSet<Uuid>, BTreeSet<Uuid>)>> {
+) -> CoreResult<Option<(BTreeSet<Uuid>, AuditEvent)>> {
     let rows = sqlx::query!(
         r#"SELECT department_id, source AS "source: MembershipSource"
              FROM department_members WHERE user_id = $1"#,
@@ -662,7 +736,20 @@ async fn set_idp_department(
         .execute(&mut *conn)
         .await?;
     }
-    Ok(Some((have, want)))
+    let event = AuditEvent::new(
+        Category::Permission,
+        "user.idp_memberships_synced",
+        ctx.actor.clone(),
+        "user",
+    )
+    .object(user_id, Some(name))
+    .change(
+        "departments",
+        department_names(conn, &have).await?,
+        department_names(conn, &want).await?,
+    )
+    .context("entra_department", entra_department);
+    Ok(Some((have.union(&want).copied().collect(), event)))
 }
 
 async fn department_names(
@@ -700,11 +787,7 @@ pub async fn status(db: &PgPool) -> CoreResult<SyncStatus> {
 pub async fn request_sync(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<()> {
     ctx.require(Capability::ManageDirectory)?;
     graph(core)?;
-    if !core.config.entra_sync.enabled {
-        return Err(CoreError::validation(
-            "Entra sync is turned off ([entra_sync] enabled = false)",
-        ));
-    }
+    require_enabled(core)?;
     let mut tx = core.db.begin().await?;
     jobs::enqueue(
         &mut *tx,
@@ -754,8 +837,13 @@ pub async fn schedule_daily(core: &Core, now: DateTime<Utc>) -> CoreResult<bool>
     .is_some())
 }
 
-/// Worker handler for [`SYNC_JOB`]. A run already in progress is not an error.
+/// Worker handler for [`SYNC_JOB`]. A run already in progress is not an
+/// error, nor is a run queued before the sync was turned off (not retried).
 pub async fn run_job(core: &Core, payload: &Value) -> Result<(), String> {
+    if !core.config.entra_sync.enabled {
+        tracing::info!("Entra sync is turned off; the queued run was skipped");
+        return Ok(());
+    }
     let full = payload
         .get("full")
         .and_then(Value::as_bool)
@@ -783,5 +871,23 @@ pub async fn run_job(core: &Core, payload: &Value) -> Result<(), String> {
             Ok(())
         }
         Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stored_summary_without_newer_fields_still_reads() {
+        let r: SyncReport = serde_json::from_value(json!({ "created": 2, "departed": 1 })).unwrap();
+        assert_eq!((r.created, r.departed, r.updated), (2, 1, 0));
+        assert!(r.errors.is_empty() && r.changed_departments.is_empty());
+    }
+
+    #[test]
+    fn the_cursor_key_covers_guests() {
+        assert_eq!(cursor_key("id,department", false), "id,department");
+        assert_eq!(cursor_key("id,department", true), "id,department;guests");
     }
 }

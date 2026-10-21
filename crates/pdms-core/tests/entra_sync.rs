@@ -73,6 +73,25 @@ async fn saved_link(core: &Core) -> Option<String> {
         .flatten()
 }
 
+/// `user.idp_memberships_synced` events about one person.
+async fn membership_audits(core: &Core, user: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'user.idp_memberships_synced' AND object_id = $1",
+    )
+    .bind(user.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+/// Initial (full) rounds requested so far.
+fn full_rounds(m: &MockGraph) -> usize {
+    m.requests()
+        .iter()
+        .filter(|r| r.starts_with("GET /v1.0/users/delta?$select="))
+        .count()
+}
+
 #[tokio::test]
 async fn department_values_map_case_and_spacing_insensitively() {
     let (core, _db) = core().await;
@@ -415,6 +434,105 @@ async fn a_manual_membership_in_the_mapped_department_satisfies_the_mapping() {
 }
 
 #[tokio::test]
+async fn mapping_changes_apply_at_once_to_people_already_synced() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    let ops = directory::create_department(&core.db, &system(), "OPS", "Operations")
+        .await
+        .unwrap();
+    m.add_user(member(
+        OID_A,
+        "Alice",
+        "alice@county.example",
+        Some("Road & Bridge"),
+    ));
+    m.add_user(member(
+        OID_B,
+        "Bob",
+        "bob@county.example",
+        Some("road and bridge "),
+    ));
+    m.add_user(member(OID_C, "Carl", "carl@county.example", Some("Clerk")));
+    // The first sync, before any mapping: nobody has a department.
+    entra_sync::run(&core, &system()).await.unwrap();
+    let (a, b, c) = (
+        id_of(&core, OID_A).await.unwrap(),
+        id_of(&core, OID_B).await.unwrap(),
+        id_of(&core, OID_C).await.unwrap(),
+    );
+    assert!(idp_departments(&core, a).await.is_empty());
+    // Bob is already in Road and Bridge by hand.
+    directory::add_department_member(&core.db, &system(), b, rb, false)
+        .await
+        .unwrap();
+
+    // Mapping the value gives Alice the department now, with no full resync.
+    entra_values::upsert(&core.db, &system(), "ROAD  AND BRIDGE", rb)
+        .await
+        .unwrap();
+    assert_eq!(idp_departments(&core, a).await, vec![rb]);
+    assert_eq!(membership_audits(&core, a).await, 1);
+    assert!(
+        idp_departments(&core, b).await.is_empty(),
+        "the manual membership satisfies it"
+    );
+    assert_eq!(membership_audits(&core, b).await, 0);
+    assert!(idp_departments(&core, c).await.is_empty(), "another value");
+    let un = entra_values::unmapped(&core.db).await.unwrap();
+    assert_eq!(un.len(), 1, "{un:?}");
+    assert_eq!(un[0].value, "Clerk");
+
+    // A following incremental run leaves it in place.
+    let r = entra_sync::run(&core, &system()).await.unwrap();
+    assert!(r.changed_departments.is_empty(), "{r:?}");
+    assert_eq!(idp_departments(&core, a).await, vec![rb]);
+    assert_eq!(full_rounds(&m), 1);
+
+    // Pointing the value at another department moves her.
+    entra_values::upsert(&core.db, &system(), "Road & Bridge", ops)
+        .await
+        .unwrap();
+    assert_eq!(idp_departments(&core, a).await, vec![ops]);
+    assert_eq!(idp_departments(&core, b).await, vec![ops]);
+    entra_values::upsert(&core.db, &system(), "Road & Bridge", rb)
+        .await
+        .unwrap();
+    assert_eq!(idp_departments(&core, a).await, vec![rb]);
+    assert!(idp_departments(&core, b).await.is_empty());
+    let (a_events, b_events) = (
+        membership_audits(&core, a).await,
+        membership_audits(&core, b).await,
+    );
+    assert_eq!((a_events, b_events), (3, 2));
+
+    // Removing the mapping takes the Entra-managed membership away again.
+    entra_values::remove(&core.db, &system(), "road & bridge")
+        .await
+        .unwrap();
+    assert!(idp_departments(&core, a).await.is_empty());
+    assert_eq!(membership_audits(&core, a).await, a_events + 1);
+    assert_eq!(
+        membership_audits(&core, b).await,
+        b_events,
+        "Bob had no Entra-managed membership"
+    );
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT department_id, source::text FROM department_members WHERE user_id = $1",
+    )
+    .bind(b)
+    .fetch_all(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(rows, vec![(rb, "manual".to_owned())]);
+    let un = entra_values::unmapped(&core.db).await.unwrap();
+    let rb_value = un.iter().find(|u| u.normalized == "road and bridge");
+    assert_eq!(rb_value.map(|u| u.users), Some(2), "{un:?}");
+}
+
+#[tokio::test]
 async fn an_account_linked_at_an_earlier_sign_in_becomes_entra_managed() {
     let m = MockGraph::start().await;
     let (core, _db) = synced(&m).await;
@@ -732,7 +850,17 @@ async fn the_sweep_holds_back_when_entra_looks_empty_or_too_many_vanish() {
     let r = entra_sync::run_full(&core, &system()).await.unwrap();
     assert_eq!(r.departed, 0, "{r:?}");
     assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
-    assert!(r.errors[0].contains("no member accounts"), "{:?}", r.errors);
+    let line = &r.errors[0];
+    assert!(line.contains("no member accounts"), "{line}");
+    assert!(
+        line.contains("Alice <alice@county.example>") && line.contains("Bob <bob@county.example>"),
+        "{line}"
+    );
+    assert!(
+        line.contains("Check Entra and the Graph permissions")
+            && line.contains("depart those people by hand on their pages"),
+        "{line}"
+    );
     for o in [OID_A, OID_B] {
         let id = id_of(&core, o).await.unwrap();
         assert_eq!(status_of(&core, id).await, "active");
@@ -753,6 +881,13 @@ async fn the_sweep_holds_back_when_entra_looks_empty_or_too_many_vanish() {
     assert_eq!(r.departed, 0, "{r:?}");
     assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
     assert!(r.errors[0].contains("7 of 9"), "{:?}", r.errors);
+    assert!(
+        r.errors[0].contains("P1 <p1@county.example>")
+            && r.errors[0].contains("P7 <p7@county.example>")
+            && !r.errors[0].contains("Alice"),
+        "{:?}",
+        r.errors
+    );
     for i in 1..=7 {
         let id = id_of(&core, &oid(i)).await.unwrap();
         assert_eq!(status_of(&core, id).await, "active");
@@ -767,34 +902,190 @@ async fn the_sweep_holds_back_when_entra_looks_empty_or_too_many_vanish() {
 }
 
 #[tokio::test]
-async fn accounts_with_a_local_password_are_never_departed_by_the_sync() {
+async fn accounts_with_a_local_password_are_departed_and_reported() {
     let m = MockGraph::start().await;
     let (core, _db) = synced(&m).await;
     let a = linked_local(&core, "Alice", "alice@county.example", OID_A).await;
-    directory::set_local_credentials(&core.db, &core.keys, &system(), a, PW, None)
-        .await
-        .unwrap();
+    let c = linked_local(&core, "Carl", "carl@county.example", OID_C).await;
+    for id in [a, c] {
+        directory::set_local_credentials(&core.db, &core.keys, &system(), id, PW, None)
+            .await
+            .unwrap();
+    }
     m.add_user(member(OID_A, "Alice", "alice@county.example", None));
     m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_user(member(OID_C, "Carl", "carl@county.example", None));
     entra_sync::run(&core, &system()).await.unwrap();
 
     m.update_user(OID_A, json!({ "accountEnabled": false }));
     let r = entra_sync::run(&core, &system()).await.unwrap();
-    assert_eq!(r.departed, 0, "{r:?}");
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+    let line = &r.errors[0];
+    assert!(
+        line.contains("alice@county.example")
+            && line.contains("local password")
+            && line.contains("departed"),
+        "{line}"
+    );
+    assert_eq!(status_of(&core, a).await, "departed");
+
+    // Also by the sweep of a full round.
+    m.remove_user(OID_C, "deleted");
+    let r = entra_sync::run_full(&core, &system()).await.unwrap();
+    assert_eq!(r.departed, 1, "{r:?}");
     assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
     assert!(
-        r.errors[0].contains("alice@county.example") && r.errors[0].contains("local password"),
+        r.errors[0].contains("carl@county.example") && r.errors[0].contains("local password"),
+        "{:?}",
+        r.errors
+    );
+    assert_eq!(status_of(&core, c).await, "departed");
+}
+
+#[tokio::test]
+async fn the_sweep_spares_accounts_created_after_the_round_started() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    entra_sync::run(&core, &system()).await.unwrap();
+    let gone = linked_local(&core, "Gone", "gone@county.example", OID_E).await;
+    // A first sign-in after the round listed Entra, before its sweep: the
+    // account is newer than the round's start.
+    let late = linked_local(&core, "Late", "late@county.example", OID_F).await;
+    sqlx::query("UPDATE users SET created_at = now() + interval '1 hour' WHERE id = $1")
+        .bind(late)
+        .execute(&core.db)
+        .await
+        .unwrap();
+    let r = entra_sync::run_full(&core, &system()).await.unwrap();
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert_eq!(status_of(&core, gone).await, "departed");
+    assert_eq!(status_of(&core, late).await, "active");
+}
+
+#[tokio::test]
+async fn a_held_back_sweep_names_at_most_twenty_accounts() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.state.lock().unwrap().page_size = 50;
+    for i in 1..=25 {
+        let (name, mail) = (format!("P{i:02}"), format!("p{i:02}@county.example"));
+        m.add_user(member(&oid(i), &name, &mail, None));
+    }
+    entra_sync::run(&core, &system()).await.unwrap();
+    for i in 1..=21 {
+        m.remove_user(&oid(i), "deleted");
+    }
+    let r = entra_sync::run_full(&core, &system()).await.unwrap();
+    assert_eq!(r.departed, 0, "{r:?}");
+    assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+    let line = &r.errors[0];
+    assert!(line.contains("21 of 25"), "{line}");
+    assert!(line.contains("P01 <p01@county.example>"), "{line}");
+    assert!(line.contains("P20 <p20@county.example>"), "{line}");
+    assert!(!line.contains("P21"), "{line}");
+    assert!(line.contains("and 1 more"), "{line}");
+    assert!(line.contains("depart those people by hand"), "{line}");
+    assert!(!line.contains("run a full sync"), "{line}");
+}
+
+#[tokio::test]
+async fn the_last_administrator_does_not_count_toward_the_sweep_limit() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    for i in 1..=6 {
+        let (name, mail) = (format!("P{i}"), format!("p{i}@county.example"));
+        m.add_user(member(&oid(i), &name, &mail, None));
+    }
+    entra_sync::run(&core, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    let admin = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    directory::assign_role(&core.db, &system(), a, admin, None)
+        .await
+        .unwrap();
+
+    // Six of seven vanish, but the last administrator is never departed:
+    // five departures are within the limit of five.
+    m.remove_user(OID_A, "deleted");
+    for i in 1..=5 {
+        m.remove_user(&oid(i), "deleted");
+    }
+    let r = entra_sync::run_full(&core, &system()).await.unwrap();
+    assert_eq!(r.departed, 5, "{r:?}");
+    assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+    assert!(
+        r.errors[0].contains("alice@county.example")
+            && r.errors[0].contains("administrator must remain"),
         "{:?}",
         r.errors
     );
     assert_eq!(status_of(&core, a).await, "active");
+}
 
-    // Nor by the sweep of a full round.
-    m.remove_user(OID_A, "deleted");
-    let r = entra_sync::run_full(&core, &system()).await.unwrap();
-    assert_eq!(r.departed, 0, "{r:?}");
-    assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
-    assert!(r.errors[0].contains("local password"), "{:?}", r.errors);
+#[tokio::test]
+async fn the_sync_refuses_to_run_while_turned_off() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let mut cfg = (*core.config).clone();
+    cfg.entra_sync.enabled = false;
+    let off = Core::new(core.db.clone(), cfg).unwrap();
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    for full in [false, true] {
+        let r = if full {
+            entra_sync::run_full(&off, &system()).await
+        } else {
+            entra_sync::run(&off, &system()).await
+        };
+        assert!(
+            matches!(&r, Err(CoreError::Validation(m)) if m.contains("turned off")),
+            "{r:?}"
+        );
+    }
+    // A run queued before the sync was turned off finishes without retrying.
+    for full in [false, true] {
+        entra_sync::run_job(&off, &json!({ "full": full }))
+            .await
+            .unwrap();
+    }
+    assert!(m.requests().is_empty(), "{:?}", m.requests());
+    assert!(id_of(&core, OID_A).await.is_none());
+}
+
+#[tokio::test]
+async fn changing_include_guests_starts_a_full_round() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let with_guests = |on: bool| {
+        let mut cfg = (*core.config).clone();
+        cfg.entra_sync.include_guests = on;
+        Core::new(core.db.clone(), cfg).unwrap()
+    };
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    let mut guest = member(OID_G, "Gwen", "gwen@partner.example", None);
+    guest["userType"] = json!("Guest");
+    m.add_user(guest);
+    entra_sync::run(&core, &system()).await.unwrap();
+    assert!(id_of(&core, OID_G).await.is_none());
+
+    // Guests on: a full round, since a delta would not list her again.
+    let on = with_guests(true);
+    let r = entra_sync::run(&on, &system()).await.unwrap();
+    assert_eq!(r.created, 1, "{r:?}");
+    assert_eq!(full_rounds(&m), 2);
+    let g = id_of(&core, OID_G).await.unwrap();
+    entra_sync::run(&on, &system()).await.unwrap();
+    assert_eq!(full_rounds(&m), 2, "the same setting continues the delta");
+
+    // Guests off again: the full round departs the guest account.
+    let off = with_guests(false);
+    let r = entra_sync::run(&off, &system()).await.unwrap();
+    assert_eq!(full_rounds(&m), 3);
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert_eq!(status_of(&core, g).await, "departed");
+    let a = id_of(&core, OID_A).await.unwrap();
     assert_eq!(status_of(&core, a).await, "active");
 }
 
