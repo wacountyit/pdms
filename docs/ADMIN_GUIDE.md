@@ -338,22 +338,36 @@ resync** reads every account again.
 
 **Setup.**
 
-1. Create the certificate on the PADM server:
-   `docker compose run --rm app gen-graph-cert --out /var/lib/pdms/graph_certificate`
-   (or `pdms gen-graph-cert --out secrets/graph_certificate` on a host with
-   the binary). Options: `--days N` (30 to 1095, default two years) and
-   `--name CN`. It writes the secret certificate and key (mode 0600) to the
-   file, and the public certificate to the same name plus `.crt`
-   (`graph_certificate.crt`). It never overwrites an existing file. It
-   prints the `.crt` path and the certificate thumbprint.
+1. Create the certificate in the `secrets/` directory on the host (never in
+   the `pdmsdata` volume, which holds documents and is backed up as one
+   archive). Run it from the PADM install directory, either with the host
+   binary:
+   `pdms gen-graph-cert --out secrets/graph_certificate`
+   or through Docker (the container runs as an unprivileged user, so run it
+   as yourself and mount `secrets/`):
+   `docker compose run --rm --user "$(id -u):$(id -g)" -v "$PWD/secrets:/out" app gen-graph-cert --out /out/graph_certificate`
+   Options: `--days N` (30 to 1095, default two years) and `--name CN`. It
+   writes the secret certificate and key to `secrets/graph_certificate`
+   (mode 0600) and the public certificate to `secrets/graph_certificate.crt`.
+   It never overwrites an existing file, and it prints the `.crt` path and
+   the certificate thumbprint. Then make the key readable by the containers,
+   as the installer does for the other secret files inside the private
+   `secrets/` directory: `chmod 644 secrets/graph_certificate`.
 2. In Entra ID, register an app **PADM Service**, add the Microsoft Graph
    **application** permission `User.Read.All`, grant admin consent, and
-   upload the `.crt` file under **Certificates & secrets**. There is no
-   client secret.
-3. Set `[graph] tenant_id` and `client_id` in `config/pdms.toml`, give PADM the
-   certificate file with the environment variable
-   `PDMS_GRAPH__CERTIFICATE_FILE` (for Docker, add it to the `app` and `worker`
-   environment, for example `/var/lib/pdms/graph_certificate`), and set:
+   upload `secrets/graph_certificate.crt` (the public certificate, from the
+   host) under **Certificates & secrets**. There is no client secret.
+3. Set `[graph] tenant_id` and `client_id` in `config/pdms.toml`. The
+   installer does not yet wire the certificate into Docker Compose, so edit
+   `docker-compose.yml` by hand, following the existing secrets:
+   - in the shared `environment:` block, add
+     `PDMS_GRAPH__CERTIFICATE_FILE: /run/secrets/graph_certificate`;
+   - add `graph_certificate` to the `secrets: [...]` list of the shared block
+     (used by `app` and `worker`) and of `migrate`;
+   - in the top-level `secrets:` section, add
+     `graph_certificate: { file: ./secrets/graph_certificate }`.
+
+   Then set:
 
    ```toml
    [entra_sync]
