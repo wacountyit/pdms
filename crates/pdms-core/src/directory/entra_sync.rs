@@ -729,3 +729,59 @@ pub async fn request_sync(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<()> 
     tx.commit().await?;
     Ok(())
 }
+
+/// Queue today's run once the local time is past `[entra_sync] run_at`.
+/// The idempotency key makes it once per local date, across workers.
+pub async fn schedule_daily(core: &Core, now: DateTime<Utc>) -> CoreResult<bool> {
+    let cfg = &core.config.entra_sync;
+    let Some(at) = cfg.run_at_time() else {
+        return Ok(false);
+    };
+    if !cfg.enabled {
+        return Ok(false);
+    }
+    let local = now.with_timezone(&core.config.timezone());
+    if local.time() < at {
+        return Ok(false);
+    }
+    Ok(jobs::enqueue(
+        &core.db,
+        NewJob::new(SYNC_JOB, json!({ "full": false }))
+            .idempotency_key(format!("entra_sync:daily:{}", local.date_naive()))
+            .max_attempts(3),
+    )
+    .await?
+    .is_some())
+}
+
+/// Worker handler for [`SYNC_JOB`]. A run already in progress is not an error.
+pub async fn run_job(core: &Core, payload: &Value) -> Result<(), String> {
+    let full = payload
+        .get("full")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let ctx = Ctx::system("entra-sync");
+    let result = if full {
+        run_full(core, &ctx).await
+    } else {
+        run(core, &ctx).await
+    };
+    match result {
+        Ok(r) => {
+            tracing::info!(
+                created = r.created,
+                updated = r.updated,
+                departed = r.departed,
+                unmapped = r.unmapped,
+                problems = r.errors.len(),
+                "Entra directory synchronized"
+            );
+            Ok(())
+        }
+        Err(CoreError::Conflict(m)) => {
+            tracing::info!("{m}; this run was skipped");
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}

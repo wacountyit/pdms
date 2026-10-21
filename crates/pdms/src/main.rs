@@ -81,6 +81,12 @@ enum Command {
     /// Run the reminder planner now (statuses, tasks, notifications). The worker
     /// also does this every 15 minutes; emails are sent by the worker.
     RunScheduler,
+    /// Read people and departments from Entra ID now (the worker does this
+    /// nightly when [entra_sync] is enabled). --full ignores the saved cursor.
+    SyncDirectory {
+        #[arg(long)]
+        full: bool,
+    },
     /// Print a new random master secret for PDMS_SECRET_KEY.
     GenSecret,
     /// Create the certificate for the Microsoft Graph app registration
@@ -280,6 +286,23 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
                 "Status changes: {}, tasks created: {}, tasks now overdue: {}, notifications: {}, deliveries: {}",
                 r.status_changes, r.tasks_created, r.tasks_overdue, r.notifications, r.deliveries
             );
+        }
+        Command::SyncDirectory { full } => {
+            use pdms_core::directory::entra_sync;
+            let core = connect(config).await?;
+            let ctx = Ctx::system("cli:sync-directory");
+            let r = if full {
+                entra_sync::run_full(&core, &ctx).await?
+            } else {
+                entra_sync::run(&core, &ctx).await?
+            };
+            println!(
+                "Created {}, updated {}, departed {}; {} without a mapped department.",
+                r.created, r.updated, r.departed, r.unmapped
+            );
+            for e in &r.errors {
+                println!("  needs attention: {e}");
+            }
         }
         Command::SeedDemo => {
             let core = connect(config).await?;

@@ -849,3 +849,89 @@ async fn changing_the_attribute_starts_a_full_read() {
         .count();
     assert_eq!(rounds, 2);
 }
+
+#[tokio::test]
+async fn the_daily_run_is_queued_once_after_run_at_local_time() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let mut cfg = (*core.config).clone();
+    cfg.org.timezone = "America/Chicago".into();
+    cfg.entra_sync.run_at = "02:30".into();
+    let core = Core::new(core.db.clone(), cfg).unwrap();
+    let at = |s: &str| s.parse::<chrono::DateTime<chrono::Utc>>().unwrap();
+    // 2026-10-15 07:00Z is 02:00 CDT: too early.
+    assert!(
+        !entra_sync::schedule_daily(&core, at("2026-10-15T07:00:00Z"))
+            .await
+            .unwrap()
+    );
+    // 08:00Z is 03:00 CDT: queued, once.
+    assert!(
+        entra_sync::schedule_daily(&core, at("2026-10-15T08:00:00Z"))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !entra_sync::schedule_daily(&core, at("2026-10-15T20:00:00Z"))
+            .await
+            .unwrap()
+    );
+    // The next local day queues again.
+    assert!(
+        entra_sync::schedule_daily(&core, at("2026-10-16T08:00:00Z"))
+            .await
+            .unwrap()
+    );
+    let keys: Vec<String> = sqlx::query_scalar(
+        "SELECT idempotency_key FROM jobs WHERE kind = 'directory.entra_sync' ORDER BY 1",
+    )
+    .fetch_all(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        keys,
+        vec!["entra_sync:daily:2026-10-15", "entra_sync:daily:2026-10-16"]
+    );
+
+    let (off, _db2) = common::core().await;
+    assert!(
+        !entra_sync::schedule_daily(&off, at("2026-10-15T08:00:00Z"))
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn the_job_runs_incremental_or_full() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    entra_sync::run_job(&core, &json!({ "full": false }))
+        .await
+        .unwrap();
+    entra_sync::run_job(&core, &json!({ "full": true }))
+        .await
+        .unwrap();
+    let full_rounds = m
+        .requests()
+        .iter()
+        .filter(|r| r.starts_with("GET /v1.0/users/delta?$select="))
+        .count();
+    assert_eq!(full_rounds, 2, "the full job ignored the saved cursor");
+}
+
+#[tokio::test]
+async fn the_job_skips_quietly_while_another_run_holds_the_lock() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let mut held = core.db.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(entra_sync::LOCK_KEY)
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    entra_sync::run_job(&core, &json!({ "full": false }))
+        .await
+        .unwrap();
+    held.rollback().await.unwrap();
+}
