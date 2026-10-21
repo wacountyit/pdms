@@ -7,6 +7,7 @@
 //! [`Capability::ManageDirectory`] and is audited in the same transaction.
 
 mod admin;
+pub mod entra_values;
 pub mod sync;
 
 pub use admin::*;

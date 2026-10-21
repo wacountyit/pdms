@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT value_normalized FROM department_entra_values",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value_normalized",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "department_entra_values",
+            "name": "value_normalized"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "13e5618c16cc9ff8f8118a630fcf3ebfe9f77e1bfa58b4b9134a04f91a93642f"
+}

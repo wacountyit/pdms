@@ -27,9 +27,9 @@ These do not change behaviour. They change where things live.
 
 1. **Migrations are split per plan.** The spec's single `0008_sharepoint_entra.sql` becomes:
    - `0008_document_visibility.sql` (P1);
-   - `0009_entra_sync.sql` (P2: `department_entra_values`, `sync_cursors`, user columns);
-   - `0010_sharepoint_files.sql` (P3);
-   - `0011_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
+   - `0010_entra_sync.sql` (P2: `department_entra_values`, `sync_cursors`, user columns);
+   - `0011_sharepoint_files.sql` (P3);
+   - `0012_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
 2. **The Graph client lives in `pdms-core::graph`** (new module), not in
    `pdms-storage`. `pdms-storage` cannot depend on `pdms-core`, and the Entra
    sync needs the same client. The SharePoint store therefore lives in
@@ -92,14 +92,14 @@ one, they update this table in the same commit.
 - **Config key:** `[graph] certificate`, not `certificate_file`. The config loader maps any `PDMS_*_FILE` environment variable onto the key without `_FILE`.
 - **Signing:** client assertions are signed **PS256** with an `x5t#S256` header (Microsoft's current guidance).
 - **Error mapping:** `GraphError::Conflict` maps to `CoreError::Conflict`; every other Graph error maps to `CoreError::Internal`, so a Graph "not found" is never shown to people as a 404.
+- **Grants:** migration 0010 also grants `DELETE` on `department_entra_values` (spec §6 listed SELECT, INSERT, UPDATE), because removing a mapping needs it.
 - **Departures:** audited as the existing `user.status_changed`, which `set_user_status` writes. There is no `directory.user_departed` (spec §11 adjusted).
 - **Additions:**
   - `GraphConfig.timeout_seconds` and `max_retries`;
   - `SyncReport.errors: Vec<String>`;
   - `sync_cursors.last_summary jsonb`;
   - `entra_sync::{run_full, status, request_sync, schedule_daily, run_job, TICK_JOB, LOCK_KEY}`;
-  - `oidc::resolve_identity`, `normalize_issuer`;
-  - `model::UserSource`.
+  - `oidc::resolve_identity`, `normalize_issuer`.
 - **Left to P4:** the Docker Compose secret and `install.sh` wiring for the certificate.
 - **Open behaviour:** an account that is departed and later re-enabled in Entra is **not** reactivated automatically; an admin reactivates it. A simultaneous first sign-in and nightly sync are resolved with `ON CONFLICT DO NOTHING`.
 
@@ -149,7 +149,7 @@ one, they update this table in the same commit.
 - **Tests:** they use P2's `tests/mock_graph` plus P3's `sp.rs` (`MockGraph`, `SpItem`, `SpState`), not a separate P4 mock.
 - **Jobs:** `RECONCILE_JOB` and `DELTA_JOB` live in `sharepoint::access` and `sharepoint::changes` and are re-exported from `sharepoint`. They are registered by `sharepoint::register_ops_jobs(worker, core)`, chained after P3's `register_jobs`.
 - **Run records:** `sync_cursors` gains a `sharepoint.reconcile` record.
-- **Migration 0011** also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
+- **Migration 0012** also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
 - **Authorization:** new `Capability::ManageSharePoint`, and new `dispatch::Visibility::Anyone` for notices that name no document.
 - **Integrity:**
   - `verify-integrity --rehash-sharepoint` (`--rehash` stays the local-file option);
