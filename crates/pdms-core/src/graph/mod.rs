@@ -4,6 +4,8 @@
 //! small client for JSON, delta queries, uploads, and downloads.
 
 pub mod cert;
+mod client;
 mod error;
 
+pub use client::{DeltaPage, GraphClient};
 pub use error::GraphError;

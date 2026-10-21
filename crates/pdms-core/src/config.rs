@@ -699,11 +699,12 @@ impl EntraSyncConfig {
 
 /// `https`, or plain `http` to this machine (tests and local mocks).
 fn https_or_loopback(s: &str) -> bool {
-    Url::parse(s).is_ok_and(|u| {
-        u.scheme() == "https"
-            || (u.scheme() == "http"
-                && matches!(u.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")))
-    })
+    Url::parse(s).is_ok_and(|u| u.scheme() == "https" || (u.scheme() == "http" && is_loopback(&u)))
+}
+
+/// The URL names this machine.
+pub(crate) fn is_loopback(u: &Url) -> bool {
+    matches!(u.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
 }
 
 /// Review and approval workflow policy.
