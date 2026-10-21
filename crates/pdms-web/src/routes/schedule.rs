@@ -65,8 +65,13 @@ fn event_view(e: &CalEvent, today: NaiveDate) -> EventView {
 // ---------------------------------------------------------------------------
 
 pub struct UpcomingView {
+    /// The visual date block ("NOV" / "9"), hidden from assistive technology.
     pub month: String,
     pub day: String,
+    /// The same date in words ("November 9, 2026") for screen readers.
+    pub full_date: String,
+    /// ISO date for the `<time datetime>` attribute.
+    pub iso: String,
     pub title: String,
     pub href: String,
     pub label: &'static str,
@@ -299,6 +304,8 @@ pub async fn dashboard(
             .map(|e| UpcomingView {
                 month: e.date.format("%b").to_string().to_uppercase(),
                 day: e.date.format("%-d").to_string(),
+                full_date: e.date.format("%B %-d, %Y").to_string(),
+                iso: e.date.format("%Y-%m-%d").to_string(),
                 title: e.title.clone(),
                 href: e.href(),
                 label: e.label(),

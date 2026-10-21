@@ -207,6 +207,22 @@ pub fn iso_date(d: Option<chrono::NaiveDate>) -> String {
     d.map_or_else(String::new, |d| d.format("%Y-%m-%d").to_string())
 }
 
+/// 1263 -> "1,263".
+pub fn group_digits(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    if n < 0 {
+        out.push('-');
+    }
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 pub fn human_size(bytes: Option<i64>) -> String {
     let Some(b) = bytes else { return String::new() };
     let b = b as f64;

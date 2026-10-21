@@ -23,8 +23,9 @@ use crate::model::UserStatus;
 use crate::notifications::rules::DueEvent;
 use crate::{Core, appointments, schedule};
 
-/// Documents considered at once for calendars and feeds.
-const MAX_DOCUMENTS: i64 = 5000;
+/// Documents considered at once for calendars, dashboards and feeds. The
+/// county overview says so when a viewer can see more than this.
+pub const MAX_DOCUMENTS: i64 = 5000;
 
 /// What a calendar event is about.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize)]

@@ -214,9 +214,39 @@ struct ReportsIndex {
 /// Documents scanned for the overview's type and department counts.
 const OVERVIEW_DOC_CAP: i64 = 20_000;
 
+/// The N in "Based on the first N documents you can see", when a cap was
+/// reached. `scanned` is what the overview's own scan returned (at most
+/// [`OVERVIEW_DOC_CAP`]). `in_scope` is the exact number of visible,
+/// non-archived documents matching the department filter: what
+/// `calendar::dashboard` and `calendar::events` read, at most
+/// [`calendar::MAX_DOCUMENTS`] of them, for the Overdue and Due-in-90 tiles
+/// and the month and department charts. The smaller cap that binds wins.
+fn cap_reached(scanned: i64, in_scope: i64) -> Option<i64> {
+    [
+        (in_scope >= calendar::MAX_DOCUMENTS, calendar::MAX_DOCUMENTS),
+        (scanned >= OVERVIEW_DOC_CAP, OVERVIEW_DOC_CAP),
+    ]
+    .into_iter()
+    .filter(|(hit, _)| *hit)
+    .map(|(_, cap)| cap)
+    .min()
+}
+
+/// The last day of the due-by-month chart: the end of the last month it
+/// shows. The chart starts with the current month, so `months` bars run to
+/// the day before the first of month `months` from now.
+fn period_end(today: NaiveDate, months: u32) -> NaiveDate {
+    let first = today.with_day(1).unwrap_or(today);
+    add_months(first, months)
+        .pred_opt()
+        .unwrap_or(today)
+        .max(today)
+}
+
 pub struct Tile {
     pub value: usize,
     pub sub: String,
+    pub href: String,
 }
 
 pub struct BoardRow {
@@ -225,6 +255,10 @@ pub struct BoardRow {
 }
 
 pub struct Boards {
+    /// "Seats you can see", or "… in this department" when filtered.
+    pub scope: &'static str,
+    /// No visible position belongs to the selected department.
+    pub empty: bool,
     pub rows: Vec<BoardRow>,
 }
 
@@ -233,17 +267,21 @@ pub struct Boards {
 pub struct Overview {
     pub months: u32,
     pub departments: Vec<(Uuid, String, bool)>,
-    pub capped: bool,
+    /// "5,000" when a document cap was reached (see [`cap_reached`]).
+    pub cap: Option<String>,
     pub as_of: String,
     pub documents: Tile,
     pub overdue: Tile,
     pub due90: Tile,
     pub in_review: Tile,
     pub due_chart: crate::charts::VBars,
-    pub due_total: usize,
+    /// The sum of the month bars.
+    pub due_total: i64,
     pub due_table: String,
     pub status_chart: crate::charts::Stacked,
+    pub status_table: String,
     pub overdue_chart: Option<crate::charts::HBars>,
+    pub overdue_table: String,
     pub boards: Option<Boards>,
 }
 
@@ -252,6 +290,16 @@ pub struct OverviewQuery {
     months: Option<u32>,
     #[serde(default)]
     department: String,
+}
+
+/// `base` narrowed to the overview's department, so a tile or "View as
+/// table" link opens the same slice the overview shows.
+fn in_department(base: &str, department: Option<Uuid>) -> String {
+    match department {
+        Some(id) if base.contains('?') => format!("{base}&department={id}"),
+        Some(id) => format!("{base}?department={id}"),
+        None => base.to_owned(),
+    }
 }
 
 fn plural_days(n: i64) -> String {
@@ -289,7 +337,6 @@ async fn build_overview(
         OVERVIEW_DOC_CAP,
     )
     .await?;
-    let capped = visible.len() as i64 >= OVERVIEW_DOC_CAP;
     let mut departments: Vec<(Uuid, String)> = visible
         .iter()
         .map(|d| (d.department_id, d.department_name.clone()))
@@ -329,6 +376,13 @@ async fn build_overview(
         .filter(|(s, _)| !matches!(s, DocumentStatus::Archived | DocumentStatus::Superseded))
         .map(|(_, n)| *n)
         .sum();
+    // What the calendar functions below read: visible, matching, not archived.
+    let in_scope: i64 = counts
+        .iter()
+        .filter(|(s, _)| *s != DocumentStatus::Archived)
+        .map(|(_, n)| *n)
+        .sum();
+    let cap = cap_reached(visible.len() as i64, in_scope).map(crate::views::group_digits);
 
     let dash = calendar::dashboard(core, ctx, &filter, 1).await?;
     let oldest = dash.overdue.iter().map(|o| o.days_overdue).max();
@@ -336,8 +390,10 @@ async fn build_overview(
         calendar::events(core, ctx, &filter, today, today + Duration::days(90), false).await?;
     let next_due = due90_events.iter().map(|e| e.date).min();
 
-    // Due by month: every month in the period, zero months included.
-    let end = add_months(today, months);
+    // Due by month: every month in the period, zero months included. The
+    // period ends with the last month shown, so every event has a bar and the
+    // total is the sum of the bars.
+    let end = period_end(today, months);
     let period_events = calendar::events(core, ctx, &filter, today, end, false).await?;
     let first = today.with_day(1).unwrap_or(today);
     let mut data = Vec::new();
@@ -353,6 +409,7 @@ async fn build_overview(
             format!("{}: {n} due", m.format("%B %Y")),
         ));
     }
+    let due_total: i64 = data.iter().map(|d| d.1).sum();
     let due_chart = crate::charts::vbars(&data, "Items due per month");
 
     let other = count_of(DocumentStatus::Draft)
@@ -397,19 +454,33 @@ async fn build_overview(
         (!rows.is_empty()).then(|| crate::charts::hbars(&rows, "Overdue items by department"));
 
     let boards = if appointments::any_visible(core, ctx).await? {
-        let attention = appointments::attention(core, ctx, today, 90).await?;
+        // The department filter applies here too: only positions of the
+        // selected department (a position with no department then drops out).
+        let positions: Vec<appointments::Position> = appointments::list_positions(core, ctx, false)
+            .await?
+            .into_iter()
+            .filter(|p| department.is_none_or(|id| p.department_id == Some(id)))
+            .collect();
+        let position_ids: BTreeSet<Uuid> = positions.iter().map(|p| p.id).collect();
+        let attention: Vec<_> = appointments::attention(core, ctx, today, 90)
+            .await?
+            .into_iter()
+            .filter(|a| position_ids.contains(&a.position_id))
+            .collect();
         let n = |f: fn(&SeatState) -> bool| attention.iter().filter(|a| f(&a.state)).count() as i64;
         let decision = n(|s| matches!(s, SeatState::DecisionOverdue | SeatState::DecisionDueToday));
         let holdover = n(|s| matches!(s, SeatState::Holdover));
         let vacant = n(|s| matches!(s, SeatState::Vacant));
         let ending = n(|s| matches!(s, SeatState::TermEnding(_)));
-        let filled: i64 = appointments::list_positions(core, ctx, false)
-            .await?
-            .iter()
-            .map(|p| p.filled)
-            .sum();
+        let filled: i64 = positions.iter().map(|p| p.filled).sum();
         let current = (filled - holdover - decision - ending).max(0);
         Some(Boards {
+            scope: if department.is_some() {
+                "Seats you can see in this department"
+            } else {
+                "Seats you can see"
+            },
+            empty: department.is_some() && positions.is_empty(),
             rows: vec![
                 BoardRow {
                     label: "Filled and current",
@@ -444,7 +515,7 @@ async fn build_overview(
     Ok(Overview {
         months,
         departments,
-        capped,
+        cap,
         as_of: fmt_date(Some(today)),
         documents: Tile {
             value: documents_total.max(0) as usize,
@@ -453,6 +524,7 @@ async fn build_overview(
                 plural_n(types.len(), "type"),
                 plural_n(depts.len(), "department")
             ),
+            href: in_department("/documents", department),
         },
         overdue: Tile {
             value: dash.overdue.len(),
@@ -460,6 +532,7 @@ async fn build_overview(
                 || "Nothing overdue".to_owned(),
                 |d| format!("Oldest: {}", plural_days(d)),
             ),
+            href: in_department("/reports/overdue", department),
         },
         due90: Tile {
             value: due90_events.len(),
@@ -467,16 +540,24 @@ async fn build_overview(
                 || "Nothing due".to_owned(),
                 |d| format!("Next: {}", fmt_date(Some(d))),
             ),
+            href: in_department("/reports/upcoming?days=90", department),
         },
         in_review: Tile {
             value: count_of(DocumentStatus::InReview).max(0) as usize,
             sub: "Awaiting sign-off".to_owned(),
+            href: in_department("/documents?status=in_review", department),
         },
         due_chart,
-        due_total: period_events.len(),
-        due_table: format!("/reports/upcoming?days={}", months * 31),
+        due_total,
+        // The Upcoming report covers [today, today + days]: the same period.
+        due_table: in_department(
+            &format!("/reports/upcoming?days={}", (end - today).num_days().max(1)),
+            department,
+        ),
         status_chart,
+        status_table: in_department("/documents", department),
         overdue_chart,
+        overdue_table: in_department("/reports/overdue", department),
         boards,
     })
 }
@@ -622,4 +703,44 @@ async fn report_csv(
         h.insert(header::CONTENT_DISPOSITION, v);
     }
     Ok(res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn day(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or(NaiveDate::MIN)
+    }
+
+    #[test]
+    fn cap_notice_names_the_cap_that_binds() {
+        // Nothing reached.
+        assert_eq!(cap_reached(4_999, 4_999), None);
+        // The calendar reads at most 5,000: the tiles and charts that use it
+        // are partial even though the overview's own scan is not.
+        assert_eq!(
+            cap_reached(4_999, calendar::MAX_DOCUMENTS),
+            Some(calendar::MAX_DOCUMENTS)
+        );
+        // Both reached: the smaller cap is the one to state.
+        assert_eq!(
+            cap_reached(OVERVIEW_DOC_CAP, 25_000),
+            Some(calendar::MAX_DOCUMENTS)
+        );
+        // Only the overview's scan reached its cap (a department filter
+        // leaves fewer than 5,000 in scope).
+        assert_eq!(cap_reached(OVERVIEW_DOC_CAP, 120), Some(OVERVIEW_DOC_CAP));
+        assert_eq!(crate::views::group_digits(calendar::MAX_DOCUMENTS), "5,000");
+    }
+
+    #[test]
+    fn period_ends_with_the_last_month_shown() {
+        // Six bars: October through March.
+        assert_eq!(period_end(day("2026-10-21"), 6), day("2027-03-31"));
+        assert_eq!(period_end(day("2026-10-01"), 6), day("2027-03-31"));
+        assert_eq!(period_end(day("2026-10-31"), 12), day("2027-09-30"));
+        // Leap February.
+        assert_eq!(period_end(day("2027-09-15"), 6), day("2028-02-29"));
+    }
 }

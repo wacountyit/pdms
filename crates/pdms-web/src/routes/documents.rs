@@ -33,7 +33,9 @@ use crate::session::CurrentUser;
 use crate::state::AppState;
 use crate::timeline::{MarkKind, Timeline};
 use crate::upload;
-use crate::views::{FlashMsg, Layout, done, fmt_date, fmt_time, human_size, iso_date, tag_class};
+use crate::views::{
+    FlashMsg, Layout, done, fmt_date, fmt_time, group_digits, human_size, iso_date, tag_class,
+};
 
 // ---------------------------------------------------------------------------
 // Form helpers
@@ -981,22 +983,6 @@ fn key_events(
     }
     ev.sort_by_key(|e| e.0);
     ev
-}
-
-/// 1263 -> "1,263".
-fn group_digits(n: i64) -> String {
-    let digits = n.unsigned_abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
-    if n < 0 {
-        out.push('-');
-    }
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// "every year", "every 5 years", "every 6 months".

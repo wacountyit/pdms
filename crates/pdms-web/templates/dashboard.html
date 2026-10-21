@@ -48,6 +48,7 @@
     {% for e in upcoming %}
     <li>
       <span class="date-block" aria-hidden="true"><span class="month">{{ e.month }}</span><span class="day">{{ e.day }}</span></span>
+      <time class="visually-hidden" datetime="{{ e.iso }}">{{ e.full_date }}</time>
       <span class="dash-list-text"><a href="{{ e.href }}">{{ e.title }}</a><span class="muted small">{{ e.label }}{% if !e.department.is_empty() %} · {{ e.department }}{% endif %}</span></span>
     </li>
     {% endfor %}

@@ -27,13 +27,13 @@
     </div>
     <button type="submit" class="primary">Apply</button>
   </form>
-  {% if o.capped %}<p class="muted small">Based on the first 20,000 documents you can see.</p>{% endif %}
+  {% if let Some(n) = o.cap %}<p class="muted small">Based on the first {{ n }} documents you can see.</p>{% endif %}
 
   <div class="dash-tiles">
-    <a class="tile" href="/documents"><span class="label">Documents</span><span class="value">{{ o.documents.value }}</span><span class="sub">{{ o.documents.sub }}</span></a>
-    <a class="tile tile-critical" href="/reports/overdue"><span class="label">Overdue</span><span class="value">{{ o.overdue.value }}</span><span class="sub">{{ o.overdue.sub }}</span></a>
-    <a class="tile tile-warning" href="/reports/upcoming?days=90"><span class="label">Due in 90 days</span><span class="value">{{ o.due90.value }}</span><span class="sub">{{ o.due90.sub }}</span></a>
-    <a class="tile tile-info" href="/documents?status=in_review"><span class="label">In review</span><span class="value">{{ o.in_review.value }}</span><span class="sub">{{ o.in_review.sub }}</span></a>
+    <a class="tile" href="{{ o.documents.href }}"><span class="label">Documents</span><span class="value">{{ o.documents.value }}</span><span class="sub">{{ o.documents.sub }}</span></a>
+    <a class="tile tile-critical" href="{{ o.overdue.href }}"><span class="label">Overdue</span><span class="value">{{ o.overdue.value }}</span><span class="sub">{{ o.overdue.sub }}</span></a>
+    <a class="tile tile-warning" href="{{ o.due90.href }}"><span class="label">Due in 90 days</span><span class="value">{{ o.due90.value }}</span><span class="sub">{{ o.due90.sub }}</span></a>
+    <a class="tile tile-info" href="{{ o.in_review.href }}"><span class="label">In review</span><span class="value">{{ o.in_review.value }}</span><span class="sub">{{ o.in_review.sub }}</span></a>
   </div>
 
   <div class="chart-grid-2">
@@ -54,7 +54,7 @@
       {% let chart = o.status_chart %}
       {% include "charts/stacked.html" %}
       {% endif %}
-      <a class="chart-link" href="/documents">View as table</a>
+      <a class="chart-link" href="{{ o.status_table }}">View as table</a>
     </section>
 
     <section class="chart-panel" aria-labelledby="ch-over">
@@ -67,16 +67,20 @@
       {% else %}
       <p class="muted">Nothing is overdue.</p>
       {% endif %}
-      <a class="chart-link" href="/reports/overdue">View as table</a>
+      <a class="chart-link" href="{{ o.overdue_table }}">View as table</a>
     </section>
 
     {% if let Some(b) = o.boards %}
     <section class="chart-panel" aria-labelledby="ch-boards">
       <h3 id="ch-boards">Boards and commissions</h3>
-      <p class="muted small">Seats you can see</p>
+      <p class="muted small">{{ b.scope }}</p>
+      {% if b.empty %}
+      <p class="muted">No boards or commissions you can see belong to this department.</p>
+      {% else %}
       <ul class="board-summary">
         {% for r in b.rows %}<li><span>{{ r.label }}</span><strong>{{ r.count }}</strong></li>{% endfor %}
       </ul>
+      {% endif %}
       <a class="chart-link" href="/positions">View as table</a>
     </section>
     {% endif %}

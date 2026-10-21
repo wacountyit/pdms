@@ -378,6 +378,19 @@ async fn dashboard_panels_respect_visibility() {
     assert!(home.body.contains("Bravo countywide doc"));
     assert!(!home.body.contains("Bravo dept doc"));
     assert!(!home.body.contains("Bravo restricted doc"));
+    // "Coming up": the visual date block is hidden from assistive technology,
+    // and the full date is in the row's text for screen readers.
+    let due = today(&app) + chrono::Duration::days(10);
+    let coming = panel(&home.body, "upcoming-h");
+    assert!(coming.contains(r#"<span class="date-block" aria-hidden="true">"#));
+    assert!(
+        coming.contains(&format!(
+            r#"<time class="visually-hidden" datetime="{}">{}</time>"#,
+            due.format("%Y-%m-%d"),
+            due.format("%B %-d, %Y")
+        )),
+        "{coming}"
+    );
     // One visible item is due in the next 30 days.
     let tile = regex::Regex::new(r#"(?s)Due in 30 days.*?class="value">(\d+)<"#)
         .unwrap()
@@ -652,4 +665,223 @@ async fn overview_period_and_department_filters() {
         .get(&format!("/reports?department={}", Uuid::new_v4()))
         .await;
     assert_eq!(tile_value(&bogus.body, "Documents"), "2");
+}
+
+/// The numbers in an "Items due per month: Oct 2, Nov 0, …." aria label.
+fn month_bars(body: &str) -> Vec<i64> {
+    let label = regex::Regex::new(r#"aria-label="Items due per month: ([^"]*)\.""#)
+        .unwrap()
+        .captures(body)
+        .expect("due-by-month chart")[1]
+        .to_owned();
+    label
+        .split(", ")
+        .map(|p| p.rsplit(' ').next().unwrap().parse().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn overview_month_total_is_the_sum_of_its_bars() {
+    use chrono::{Datelike, Months};
+    let app = app().await;
+    let (a, _, secret) = overview_fixture(&app).await;
+    let (owner, _) = user(&app.core, "carol@x.org", Some(a), None).await;
+    let today = today(&app);
+    let first = today.with_day(1).unwrap();
+    // Six bars: this month through the fifth month from now.
+    let after = first.checked_add_months(Months::new(6)).unwrap();
+    let last = after.pred_opt().unwrap();
+    for (title, date) in [("Last day shown", last), ("Month after the chart", after)] {
+        doc(
+            &app,
+            a,
+            owner,
+            title,
+            "policy",
+            MetadataInput {
+                next_review_date: Some(date),
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = b.get("/reports").await;
+    let bars = month_bars(&r.body);
+    assert_eq!(bars.len(), 6);
+    // The fixture's two visible reviews (in ten days) and the last day shown;
+    // the month after the chart has no bar and is not in the total.
+    let sum: i64 = bars.iter().sum();
+    assert_eq!(sum, 3, "{bars:?}");
+    assert_eq!(*bars.last().unwrap(), 1, "{bars:?}");
+    let due = panel(&r.body, "ch-due");
+    assert!(due.contains("Next 6 months · 3 items"), "{due}");
+    // "View as table" covers exactly the same days.
+    let days = (last - today).num_days();
+    let link = format!("/reports/upcoming?days={days}");
+    assert!(due.contains(&format!(r#"href="{link}""#)), "{due}");
+    let table = b.get(&link).await;
+    assert!(table.body.contains("Last day shown"));
+    assert!(!table.body.contains("Month after the chart"));
+}
+
+/// The count on a "Boards and commissions" row.
+fn board_count(body: &str, label: &str) -> String {
+    let boards = panel(body, "ch-boards");
+    regex::Regex::new(&format!(
+        r#"<li><span>{label}</span><strong>(\d+)</strong></li>"#
+    ))
+    .unwrap()
+    .captures(boards)
+    .unwrap_or_else(|| panic!("no {label} row in {boards}"))[1]
+        .to_owned()
+}
+
+#[tokio::test]
+async fn overview_boards_follow_the_department_filter() {
+    use pdms_core::appointments::{self, NewAppointment, PositionSpec};
+    let app = app().await;
+    let (a, bdept, secret) = overview_fixture(&app).await;
+    let alice = directory::list_users(&app.core.db, "alice@x.org", 1)
+        .await
+        .unwrap()[0]
+        .id;
+    // A third department alice can see a document of, with no boards.
+    let c = directory::create_department(&app.core.db, &system(), "CCC", "Dept Charlie")
+        .await
+        .unwrap();
+    let (carl, _) = user(&app.core, "carl@x.org", Some(c), None).await;
+    let cw = doc(
+        &app,
+        c,
+        carl,
+        "Charlie countywide doc",
+        "policy",
+        MetadataInput::default(),
+    )
+    .await;
+    documents::set_visibility(&app.core, &system(), cw, pdms_authz::Visibility::CountyWide)
+        .await
+        .unwrap();
+
+    let position = async |name: &str, dept: Uuid, seats: i32, manager: Option<Uuid>| {
+        appointments::create_position(
+            &app.core,
+            &system(),
+            PositionSpec {
+                name: name.into(),
+                body_name: "Advisory Committee".into(),
+                department_id: Some(dept),
+                appointing_authority: "Board".into(),
+                term_months: Some(24),
+                seats,
+                manager_user_id: manager,
+                reappointment_lead_days: 90,
+                description: String::new(),
+                is_active: true,
+            },
+        )
+        .await
+        .unwrap()
+    };
+    // Alpha (alice's department): two seats, one filled and current.
+    let alpha_seat = position("Alpha seat", a, 2, None).await;
+    let t = today(&app);
+    appointments::appoint(
+        &app.core,
+        &system(),
+        alpha_seat,
+        NewAppointment {
+            person_name: "Pat Example".into(),
+            start_date: t - chrono::Duration::days(100),
+            end_date: Some(t + chrono::Duration::days(400)),
+            reappointment_due_date: Some(t + chrono::Duration::days(300)),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // Bravo: one vacant seat alice sees because she manages it.
+    position("Bravo seat", bdept, 1, Some(alice)).await;
+
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let all = b.get("/reports").await;
+    assert!(panel(&all.body, "ch-boards").contains("Seats you can see"));
+    assert_eq!(board_count(&all.body, "Filled and current"), "1");
+    assert_eq!(board_count(&all.body, "Vacant"), "2");
+
+    let alpha = b.get(&format!("/reports?department={a}")).await;
+    assert!(panel(&alpha.body, "ch-boards").contains("Seats you can see in this department"));
+    assert_eq!(board_count(&alpha.body, "Filled and current"), "1");
+    assert_eq!(board_count(&alpha.body, "Vacant"), "1");
+
+    let bravo = b.get(&format!("/reports?department={bdept}")).await;
+    assert_eq!(board_count(&bravo.body, "Filled and current"), "0");
+    assert_eq!(board_count(&bravo.body, "Vacant"), "1");
+    // The tiles and tables open the same department.
+    assert!(
+        bravo
+            .body
+            .contains(&format!(r#"href="/reports/overdue?department={bdept}""#))
+    );
+
+    let charlie = b.get(&format!("/reports?department={c}")).await;
+    let boards = panel(&charlie.body, "ch-boards");
+    assert!(boards.contains("No boards or commissions you can see belong to this department."));
+    assert!(!boards.contains("<strong>"));
+}
+
+#[tokio::test]
+async fn overview_overdue_by_department_names_are_text_rows() {
+    let app = app().await;
+    let (a, _, secret) = overview_fixture(&app).await;
+    let long = directory::create_department(
+        &app.core.db,
+        &system(),
+        "RBM",
+        "Road and Bridge Maintenance and Operations",
+    )
+    .await
+    .unwrap();
+    let (owner, _) = user(&app.core, "carol@x.org", Some(a), None).await;
+    let (dave, _) = user(&app.core, "dave@x.org", Some(long), None).await;
+    let past = Some(today(&app) - chrono::Duration::days(20));
+    let late = || MetadataInput {
+        next_review_date: past,
+        ..Default::default()
+    };
+    for t in ["Late one", "Late two"] {
+        doc(&app, a, owner, t, "policy", late()).await;
+    }
+    let id = doc(&app, long, dave, "Late road policy", "policy", late()).await;
+    documents::set_visibility(&app.core, &system(), id, pdms_authz::Visibility::CountyWide)
+        .await
+        .unwrap();
+
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = b.get("/reports").await;
+    let over = panel(&r.body, "ch-over");
+    // One summary for assistive technology, most overdue first.
+    assert!(
+        over.contains(
+            r#"<div class="hbars" role="img" aria-label="Overdue items by department: Dept Alpha 2, Road and Bridge Maintenance and Operations 1.">"#
+        ),
+        "{over}"
+    );
+    // Each name is a whole line of HTML text above its bar, never cut short.
+    assert!(
+        over.contains(
+            r#"<span class="hbar-label">Road and Bridge Maintenance and Operations</span>"#
+        )
+    );
+    // The bars: critical color, a native tooltip, the count after the bar.
+    assert_eq!(over.matches(r#"<g class="chart-seg-critical">"#).count(), 2);
+    assert!(over.contains("<title>Dept Alpha: 2</title>"));
+    assert!(over.contains(r#"<svg class="hbar" width="80%" height="16">"#));
+    assert!(over.contains(r#"<svg class="hbar" width="40%" height="16">"#));
+    assert!(over.contains(r#"<span class="hbar-value">2</span>"#));
+    assert!(!over.contains("style="));
 }
