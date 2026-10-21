@@ -301,6 +301,50 @@ async fn existing_account_with_the_same_email_is_never_linked() {
 }
 
 #[tokio::test]
+async fn overlong_or_empty_token_names_still_sign_in() {
+    let long = format!("{}{}", "N".repeat(150), "é".repeat(150));
+    let cases = [
+        (
+            "entra-oid-20",
+            "long@org.example",
+            long.clone(),
+            long.chars().take(200).collect::<String>(),
+        ),
+        (
+            "entra-oid-21",
+            "empty@org.example",
+            String::new(),
+            "empty@org.example".to_owned(),
+        ),
+    ];
+    for (oid, email, name, want) in cases {
+        let app = app().await;
+        let (_idp, issuer) = mock_idp(serde_json::json!({
+            "sub": format!("pairwise-{oid}"), "oid": oid, "aud": [CLIENT_ID],
+            "email": email, "name": name
+        }))
+        .await;
+        let base = serve(app.core.clone(), &issuer).await;
+        // The first sign-in creates the account; the second updates it.
+        for attempt in 1..=2 {
+            let r = browser()
+                .get(format!("{base}/auth/oidc/start"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(r.status(), 200, "{email}, sign-in {attempt}");
+        }
+        let got: String =
+            sqlx::query_scalar("SELECT display_name FROM users WHERE oidc_subject = $1")
+                .bind(oid)
+                .fetch_one(&app.core.db)
+                .await
+                .unwrap();
+        assert_eq!(got, want, "{email}");
+    }
+}
+
+#[tokio::test]
 async fn with_entra_sync_on_token_groups_do_not_change_departments() {
     let mut cfg = config();
     cfg.entra_sync.enabled = true; // Graph is not configured: sign-in provisions as before

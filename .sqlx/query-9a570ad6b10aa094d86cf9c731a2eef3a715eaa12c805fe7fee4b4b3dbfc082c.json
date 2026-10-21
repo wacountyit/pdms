@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET last_login_at = now(), display_name = coalesce($2, display_name),\n                    updated_at = now()\n              WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a570ad6b10aa094d86cf9c731a2eef3a715eaa12c805fe7fee4b4b3dbfc082c"
+}

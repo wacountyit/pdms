@@ -219,11 +219,14 @@ impl OidcProvider {
             );
         }
         // While syncing, the name is Entra's (set by the sync), not the token's.
+        // A token without a name leaves the name as it is.
         let name = claims.name.clone().filter(|_| !syncing);
         sqlx::query!(
-            "UPDATE users SET last_login_at = now(), display_name = $2, updated_at = now() WHERE id = $1",
+            "UPDATE users SET last_login_at = now(), display_name = coalesce($2, display_name),
+                    updated_at = now()
+              WHERE id = $1",
             user.0,
-            name.unwrap_or_else(|| user.1.clone()),
+            name,
         )
         .execute(&mut *tx)
         .await?;
@@ -283,10 +286,7 @@ impl OidcProvider {
             .map(|e| e.to_string())
             .or_else(|| claims.preferred_username().map(|u| u.to_string()))
             .filter(|e| e.contains('@'));
-        let name = claims
-            .name()
-            .and_then(|n| n.get(None))
-            .map(|n| n.to_string());
+        let name = display_name(claims.name().and_then(|n| n.get(None)).map(|n| n.as_str()));
         let groups = raw
             .get(&self.config.groups_claim)
             .and_then(|v| v.as_array())
@@ -312,11 +312,20 @@ impl OidcProvider {
     }
 }
 
+/// The token's name as a display name, normalized once for both provisioning
+/// and the login update: trimmed, at most 200 characters (the
+/// `users.display_name` limit), and `None` when blank.
+fn display_name(name: Option<&str>) -> Option<String> {
+    let name = name?.trim();
+    (!name.is_empty()).then(|| name.chars().take(200).collect())
+}
+
 #[derive(Debug, Clone)]
 struct VerifiedClaims {
     issuer: String,
     subject: String,
     email: Option<String>,
+    /// Normalized by [`display_name`].
     name: Option<String>,
     groups: Vec<String>,
     groups_overage: bool,
@@ -351,9 +360,20 @@ pub async fn resolve_identity(
         // Entra decides: enabled member or not, and the department.
         return Ok(
             match crate::directory::entra_sync::sync_one(core, subject).await {
-                Ok(Some(_)) => find_identity(core, issuer, subject)
-                    .await?
-                    .unwrap_or(Err("not_provisioned")),
+                Ok(Some(_)) => match find_identity(core, issuer, subject).await? {
+                    Some(found) => found,
+                    None => {
+                        // The sync stores the configured issuer and Graph's
+                        // object ID; this token's differ in form.
+                        tracing::error!(
+                            %issuer,
+                            %subject,
+                            "Entra has this person, but no account has this sign-in's issuer and subject; \
+                             check auth.oidc.issuer_url and subject_claim"
+                        );
+                        Err("not_provisioned")
+                    }
+                },
                 Ok(None) => {
                     // A sync running at the same moment may have created the
                     // account just now (its insert won).
@@ -500,6 +520,21 @@ mod tests {
         ] {
             assert_eq!(safe_return_to(bad), "/", "{bad}");
         }
+    }
+
+    #[test]
+    fn token_names_are_trimmed_truncated_or_absent() {
+        assert_eq!(
+            display_name(Some("  Ada Lovelace ")).as_deref(),
+            Some("Ada Lovelace")
+        );
+        assert_eq!(display_name(Some("")), None);
+        assert_eq!(display_name(Some(" \t ")), None);
+        assert_eq!(display_name(None), None);
+        let long = format!("{}{}", "a".repeat(199), "é".repeat(5));
+        let cut = display_name(Some(&long)).unwrap();
+        assert_eq!(cut.chars().count(), 200);
+        assert!(cut.ends_with('é'), "cut on a character boundary");
     }
 
     #[test]
