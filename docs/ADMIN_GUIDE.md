@@ -17,7 +17,7 @@ build takes several minutes).
 
 | Step | What it asks and does |
 |---|---|
-| How people reach PDMS | **1) Bundled Caddy:** automatic HTTPS. A domain gets a Let's Encrypt certificate (ports 80/443 reachable from the internet); without a domain, Caddy uses an internal certificate for the server's IP (browsers warn until it is trusted). **2) Your own reverse proxy:** enter the HTTPS address users open and the proxy's IP; PDMS then listens on all interfaces at its port (firewall it to the proxy). **3) Local testing:** plain HTTP on `localhost`. The host port defaults to 8080 or the next free port; Caddy needs 80 and 443 free. |
+| How people reach PDMS | **1) Bundled Caddy:** automatic HTTPS. A domain gets a Let's Encrypt certificate (ports 80/443 reachable from the internet); without a domain, Caddy uses an internal certificate for the server's IP (browsers warn until it is trusted). **2) Your own reverse proxy:** enter the HTTPS address users open and the proxy's IP; PDMS then listens on all interfaces at its port (firewall it to the proxy). **3) Local testing:** plain HTTP on `localhost`. The host port defaults to 8080 or the next free port. Caddy's ports default to 80 and 443; if something else on the server already uses them, the installer suggests the next free ones (for example 81 and 444), and the address users open then includes the port (`https://10.0.0.5:444`). Let's Encrypt still checks a domain on ports 80 and 443, so with other ports a domain's certificate is only issued if your firewall forwards 80 and 443 to them; for testing, leave the domain blank. |
 | Database for host tools | Optional: publishes PostgreSQL on `127.0.0.1` only (5432 or the next free port) through `docker-compose.override.yml`. Not needed for normal operation or backups. |
 | Name and time zone | Shown in titles, emails, and calendars; the time zone (detected from the host) drives reminder scheduling. |
 | Source code URL | Where users can get this installation's source code, as the AGPL-3.0 requires for software used over a network (defaults to the git remote). Linked from every page as **Source code**. |
@@ -31,7 +31,7 @@ Files it writes:
 
 | File | Contents |
 |---|---|
-| `.env` (`0600`) | Deployment settings for Docker Compose: proxy mode, host port and bind address, public URL, database port, enabled profiles. Docker Compose reads it automatically. |
+| `.env` (`0600`) | Deployment settings for Docker Compose: proxy mode, host port and bind address, Caddy's ports, public URL, database port, enabled profiles. Docker Compose reads it automatically. |
 | `config/pdms.toml` | Application settings. Blocks between `# >>> install.sh:<name>` markers are managed by the installer; edit anything else freely. |
 | `config/Caddyfile` | With the bundled proxy. |
 | `secrets/` | Passwords and keys. Back them up securely (see BACKUP.md). |

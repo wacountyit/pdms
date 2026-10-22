@@ -47,6 +47,8 @@ takes its default or is skipped:
   PDMS_INSTALL_NAME, PDMS_INSTALL_TIMEZONE, PDMS_INSTALL_SOURCE_URL (default: the git remote)
   PDMS_INSTALL_PROXY        caddy | external | local   (default: local)
   PDMS_INSTALL_PORT         host port for the app      (default: first free from 8080)
+  PDMS_INSTALL_CADDY_HTTP_PORT, PDMS_INSTALL_CADDY_HTTPS_PORT
+                            Caddy's host ports (default: 80 and 443, or the next free ones)
   PDMS_INSTALL_DOMAIN       domain for Caddy (blank: this host's IP with an internal certificate)
   PDMS_INSTALL_PUBLIC_URL   the URL users open (external proxy)
   PDMS_INSTALL_PROXY_IP     your reverse proxy's IP address (external proxy)
@@ -264,30 +266,63 @@ if configuring network || [[ -z "$(env_get PDMS_PROXY_MODE)" ]]; then
   case "$choice" in
     1)
       mode=caddy
-      for p in 80 443; do
-        if port_in_use "$p" && ! docker compose ps --services --status running 2>/dev/null | grep -qx caddy; then
-          warn "port $p is in use; Caddy needs ports 80 and 443. Stop whatever uses them or choose option 2."
+      # Caddy normally takes ports 80 and 443. On a machine where something
+      # else already has them (another Caddy, a web server), offer the next
+      # free ones instead. Ports PDMS's own running Caddy holds count as free.
+      caddy_running=false
+      docker compose ps --services --status running 2>/dev/null | grep -qx caddy && caddy_running=true
+      CADDY_HTTP_PORT="" CADDY_HTTPS_PORT=""
+      for kind in HTTP HTTPS; do
+        standard=80; [[ $kind == HTTPS ]] && standard=443
+        previous=$(env_get "PDMS_CADDY_${kind}_PORT"); previous=${previous:-$standard}
+        if $caddy_running; then suggested=$previous; else suggested=$(free_port_from "$previous"); fi
+        [[ "$suggested" == "$CADDY_HTTP_PORT" ]] && suggested=$(free_port_from $((suggested + 1)))
+        [[ "$suggested" != "$previous" ]] && note "Port $previous is already in use on this machine; suggesting $suggested for Caddy's $kind."
+        while true; do
+          ask "CADDY_${kind}_PORT" "Host port for Caddy's $kind" "$suggested"
+          chosen_name="CADDY_${kind}_PORT"; chosen=${!chosen_name}
+          if ! valid_port "$chosen"; then
+            warn "not a port number: $chosen"
+          elif [[ "$chosen" == "$PORT" || ( $kind == HTTPS && "$chosen" == "$CADDY_HTTP_PORT" ) ]]; then
+            warn "port $chosen is already taken by this installation"
+          elif port_in_use "$chosen" && ! { $caddy_running && [[ "$chosen" == "$previous" ]]; }; then
+            warn "port $chosen is already in use; choose another or stop whatever uses it"
+          else
+            break
+          fi
           $NON_INTERACTIVE && exit 1
-        fi
+          unset "PDMS_INSTALL_CADDY_${kind}_PORT"
+        done
       done
+      https_suffix=""; [[ "$CADDY_HTTPS_PORT" != 443 ]] && https_suffix=":$CADDY_HTTPS_PORT"
       ask DOMAIN "Domain name pointing at this server (blank to use its IP address)" "$(env_get PDMS_DOMAIN)"
       if [[ -n "$DOMAIN" ]]; then
-        public_url="https://$DOMAIN"
+        public_url="https://$DOMAIN$https_suffix"
         site="$DOMAIN"
         tls_line=""
         note "Caddy will obtain a certificate for $DOMAIN from Let's Encrypt (ports 80 and 443 must be reachable from the internet)."
+        if [[ "$CADDY_HTTP_PORT" != 80 || "$CADDY_HTTPS_PORT" != 443 ]]; then
+          warn "Let's Encrypt checks the domain on ports 80 and 443. With ports $CADDY_HTTP_PORT and $CADDY_HTTPS_PORT,"
+          note "the certificate is only issued if your firewall or router forwards 80 and 443 to them."
+          note "For testing without that, leave the domain blank to use an internal certificate."
+        fi
       else
         ip=$(host_ip)
         ask PUBLIC_IP "This server's IP address as users will type it" "${ip:-127.0.0.1}"
-        public_url="https://$PUBLIC_IP"
+        public_url="https://$PUBLIC_IP$https_suffix"
         site="$PUBLIC_IP"
         tls_line="	tls internal"
         note "Caddy will use its own internal certificate: browsers warn until you trust it or use a domain."
       fi
+      # Global options: Caddy's ports when they are not 80 and 443, and, for an
+      # IP address, which certificate to use (browsers send no server name for
+      # an IP, and behind Docker's port forwarding Caddy cannot match it either).
+      global_lines=""
+      [[ "$CADDY_HTTP_PORT" != 80 ]] && global_lines+=$(printf '\thttp_port %s\n' "$CADDY_HTTP_PORT")$'\n'
+      [[ "$CADDY_HTTPS_PORT" != 443 ]] && global_lines+=$(printf '\thttps_port %s\n' "$CADDY_HTTPS_PORT")$'\n'
+      [[ -z "$DOMAIN" ]] && global_lines+=$(printf '\tdefault_sni %s\n' "$PUBLIC_IP")$'\n'
       globals=""
-      # Browsers send no server name for an IP address, and behind Docker's port
-      # forwarding Caddy cannot match the IP either: tell it which certificate to use.
-      [[ -z "$DOMAIN" ]] && globals=$(printf '{\n\tdefault_sni %s\n}\n\n' "$PUBLIC_IP")
+      [[ -n "$global_lines" ]] && globals=$(printf '{\n%s}\n' "$global_lines")
       cat > config/Caddyfile <<EOF
 # Generated by install.sh (./install.sh --configure network rewrites it).
 $globals
@@ -304,6 +339,8 @@ $tls_line
 EOF
       bind="127.0.0.1:$PORT"
       env_set PDMS_DOMAIN "$DOMAIN"
+      env_set PDMS_CADDY_HTTP_PORT "$CADDY_HTTP_PORT"
+      env_set PDMS_CADDY_HTTPS_PORT "$CADDY_HTTPS_PORT"
       ;;
     2)
       mode=external
@@ -675,7 +712,7 @@ done
 
 say "\"${ORG_NAME}\" is running"
 case "$MODE" in
-  caddy)    echo "   Open: $PUBLIC_URL_NOW   (Caddy on ports 80/443; the app itself on 127.0.0.1:$(env_get PDMS_HTTP_PORT))" ;;
+  caddy)    echo "   Open: $PUBLIC_URL_NOW   (Caddy on ports $(env_get PDMS_CADDY_HTTP_PORT | grep . || echo 80)/$(env_get PDMS_CADDY_HTTPS_PORT | grep . || echo 443); the app itself on 127.0.0.1:$(env_get PDMS_HTTP_PORT))" ;;
   external) echo "   Open: $PUBLIC_URL_NOW   (via your reverse proxy -> this host, port $(env_get PDMS_HTTP_PORT))" ;;
   *)        echo "   Open: $PUBLIC_URL_NOW   (local testing only)" ;;
 esac
