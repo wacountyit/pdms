@@ -202,3 +202,58 @@ pub(super) async fn move_item(
         "SharePoint already has items named {name:?} and {fallback:?} in that folder"
     )))
 }
+
+/// Where a document's files go. The folder is created on the first upload;
+/// the row is written in the version's transaction (`record_upload`).
+#[derive(Clone, Debug)]
+pub struct DocumentFolder {
+    pub item_id: String,
+    pub parent_item_id: String,
+    pub name: String,
+}
+
+/// Eight random hex characters, to keep a fallback name unique.
+pub(super) fn token() -> String {
+    Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(8)
+        .collect()
+}
+
+pub(super) async fn document_folder(
+    core: &Core,
+    document_id: Option<Uuid>,
+    external_id: &str,
+    title: &str,
+    spot: layout::Spot,
+) -> CoreResult<DocumentFolder> {
+    if let Some(id) = document_id {
+        let existing = sqlx::query_as!(
+            DocumentFolder,
+            "SELECT item_id, parent_item_id, name FROM sharepoint_document_folders WHERE document_id = $1",
+            id
+        )
+        .fetch_optional(&core.db)
+        .await?;
+        if let Some(f) = existing {
+            return Ok(f);
+        }
+    }
+    let sp = core
+        .sharepoint
+        .as_ref()
+        .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
+    let r = sp.resolved().await?;
+    let parent = department_folder_id(core, spot.area, spot.department_id).await?;
+    let name = layout::document_folder_name(external_id, title);
+    let fallback = layout::document_folder_name(external_id, &format!("{title} {}", token()));
+    let (item_id, name) =
+        create_folder(&core.db, sp.graph(), &r.drive_id, &parent, &name, &fallback).await?;
+    Ok(DocumentFolder {
+        item_id,
+        parent_item_id: parent,
+        name,
+    })
+}

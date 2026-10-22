@@ -13,10 +13,12 @@ mod mock_graph;
 
 use common::*;
 use mock_graph::{MockGraph, certificate};
+use pdms_authz::{Permission, Scope, Subject, Visibility};
 use pdms_core::config::StorageBackend;
 use pdms_core::directory;
+use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
 use pdms_core::sharepoint::Area;
-use pdms_core::{Config, Core, sharepoint};
+use pdms_core::{Config, Core, CoreError, Ctx, acl, sharepoint};
 use uuid::Uuid;
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
@@ -163,4 +165,286 @@ async fn an_untracked_folder_left_by_an_interrupted_run_is_adopted() {
         .unwrap();
     assert_eq!(first, again);
     assert_eq!(sp.names("Departments"), vec!["Road and Bridge"]);
+}
+
+/// A department whose members may create and edit; returns (department, member).
+async fn editing_department(core: &Core, code: &str, name: &str, email: &str) -> (Uuid, Uuid) {
+    let dept = new_department(core, code, name).await;
+    let user = directory::create_user(&core.db, &system(), email, email, Some(dept))
+        .await
+        .unwrap();
+    for p in [Permission::Create, Permission::Edit] {
+        acl::grant(
+            &core.db,
+            &system(),
+            Subject::Department(dept),
+            Scope::Department(dept),
+            p,
+            None,
+            "test",
+        )
+        .await
+        .unwrap();
+    }
+    (dept, user)
+}
+
+async fn try_new_doc(
+    core: &Core,
+    ctx: &Ctx,
+    dept: Uuid,
+    owner: Uuid,
+    title: &str,
+    visibility: Visibility,
+    file: Option<(&str, &[u8])>,
+) -> Result<Uuid, CoreError> {
+    let file = match file {
+        Some((name, bytes)) => Some(upload(core, name, bytes).await),
+        None => None,
+    };
+    let other = types::type_by_key(&core.db, "other").await.unwrap().id;
+    documents::create(
+        core,
+        ctx,
+        NewDocument {
+            metadata: MetadataInput {
+                title: title.into(),
+                document_type_id: other,
+                department_id: dept,
+                ..Default::default()
+            },
+            owner_id: owner,
+            status: DocumentStatus::Active,
+            visibility,
+            tags: vec![],
+            file,
+            note: String::new(),
+        },
+    )
+    .await
+}
+
+async fn new_doc(
+    core: &Core,
+    ctx: &Ctx,
+    dept: Uuid,
+    owner: Uuid,
+    title: &str,
+    visibility: Visibility,
+    file: Option<(&str, &[u8])>,
+) -> Uuid {
+    try_new_doc(core, ctx, dept, owner, title, visibility, file)
+        .await
+        .unwrap()
+}
+
+async fn external_id(core: &Core, id: Uuid) -> String {
+    sqlx::query_scalar("SELECT external_id FROM documents WHERE id = $1")
+        .bind(id)
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+async fn document_count(core: &Core) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM documents")
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn an_upload_lands_in_its_department_folder() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let bytes = pdf("Fuel supply agreement");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel Supply Agreement",
+        Visibility::Department,
+        Some(("agreement.pdf", &bytes)),
+    )
+    .await;
+    let ext = external_id(&core, id).await;
+    let folder = format!("Departments/Road and Bridge/{ext} – Fuel Supply Agreement");
+    let names = sp.names(&folder);
+    assert_eq!(names.len(), 1, "{names:?}");
+    // Until the mirror job runs, the file carries its temporary name.
+    assert!(
+        names[0].starts_with(&format!("{ext} (uploading ")) && names[0].ends_with(".pdf"),
+        "{names:?}"
+    );
+    assert_eq!(
+        sp.item(&format!("{folder}/{}", names[0])).unwrap().content,
+        bytes
+    );
+    let backend: String = sqlx::query_scalar(
+        "SELECT b.storage_backend FROM blobs b JOIN document_versions v ON v.blob_sha256 = b.sha256 WHERE v.document_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(backend, "sharepoint");
+    let recorded: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sharepoint_files WHERE document_id = $1")
+            .bind(id)
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert_eq!(recorded, 1);
+}
+
+#[tokio::test]
+async fn large_files_are_sent_in_chunks() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let bytes = "PADM chunk test\n".repeat(50_000).into_bytes(); // 800,000 bytes: three 320 KiB chunks
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Big notes",
+        Visibility::Department,
+        Some(("notes.txt", &bytes)),
+    )
+    .await;
+    let puts = sp
+        .requests()
+        .iter()
+        .filter(|r| r.starts_with("PUT /upload/"))
+        .count();
+    assert_eq!(puts, 3);
+    let ext = external_id(&core, id).await;
+    let folder = format!("Departments/Road and Bridge/{ext} – Big notes");
+    let name = sp.names(&folder).pop().unwrap();
+    assert!(name.ends_with(".txt"));
+    assert_eq!(sp.item(&format!("{folder}/{name}")).unwrap().content, bytes);
+}
+
+#[tokio::test]
+async fn a_new_version_goes_into_the_same_folder() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("v1"))),
+    )
+    .await;
+    documents::add_version(
+        &core,
+        &ctx,
+        id,
+        upload(&core, "b.pdf", &pdf("v2")).await,
+        documents::VersionKind::Amendment,
+        "",
+        None,
+    )
+    .await
+    .unwrap();
+    let ext = external_id(&core, id).await;
+    assert_eq!(
+        sp.names(&format!("Departments/Road and Bridge/{ext} – Fuel"))
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn awkward_titles_still_get_safe_folders() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let title = format!(
+        "~Q3 \"Final\" Agreement: Road #5 / Bridge 50% _vti_ *draft*... {}",
+        "x".repeat(400)
+    );
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        &title,
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    let ext = external_id(&core, id).await;
+    let folders = sp.names("Departments/Road and Bridge");
+    assert_eq!(folders.len(), 1);
+    let f = &folders[0];
+    assert!(
+        f.starts_with(&format!(
+            "{ext} – Q3 _Final_ Agreement_ Road _5 _ Bridge 50_ _vti-"
+        )),
+        "{f}"
+    );
+    assert!(f.chars().count() <= 100);
+    assert!(!f.chars().any(|c| "\"*:<>?/\\|#%".contains(c)));
+}
+
+#[tokio::test]
+async fn upload_failure_saves_nothing() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    core.sharepoint.clone().unwrap().resolved().await.unwrap();
+    let before = document_count(&core).await;
+    sp.fail("POST /drives/drive-1/items/");
+    let err = try_new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(&err, CoreError::Unavailable(m) if m.contains("nothing was saved")),
+        "{err:?}"
+    );
+    assert_eq!(document_count(&core).await, before);
+}
+
+#[tokio::test]
+async fn empty_files_are_refused() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let err = try_new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Empty",
+        Visibility::Department,
+        Some(("empty.txt", b"")),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(&err, CoreError::Validation(m) if m.contains("empty")),
+        "{err:?}"
+    );
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Accepting an uploaded file: sniff its type, scan it, and store it by hash.
+//! Accepting an uploaded file: sniff its type and scan it.
 
 use pdms_audit::{AuditEvent, Category, Outcome};
 use pdms_storage::BlobHash;
@@ -64,7 +64,8 @@ async fn reject(
     CoreError::Validation(msg)
 }
 
-/// Validate, scan, and store an upload. Rejections are audited.
+/// Validate and scan an upload. Rejections are audited. Storing it is
+/// `filestore::put_version_file`.
 pub async fn ingest(
     core: &Core,
     ctx: &Ctx,
@@ -98,10 +99,6 @@ pub async fn ingest(
             }
         },
     };
-    core.storage
-        .put_file(upload.file.sha256, &upload.file.path, upload.file.size)
-        .await
-        .map_err(|e| CoreError::internal(format!("storing upload: {e}")))?;
     Ok(StoredFile {
         sha256: upload.file.sha256,
         size: upload.file.size,

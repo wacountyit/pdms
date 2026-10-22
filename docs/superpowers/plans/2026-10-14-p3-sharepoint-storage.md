@@ -2151,7 +2151,7 @@ git commit -m "sharepoint: migration 0013 and department folders tracked by item
     - `pub(crate) async fn record_location(conn, document_id, version_no, &FileLocation) -> CoreResult<()>`;
     - `pub fn backend_name(core) -> &'static str`.
 
-- [ ] **Step 1: Write the failing tests.** Add to the imports of `tests/sharepoint.rs`:
+- [x] **Step 1: Write the failing tests.** Add to the imports of `tests/sharepoint.rs`:
 
 ```rust
 use pdms_authz::{Permission, Scope, Subject, Visibility};
@@ -2341,14 +2341,14 @@ async fn empty_files_are_refused() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --test sharepoint`
 Expected: the new upload tests FAIL. For example, `an_upload_lands_in_its_department_folder` panics because `sp.names(…)` is empty: files still go to the local blob store. `upload_failure_saves_nothing` fails because the document is created.
 
-- [ ] **Step 3: Check the `bytes` dependency.** P2 (Task 3) added `bytes = "1"` to `crates/pdms-core/Cargo.toml`. Confirm with `grep '^bytes' crates/pdms-core/Cargo.toml`, which should print one line. Nothing else to add.
+- [x] **Step 3: Check the `bytes` dependency.** P2 (Task 3) added `bytes = "1"` to `crates/pdms-core/Cargo.toml`. Confirm with `grep '^bytes' crates/pdms-core/Cargo.toml`, which should print one line. Nothing else to add.
 
-- [ ] **Step 4: Add document folders.** Append to `folders.rs`:
+- [x] **Step 4: Add document folders.** Append to `folders.rs`:
 
 ```rust
 /// Where a document's files go. The folder is created on the first upload;
@@ -2401,7 +2401,7 @@ pub(super) async fn document_folder(
 }
 ```
 
-- [ ] **Step 5: Implement uploads.** Create `crates/pdms-core/src/sharepoint/files.rs`:
+- [x] **Step 5: Implement uploads.** Create `crates/pdms-core/src/sharepoint/files.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2643,7 +2643,7 @@ pub(crate) fn unavailable(message: &'static str, e: impl std::fmt::Display) -> C
 }
 ```
 
-- [ ] **Step 6: Implement the file-store router.** Create `crates/pdms-core/src/documents/filestore.rs`:
+- [x] **Step 6: Implement the file-store router.** Create `crates/pdms-core/src/documents/filestore.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2739,7 +2739,7 @@ pub fn backend_name(core: &Core) -> &'static str {
 
 In `crates/pdms-core/src/documents/mod.rs`, add `pub mod filestore;` after `pub mod fields;`.
 
-- [ ] **Step 7: Stop storing in `ingest`.** In `crates/pdms-core/src/documents/files.rs`, delete this block from `ingest`:
+- [x] **Step 7: Stop storing in `ingest`.** In `crates/pdms-core/src/documents/files.rs`, delete this block from `ingest`:
 
 ```rust
     core.storage
@@ -2750,7 +2750,7 @@ In `crates/pdms-core/src/documents/mod.rs`, add `pub mod filestore;` after `pub 
 
 Change the doc comment to `/// Validate and scan an upload. Rejections are audited. Storing it is filestore::put_version_file.` and the module doc to `//! Accepting an uploaded file: sniff its type and scan it.`
 
-- [ ] **Step 8: Route `create` through the file store.** In `crates/pdms-core/src/documents/service.rs`:
+- [x] **Step 8: Route `create` through the file store.** In `crates/pdms-core/src/documents/service.rs`:
 
 (a) Add `use super::filestore;` next to the other `super::` imports.
 
@@ -2811,7 +2811,7 @@ with:
     }
 ```
 
-- [ ] **Step 9: Route `add_version` through the file store.** In `add_version`, after `let stored = files::ingest(core, ctx, Some(id), &upload).await?;`, add:
+- [x] **Step 9: Route `add_version` through the file store.** In `add_version`, after `let stored = files::ingest(core, ctx, Some(id), &upload).await?;`, add:
 
 ```rust
     let location = filestore::put_version_file(
@@ -2835,12 +2835,12 @@ Then replace `files::record_blob(&mut tx, &stored, core.storage.backend()).await
     filestore::record_location(&mut tx, id, version, &location).await?;
 ```
 
-- [ ] **Step 10: Run the tests and confirm they pass, including the existing suites.**
+- [x] **Step 10: Run the tests and confirm they pass, including the existing suites.**
 
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test documents && cargo test -p pdms-core --test phase4`
 Expected: all `test result: ok.` The local-storage suites behave exactly as before, because `put_version_file` stores in `core.storage` when SharePoint isn't configured.
 
-- [ ] **Step 11: Commit.**
+- [x] **Step 11: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -4239,3 +4239,4 @@ git commit -m "sharepoint: example config, opt-in live test, and plan/roadmap st
 - **Empty files** can't be stored in SharePoint mode.
 - **The version number in file names** is the PADM version number, so numbers skip over metadata-only versions.
 - **Extensions** come from the sniffed content type.
+- **Temporary upload names (D-103):** spec §7.1 says to upload to the final name. Files are uploaded as `<external ID> (uploading <token>).<ext>` instead, and the mirror job renames them, because the version number is only known inside the version's transaction, which starts after the upload.

@@ -18,6 +18,7 @@ use uuid::Uuid;
 use super::access::{self, DocRef};
 use super::fields::{self, FieldDef, FieldType};
 use super::files::{self, StoredFile, Upload};
+use super::filestore;
 use super::retention::{self, Eligibility};
 use super::status::{self, DocumentStatus};
 use super::tags::{self, TagRef};
@@ -753,25 +754,45 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
     };
 
     let id = Uuid::now_v7();
+    // The document ID is allocated before the file is stored, so the file can
+    // be filed under it (spec §7.1). A number left unused by a failure is harmless.
+    let prefix = sqlx::query_scalar!(
+        "SELECT id_prefix FROM document_types WHERE id = $1",
+        meta.document_type_id
+    )
+    .fetch_one(&core.db)
+    .await?;
+    let seq = sqlx::query_scalar!(r#"SELECT nextval('document_external_seq') AS "n!""#)
+        .fetch_one(&core.db)
+        .await?;
+    let year = Utc::now()
+        .with_timezone(&core.config.timezone())
+        .format("%Y");
+    let external_id = format!("{prefix}-{year}-{seq:06}");
+    let location = match (&new.file, &stored) {
+        (Some(u), Some(f)) => Some(
+            filestore::put_version_file(
+                core,
+                &filestore::PutTarget {
+                    document_id: None,
+                    external_id: &external_id,
+                    title: &meta.title,
+                    visibility: new.visibility,
+                    department_id: meta.department_id,
+                },
+                f,
+                &u.file.path,
+            )
+            .await?,
+        ),
+        _ => None,
+    };
     let names = names_for(
         core,
         &[meta.document_type_id, meta.department_id, new.owner_id],
     )
     .await?;
     let mut tx = core.db.begin().await?;
-    let prefix = sqlx::query_scalar!(
-        "SELECT id_prefix FROM document_types WHERE id = $1",
-        meta.document_type_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    let seq = sqlx::query_scalar!(r#"SELECT nextval('document_external_seq') AS "n!""#)
-        .fetch_one(&mut *tx)
-        .await?;
-    let year = Utc::now()
-        .with_timezone(&core.config.timezone())
-        .format("%Y");
-    let external_id = format!("{prefix}-{year}-{seq:06}");
     sqlx::query!(
         "INSERT INTO documents (id, external_id, document_type_id, department_id, owner_id, title, description,
                                 status, execution_date, effective_date, last_review_date, next_review_date,
@@ -819,14 +840,14 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         .await?;
     }
     if let Some(f) = &stored {
-        files::record_blob(&mut tx, f, core.storage.backend()).await?;
+        files::record_blob(&mut tx, f, filestore::backend_name(core)).await?;
     }
     let kind = if stored.is_some() {
         VersionKind::Initial
     } else {
         VersionKind::Metadata
     };
-    append_version(
+    let version = append_version(
         &mut tx,
         ctx,
         id,
@@ -839,6 +860,9 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         &defs,
     )
     .await?;
+    if let Some(loc) = &location {
+        filestore::record_location(&mut tx, id, version, loc).await?;
+    }
     refresh_search(&mut tx, id).await?;
 
     let doc = fetch_live(&mut tx, id).await?;
@@ -1441,6 +1465,19 @@ pub async fn add_version(
         ));
     }
     let stored = files::ingest(core, ctx, Some(id), &upload).await?;
+    let location = filestore::put_version_file(
+        core,
+        &filestore::PutTarget {
+            document_id: Some(id),
+            external_id: &doc_ref.external_id,
+            title: &doc_ref.title,
+            visibility: doc_ref.attrs.visibility,
+            department_id: doc_ref.attrs.department_id,
+        },
+        &stored,
+        &upload.file.path,
+    )
+    .await?;
     let defs = fields::list(&core.db).await?;
     let mut tx = core.db.begin().await?;
     sqlx::query!("SELECT id FROM documents WHERE id = $1 FOR UPDATE", id)
@@ -1458,7 +1495,7 @@ pub async fn add_version(
     } else {
         kind
     };
-    files::record_blob(&mut tx, &stored, core.storage.backend()).await?;
+    files::record_blob(&mut tx, &stored, filestore::backend_name(core)).await?;
     let version = append_version(
         &mut tx,
         ctx,
@@ -1472,6 +1509,7 @@ pub async fn add_version(
         &defs,
     )
     .await?;
+    filestore::record_location(&mut tx, id, version, &location).await?;
     refresh_search(&mut tx, id).await?;
     let mut e = file_context(
         doc_ref

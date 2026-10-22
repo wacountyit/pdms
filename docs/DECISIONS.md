@@ -10,7 +10,8 @@ D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
 finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
 D-096 was decided while building plan P2 (Entra sync, 2026-10-21).
 D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
-D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built.
+D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built,
+and D-103 while building it.
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -904,6 +905,18 @@ Six questions from P3's pre-flight check, answered by the owner:
    gap.
 6. **SharePoint calls while a visibility change holds its row lock are
    accepted**, because they are rare and short.
+
+### D-103 SharePoint uploads use a temporary name first — Accepted (2026-10-22)
+The spec (§7.1) says a file is uploaded straight to its final name, which
+includes the version number. PADM only knows that number inside the
+database transaction that saves the version, and the upload has to finish
+before that transaction starts, so that a failed upload saves nothing.
+So each file is uploaded into its document's folder as
+`<document ID> (uploading <random>).<ext>`. The `sharepoint.mirror_document`
+job renames it to its final name once the version is saved. Until the job
+runs, which is normally within seconds, someone browsing SharePoint sees the
+temporary name. If the save fails after the upload, the temporary file is
+left behind as an orphan (D-102, point 5).
 
 ## Open questions (configurable defaults; not blocking)
 

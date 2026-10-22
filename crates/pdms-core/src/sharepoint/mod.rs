@@ -9,6 +9,7 @@
 //! moves that narrow who can browse a document: those happen before the
 //! change is saved (spec §7.3).
 
+mod files;
 mod folders;
 pub mod layout;
 pub mod quickxor;
@@ -22,8 +23,19 @@ use crate::config::SharePointConfig;
 use crate::error::{CoreError, CoreResult};
 use crate::graph::GraphClient;
 
-pub use folders::department_folder_id;
+pub use files::{UploadTarget, UploadedFile};
+pub(crate) use files::{record_upload, upload_staged};
+pub use folders::{DocumentFolder, department_folder_id};
 pub use layout::{Area, Spot};
+
+/// Shown when an upload cannot reach SharePoint.
+pub const UPLOAD_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable right now, so nothing was saved. Try again in a few minutes.";
+
+/// Log the underlying failure and return the user-facing "unavailable" error.
+pub(crate) fn unavailable(message: &'static str, e: impl std::fmt::Display) -> CoreError {
+    tracing::error!(error = %e, "SharePoint request failed");
+    CoreError::Unavailable(message.to_owned())
+}
 
 /// SharePoint storage, shared by the web server and the worker.
 #[derive(Clone)]

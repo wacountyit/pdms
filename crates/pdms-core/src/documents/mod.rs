@@ -5,6 +5,7 @@
 pub mod access;
 pub mod fields;
 pub mod files;
+pub mod filestore;
 pub mod retention;
 pub mod search;
 mod service;
