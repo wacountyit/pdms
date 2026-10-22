@@ -5,10 +5,12 @@ for policies, contracts, partnership agreements, and other dated documents, plus
 personnel appointments. Organization-neutral; the display name is set at install
 time (default: "Policy and Document Management System").
 
-Status: **Phases 0–5 complete.** This document describes the system as built. Planned
-changes (SharePoint file storage, Entra user sync, County-wide visibility; D-081 to D-089)
-are designed in [the spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md)
-and tracked in [ROADMAP §0](ROADMAP.md#0-where-things-stand). Decisions referenced as `D-nnn` are
+Status: **Phases 0–5 complete.** This document describes the system as built.
+SharePoint file storage, Entra user sync and County-wide visibility (D-081 to
+D-089) are designed in [the spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md).
+Visibility (P1), the Entra sync (P2) and SharePoint storage (P3) are built;
+SharePoint folder permissions and change detection (P4) are tracked in
+[ROADMAP §0](ROADMAP.md#0-where-things-stand). Decisions referenced as `D-nnn` are
 in [DECISIONS.md](DECISIONS.md).
 
 ## 1. Principles
@@ -287,6 +289,12 @@ Schema: `migrations/0001_foundation.sql` (`audit_log`, `audit_chain_head`).
   is logged in `notification_delivery_attempts`. Each email has a
   deterministic `Message-ID`, so the only duplicate possible is a crash
   between the SMTP server's acceptance and the commit (D-007).
+- **SharePoint mirror** (`sharepoint.mirror_document`, only with the
+  SharePoint backend): every change to a document queues one run in the
+  change's own transaction, unless one is already pending. The run gives
+  files their final names, writes the library columns, marks the newest file
+  `Current`, and moves or renames the document's folder. It is idempotent,
+  and a nightly `sharepoint.mirror_sweep` queues it for every document.
 - **Rules:** the document's own rules win over its type's, which win over the
   organization defaults, per event (D-042).
 - **Calendar and dashboards** expand document dates (with projected review
@@ -304,14 +312,38 @@ Schema: `migrations/0001_foundation.sql` (`audit_log`, `audit_chain_head`).
 2. The file is streamed to a spool file while being hashed and size-limited.
 3. Its type is sniffed from the content against an allowlist (D-027).
 4. ClamAV scans it, if configured: `clamd` INSTREAM, fail closed by default.
-5. It is stored under its SHA-256 and recorded in `blobs`.
+5. It is stored (`documents::filestore::put_version_file`) and recorded in
+   `blobs`.
 6. A `document_versions` row is appended.
 
-`BlobStore` has `put_file`, `get`, `size`, and `verify`, but no delete. The
-backends are the local filesystem (temp file, re-hash, fsync, rename, read-only)
-and S3-compatible storage (conditional `PUT`, multipart above 16 MB). The
-interface is key-based, so a SharePoint/Graph backend can be added later
-(planned: D-081 to D-084, ROADMAP §0.3 sub-project 1).
+**Where files live.** `documents::filestore` is the only code that decides.
+With `[storage] backend = "local"` or `"s3"`, files go to the `BlobStore`
+under their SHA-256. `BlobStore` has `put_file`, `get`, `size`, and `verify`,
+but no delete. The backends are the local filesystem (temp file, re-hash,
+fsync, rename, read-only) and S3-compatible storage (conditional `PUT`,
+multipart above 16 MB). Export packages always use the `BlobStore`.
+
+With `backend = "sharepoint"` (D-081 to D-084), `pdms-core::sharepoint` stores
+document files in one SharePoint library through Microsoft Graph (P2's
+`GraphClient`):
+- **Setup on first use:** the site, library, list, missing columns and the
+  three area folders are found or created lazily (`SharePoint::resolved`), so
+  the server still starts when SharePoint is down.
+- **Folders** are tracked by Graph item ID (`sharepoint_department_folders`,
+  `sharepoint_document_folders`), so renames never depend on paths.
+- **Upload:** before the version's transaction, the file is sent in chunks to
+  the document's folder under a temporary name (D-103), and SharePoint's
+  QuickXorHash and size are checked. The transaction records it in
+  `sharepoint_files`. A failure is `CoreError::Unavailable`: nothing is saved
+  and the form is kept (D-102).
+- **Read:** downloads, text extraction, records packages and restores stream
+  the file from SharePoint and check it against the recorded SHA-256 and
+  size. A mismatch ends the stream with an error, marks the file
+  `changed_outside`, and is audited in the same transaction.
+- **Placement:** the mirror job (§8) applies names, columns and moves.
+  Changes that narrow who can browse a document (`layout::narrows`) move the
+  folder before the change is saved and are refused if SharePoint is down.
+  Every folder move is audited as `sharepoint.folder_moved`.
 
 **Data model:**
 - `documents` holds the current metadata. `custom_fields` is typed JSONB keyed
@@ -360,6 +392,7 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
 | 6 (`0008_document_visibility`, `0009_ui_redesign`, `0010_entra_sync`, done) | 0008: `documents.visibility` (department / county_wide / restricted) replaces `inherit_acl` and `is_confidential`. 0009: branding_assets (the seal); `users.username`. 0010: department_entra_values (Entra Department value to PADM department), sync_cursors (delta link, last run, last error, last summary, delta select), `users.entra_department`, `users.entra_synced_at`, `users.source` |
 | 7 (`0012_color_scheme`, R2) | `users.color_scheme` (`dark` default, `light`, `system`; D-098), loaded with the session and written as `<html data-theme>`. |
 | 7 (`0011_small_changes`, R2 with sub-project 3) | Renames the seeded `partnership_agreement` type to `interlocal_agreement` ("Interlocal Agreement (ILA)", prefix `ILA`), keeping a name or prefix an administrator changed (D-088); deletes queued Outlook sync jobs and drops `graph_calendar_links` (D-087). |
+| 8 (`0013_sharepoint_files`, P3) | sharepoint_department_folders (one folder per department and area), sharepoint_document_folders (one per document), sharepoint_files (one per version that introduced a file: drive and item IDs, list item ID, name, QuickXorHash, size, last known path, hash of the column values last written, state `ok` / `changed_outside` / `missing`) |
 
 ## 13. Phase 0 deliverables and tests (done)
 

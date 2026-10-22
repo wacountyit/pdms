@@ -124,7 +124,10 @@ To remove anything left by older versions of the test kit:
 Tests also start SeaweedFS (S3 API), Mailpit (SMTP), and a mock OIDC provider;
 those containers are removed when each test finishes. A real OCR test is opt-in too: `docker build -t pdms-ocr:test deploy/ocr`, then
 `cargo test -p pdms-core --test phase5 -- --ignored`. A real ClamAV test is opt-in:
-`cargo test -p pdms-storage --test clamav -- --ignored`.
+`cargo test -p pdms-storage --test clamav -- --ignored`. SharePoint storage is
+tested against an in-process mock of Microsoft Graph; a round trip against a
+real SharePoint test site is opt-in (`live_sharepoint_round_trip` in
+`crates/pdms-core/tests/sharepoint.rs` lists the variables it needs).
 
 After changing any `sqlx::query!` or a migration, refresh the offline metadata
 (CI checks it): `cargo sqlx prepare --workspace -- --all-targets`.
@@ -138,7 +141,9 @@ crates/pdms-core     config, auth, directory, grants, documents, notifications, 
                      workflow, signatures, appointments, comments, ocr (text and date
                      suggestions), exports, reports, API tokens, activity (the
                      dashboard feed),
-                     integrations (webhooks, providers, audit forwarding), integrity, jobs
+                     integrations (webhooks, providers, audit forwarding), integrity, jobs,
+                     graph (Microsoft Graph client), sharepoint (document files in a
+                     SharePoint library: layout, uploads, verified reads, the mirror job)
 crates/pdms-storage  blob storage (local, S3), upload spooling, type sniffing, ClamAV
 crates/pdms-web      HTTP routes (including the REST API and OpenAPI), middleware, templates
 crates/pdms          the `pdms` binary (serve, worker, migrate, create-admin, verify-audit,

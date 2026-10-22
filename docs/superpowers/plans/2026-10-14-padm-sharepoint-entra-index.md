@@ -121,18 +121,21 @@ one, they update this table in the same commit.
 
 | Name | Definition |
 |---|---|
-| `pdms_core::sharepoint::SharePoint` | `Clone`; built at startup when `[storage] backend = "sharepoint"`. Holds `GraphClient`, the resolved `site_id`, `drive_id`, and the area folder item IDs. `Core.sharepoint: Option<SharePoint>` |
+| `pdms_core::sharepoint::SharePoint` | `Clone`; built in `Core::new` when `[storage] backend = "sharepoint"` (needs `[graph]`). Holds the `GraphClient`; `resolved().await -> CoreResult<&Resolved>` looks up `site_id`, `drive_id`, `list_id` and the area folder item IDs lazily on first use, creating missing columns and area folders, and retries after a failure. `Core.sharepoint: Option<SharePoint>` |
 | `pdms_core::sharepoint::layout` | Pure functions: `area_for(Visibility) -> Area` (`Departments`, `CountyWide`, `Restricted`); `document_folder_name(external_id, title) -> String`; `file_name(external_id, version_no, label, ext) -> String`; `sanitize_segment(&str, max_chars) -> String`; `columns(&PlacementDoc, &PlacementFile) -> serde_json::Map` |
-| `pdms_core::documents::filestore` | `put_version_file(core, tx_ctx: &PutCtx, file: &StoredFile) -> CoreResult<FileLocation>`; `open_version_file(core, version_id: Uuid) -> CoreResult<ByteStream>` |
-| DB | `sharepoint_files` (spec §6, keyed by `document_version_id`) |
-| Jobs | `sharepoint::MIRROR_JOB = "sharepoint.mirror_document"`; `pub async fn enqueue_mirror<'e>(exec: impl PgExecutor<'e>, document_id: Uuid) -> CoreResult<()>` |
-| Hook | `pub async fn apply_placement_now(core: &Core, document_id: Uuid) -> CoreResult<()>`, called by `set_visibility` when `to.is_tighter_than(from)` |
+| `pdms_core::documents::filestore` | `put_version_file(core, &PutTarget, &StoredFile, src: &Path) -> CoreResult<FileLocation>`; `open(core, document_id, version_no, hash, size) -> CoreResult<ByteStream>`; `open_version_file(core, version_id) -> CoreResult<ByteStream>`; `record_location`, `backend_name`, `copy_for_restore`, `known_media_type` |
+| DB | `sharepoint_files` (spec §6, keyed by `document_version_id`), plus `list_item_id`, `name`, `fields_hash`; `sharepoint_department_folders` and `sharepoint_document_folders` (folders tracked by Graph item ID). Migration `0013_sharepoint_files` |
+| Jobs | `sharepoint::MIRROR_JOB = "sharepoint.mirror_document"`; `pub async fn enqueue_mirror<'e>(exec: impl PgExecutor<'e>, document_id: Uuid) -> CoreResult<()>`; `mirror_later(core, conn, document_id)` (crate-private, called in every changing transaction); `MIRROR_SWEEP_JOB = "sharepoint.mirror_sweep"` (nightly); `register_jobs(worker, core)` |
+| Hook | `pub async fn apply_placement_now(core: &Core, document_id: Uuid, to: Spot, reason: &str) -> CoreResult<()>`, called by `set_visibility`, by `update` (department change) and by `delete` whenever `layout::narrows(from, to)` |
+| Errors | `CoreError::Unavailable(String)`: web and API 503, except on the document forms and `views::done`, which keep the page and show the message (D-102) |
+| Change flag | `sharepoint::files::flag_changed(db, document_id, item_id, source, detail)`: marks the file `changed_outside` and writes `sharepoint.changed_outside` in one transaction. Private to `files` for now; P4 re-exports it for delta findings |
+| Audit | `sharepoint.changed_outside`, `sharepoint.folder_moved` (category system; context `from`, `to`, `reason`; D-102) |
 | Department folders | `pub async fn department_folder_id(core: &Core, area: Area, department_id: Uuid) -> CoreResult<String>` (create-if-missing) |
 
 **Changes recorded when P3 was written** (the P3 plan, including its closing "Deviations" section, is authoritative):
 
 - **Signatures:**
-  - `apply_placement_now(core, document_id, to: Spot)`: it runs *before* the change is saved, so it is told the target.
+  - `apply_placement_now(core, document_id, to: Spot, reason: &str)`: it runs *before* the change is saved, so it is told the target; the reason goes into the `sharepoint.folder_moved` event.
   - `put_version_file(core, &PutTarget, &StoredFile, src: &Path)`.
   - New: `filestore::open(core, document_id, version_no, hash, size)`.
 - **Startup:** the site, library, and area folders are resolved lazily on first use. The server still starts when SharePoint is down, as D-021 does for OIDC.
@@ -146,6 +149,8 @@ one, they update this table in the same commit.
   - "Open in PADM" is a text column, because Graph cannot write hyperlink columns.
   - Empty files cannot be stored.
   - File names use the PADM version number, so they skip numbers for metadata-only versions.
+  - Files are uploaded under a temporary name and renamed by the mirror job (D-103).
+  - Folder moves are audited as `sharepoint.folder_moved` (D-102).
 - **Setup:** the "Current documents" view must be created by hand (Graph v1.0 cannot create views). P4's setup guide covers it.
 - **Tests:** they extend P2's `tests/mock_graph` with an `sp.rs` child module.
 

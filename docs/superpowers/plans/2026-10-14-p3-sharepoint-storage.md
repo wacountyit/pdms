@@ -1,5 +1,7 @@
 # P3: SharePoint document storage. Implementation Plan
 
+> **Status: done (2026-10-22).** Tasks 1–10 were merged in [PR #5](https://github.com/wacountyit/pdms/pull/5); Task 11 (example config, live test, docs) followed in its own pull request. All eleven tasks are done. Where the build differs from the text, an "As built" note says so, and the deviations are listed at the end.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Pre-flight done (2026-10-22, WACountyIT).** This plan was written on 2026-10-15, before P2, R1, R2 and sub-project 3 were built. It was checked against `main` at `0ade802`. Most of it matches: P2's Graph client, `GraphError`, the mock Graph, the documents service and the jobs API are as described. These corrections apply; the text below already carries the numeric ones.
@@ -4129,7 +4131,7 @@ git commit -m "sharepoint: narrowing moves happen before the change is saved"
 - Consumes: everything above.
 - Produces: documentation only.
 
-- [ ] **Step 1: Example configuration.** In `config/pdms.example.toml`, change the `backend` line of `[storage]` to:
+- [x] **Step 1: Example configuration.** In `config/pdms.example.toml`, change the `backend` line of `[storage]` to:
 
 ```toml
 backend = "local"               # "local", "s3", or "sharepoint" (document files in SharePoint; needs [graph] and [sharepoint])
@@ -4145,7 +4147,7 @@ delta_interval_minutes = 5      # change check interval (P4)
 upload_chunk_bytes = 10485760   # 10 MiB; a multiple of 327680 (320 KiB), at most 62914560
 ```
 
-- [ ] **Step 2: Add the opt-in live test.** Append to `tests/sharepoint.rs`:
+- [x] **Step 2: Add the opt-in live test.** Append to `tests/sharepoint.rs`:
 
 ```rust
 /// Round trip against a real SharePoint **test** site. Not run by default.
@@ -4190,7 +4192,7 @@ async fn live_sharepoint_round_trip() {
 }
 ```
 
-- [ ] **Step 3: Record the deviations from the index.** In `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, update the "Produced by P3" table:
+- [x] **Step 3: Record the deviations from the index.** In `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, update the "Produced by P3" table:
 
 - the `documents::filestore` row becomes: `put_version_file(core, &PutTarget, &StoredFile, src: &Path) -> CoreResult<FileLocation>`; `open(core, document_id, version_no, hash, size) -> CoreResult<ByteStream>`; `open_version_file(core, version_id) -> CoreResult<ByteStream>`; `record_location`, `backend_name`, `copy_for_restore`, `known_media_type`;
 - the Hook row becomes `apply_placement_now(core, document_id, to: Spot)`. It is called by `set_visibility`, by `update` (department change), and by `delete` whenever `layout::narrows(from, to)`;
@@ -4202,9 +4204,9 @@ async fn live_sharepoint_round_trip() {
   - `CoreError::Unavailable` (web and API 503);
   - `sharepoint::flag_changed` (P4 reuses it for delta findings).
 
-- [ ] **Step 4: Update the roadmap.** In `docs/ROADMAP.md` §0.3, set sub-project 1's status to "**In progress**: P1 and P3 done; P4 (access, change detection, setup) next". If P4 is also done by then, set it to "Done".
+- [x] **Step 4: Update the roadmap.** In `docs/ROADMAP.md` §0.3, set sub-project 1's status to "**In progress**: P1 and P3 done; P4 (access, change detection, setup) next". If P4 is also done by then, set it to "Done".
 
-- [ ] **Step 5: Full verification.**
+- [x] **Step 5: Full verification.**
 
 ```bash
 cargo fmt --all --check
@@ -4218,7 +4220,7 @@ Expected:
 - `prepare --check` exits 0;
 - every `test result: ok.` line has `0 failed`, and the new `live_sharepoint_round_trip` shows as ignored.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add config/pdms.example.toml crates/pdms-core/tests/sharepoint.rs docs
