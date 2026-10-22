@@ -83,7 +83,7 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **UI redesign R2** (5b) | The second contributor. Put your GitHub name here | Started on the contributor's own machine; nothing is on GitHub yet. Their first push replaces this with the real state of the spec, the plan and each build part. The questions for the owner in the [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md) §9 come first | Branches `r2-…`; PR titles start with `R2:` | 2026-10-21 |
+| **UI redesign R2** (5b) | WACountyIT | Spec: **Not started**; the brief §9 questions go to the owner first. Plan: **Not started**. Build parts, all **Not started**: admin pages; calendar and feeds; appointments; records requests; notifications, audit and account; report detail | Branch `r2-spec` (spec); later parts on their own `r2-…` branches. PR titles start with `R2:` | 2026-10-22 |
 
 Nothing else is claimed. §0.5 lists what can start next.
 
