@@ -41,7 +41,8 @@ The installer asks everything first, then builds and starts unattended:
 
 - **How people reach PDMS:** the bundled Caddy proxy with automatic HTTPS, your
   own reverse proxy, or local testing. It finds a free host port (8080, or the
-  next free one) and checks that 80/443 are free for Caddy.
+  next free one). Caddy gets ports 80 and 443, or the next free ones if
+  something else on the machine already has them.
 - **Name and time zone** (detected from the host).
 - **Optionally:** PostgreSQL on `127.0.0.1` for host tools (on a free port),
   Microsoft Entra ID sign-in, SMTP email, OCR, and virus scanning.

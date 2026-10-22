@@ -95,13 +95,16 @@ services:
 
   caddy:
     # Bundled reverse proxy with automatic HTTPS (install.sh option 1).
+    # Caddy listens on the same port numbers inside the container as on the
+    # host, so its HTTP-to-HTTPS redirects carry the right port. install.sh
+    # sets other ports when 80 or 443 is taken (config/Caddyfile tells Caddy).
     image: caddy:2.8.4-alpine
     profiles: ["caddy"]
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${PDMS_CADDY_HTTP_PORT:-80}:${PDMS_CADDY_HTTP_PORT:-80}"
+      - "${PDMS_CADDY_HTTPS_PORT:-443}:${PDMS_CADDY_HTTPS_PORT:-443}"
+      - "${PDMS_CADDY_HTTPS_PORT:-443}:${PDMS_CADDY_HTTPS_PORT:-443}/udp"
     volumes:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
