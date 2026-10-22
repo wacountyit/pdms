@@ -1082,7 +1082,7 @@ It does this lazily, so the server still starts when SharePoint is down (the sam
   - `Core.sharepoint: Option<SharePoint>`;
   - in tests: `mock_graph::{SITE_URL, SITE, DRIVE, LIST, SpItem}` and `MockGraph::{names, item, fields, columns, tamper, fail, heal}`.
 
-- [ ] **Step 1: Teach P2's mock Graph about SharePoint.** P2's `crates/pdms-core/tests/mock_graph/mod.rs` is the shared mock: an axum fallback handler with the token endpoint and the pre-authenticated `/upload/…` and `/blob/…` URLs. P3 adds its endpoints in a child module, so P2's tests are unaffected.
+- [x] **Step 1: Teach P2's mock Graph about SharePoint.** P2's `crates/pdms-core/tests/mock_graph/mod.rs` is the shared mock: an axum fallback handler with the token endpoint and the pre-authenticated `/upload/…` and `/blob/…` URLs. P3 adds its endpoints in a child module, so P2's tests are unaffected.
 
 Create `crates/pdms-core/tests/mock_graph/sp.rs`:
 
@@ -1482,7 +1482,7 @@ pub use sp::{DRIVE, LIST, SITE, SITE_URL, SpItem};
 
 The test certificate comes from P2's generator, once per test binary (RSA key generation is the slow part). PEM files are git-ignored, so nothing is committed.
 
-- [ ] **Step 2: Write the failing integration test.** Create `crates/pdms-core/tests/sharepoint.rs`. Later tasks add more tests to this file.
+- [x] **Step 2: Write the failing integration test.** Create `crates/pdms-core/tests/sharepoint.rs`. Later tasks add more tests to this file.
 
 ```rust
 #![allow(
@@ -1560,12 +1560,12 @@ async fn the_sharepoint_backend_needs_the_graph_section() {
 }
 ```
 
-- [ ] **Step 3: Run the test and confirm it fails.**
+- [x] **Step 3: Run the test and confirm it fails.**
 
 Run: `cargo test -p pdms-core --test sharepoint`
 Expected: compile errors `no field sharepoint on type Core` and `cannot find SharePoint in sharepoint`.
 
-- [ ] **Step 4: Implement `folders.rs` (area folders only, for now).** Create `crates/pdms-core/src/sharepoint/folders.rs`:
+- [x] **Step 4: Implement `folders.rs` (area folders only, for now).** Create `crates/pdms-core/src/sharepoint/folders.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1607,7 +1607,7 @@ pub(super) async fn ensure_area_folder(g: &GraphClient, drive: &str, area: Area)
 }
 ```
 
-- [ ] **Step 5: Implement the handle.** Replace `crates/pdms-core/src/sharepoint/mod.rs` with:
+- [x] **Step 5: Implement the handle.** Replace `crates/pdms-core/src/sharepoint/mod.rs` with:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1779,7 +1779,7 @@ async fn resolve(inner: &Inner) -> CoreResult<Resolved> {
 }
 ```
 
-- [ ] **Step 6: Wire it into `Core`.** In `crates/pdms-core/src/lib.rs`:
+- [x] **Step 6: Wire it into `Core`.** In `crates/pdms-core/src/lib.rs`:
 
 (a) Add the field to `Core`, after `pub ocr: …`:
 
@@ -1806,12 +1806,12 @@ async fn resolve(inner: &Inner) -> CoreResult<Resolved> {
 
 and add `sharepoint,` to the `Core { … }` literal.
 
-- [ ] **Step 7: Run the tests and confirm they pass.**
+- [x] **Step 7: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint`
 Expected: `test result: ok. 2 passed`. The mock answers `POST /tenant-1/oauth2/v2.0/token` only for a well-formed client assertion (P2), so a token failure here points at the `[graph]` settings, not at SharePoint.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -1837,7 +1837,7 @@ git commit -m "sharepoint: resolve site, library, columns, and area folders on f
   - `pub(super) async fn create_folder(db, g, drive, parent, name, fallback) -> CoreResult<(String, String)>`;
   - `pub(super) async fn move_item(g, drive, item, parent: Option<&str>, name, fallback) -> CoreResult<String>`.
 
-- [ ] **Step 1: Write the migration.** Create `migrations/0013_sharepoint_files.sql`:
+- [x] **Step 1: Write the migration.** Create `migrations/0013_sharepoint_files.sql`:
 
 ```sql
 -- SharePoint document storage (spec §5–§7, plan P3). Files live in one
@@ -1889,7 +1889,7 @@ GRANT SELECT, INSERT, UPDATE ON sharepoint_department_folders, sharepoint_docume
 Apply it to the dev database: `sqlx migrate run --source migrations`
 Expected: `Applied 13/migrate sharepoint files`.
 
-- [ ] **Step 2: Write the failing tests.** Add these imports to `tests/sharepoint.rs`: `use pdms_core::directory;`, `use pdms_core::sharepoint::Area;` and `use uuid::Uuid;`. Then add:
+- [x] **Step 2: Write the failing tests.** Add these imports to `tests/sharepoint.rs`: `use pdms_core::directory;`, `use pdms_core::sharepoint::Area;` and `use uuid::Uuid;`. Then add:
 
 ```rust
 async fn new_department(core: &Core, code: &str, name: &str) -> Uuid {
@@ -1954,12 +1954,12 @@ async fn an_untracked_folder_left_by_an_interrupted_run_is_adopted() {
 }
 ```
 
-- [ ] **Step 3: Run the tests and confirm they fail.**
+- [x] **Step 3: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --test sharepoint department`
 Expected: compile error `cannot find function department_folder_id in module sharepoint`.
 
-- [ ] **Step 4: Implement.** In `folders.rs`, extend the imports:
+- [x] **Step 4: Implement.** In `folders.rs`, extend the imports:
 
 ```rust
 use serde::Deserialize;
@@ -2107,12 +2107,12 @@ pub(super) async fn move_item(
 
 In `mod.rs`, add `pub use folders::department_folder_id;` after `pub use layout::{Area, Spot};`.
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint`
 Expected: `test result: ok. 6 passed`.
 
-- [ ] **Step 6: Refresh the offline query data and commit.**
+- [x] **Step 6: Refresh the offline query data and commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets

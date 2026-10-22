@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, code FROM departments WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "code"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "30bce66c967649731ec8048c3364861ec72d67fa5f9983aee504137693c624af"
+}

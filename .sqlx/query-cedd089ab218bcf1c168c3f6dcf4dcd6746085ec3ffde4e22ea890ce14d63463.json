@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM sharepoint_department_folders WHERE item_id = $1)\n               OR EXISTS (SELECT 1 FROM sharepoint_document_folders WHERE item_id = $1) AS \"tracked!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tracked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cedd089ab218bcf1c168c3f6dcf4dcd6746085ec3ffde4e22ea890ce14d63463"
+}

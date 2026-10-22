@@ -24,6 +24,10 @@ use pdms_core::config::{GraphConfig, Secret};
 use pdms_core::graph::cert;
 use serde_json::{Value, json};
 
+mod sp;
+#[allow(unused_imports)]
+pub use sp::{DRIVE, LIST, SITE, SITE_URL, SpItem};
+
 pub const TENANT: &str = "tenant-1";
 pub const CLIENT: &str = "client-1";
 
@@ -58,6 +62,7 @@ pub struct MockState {
     /// The next request with a `$deltatoken` gets HTTP 410.
     pub expire_delta: bool,
     pub uploads: Vec<(String, String, Vec<u8>)>,
+    pub sp: sp::SpState,
 }
 
 #[derive(Clone)]
@@ -232,11 +237,17 @@ async fn handle(
         if has_auth {
             return graph_error(400, "authorizationNotAllowed");
         }
+        if let Some(r) = sp::blob(&s, name) {
+            return r;
+        }
         return (StatusCode::OK, format!("contents of {name}")).into_response();
     }
     if let Some(name) = path.strip_prefix("/upload/") {
         if has_auth {
             return graph_error(400, "authorizationNotAllowed");
+        }
+        if let Some(r) = sp::upload(&mut s, name, &headers, &body) {
+            return r;
         }
         let range = headers
             .get(header::CONTENT_RANGE)
@@ -259,6 +270,9 @@ async fn handle(
     };
     if !bearer.is_some_and(|n| n >= s.min_token) {
         return graph_error(401, "InvalidAuthenticationToken");
+    }
+    if let Some(r) = sp::route(&mut s, &base, &method, api, &body) {
+        return r;
     }
     match (method, api) {
         (Method::GET, "/users/delta") => users_delta(&mut s, &base, &query),

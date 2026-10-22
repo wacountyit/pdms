@@ -66,6 +66,8 @@ pub struct Core {
     pub signatures: Arc<dyn signatures::SignatureProvider>,
     /// OCR for scanned files (`None` unless an OCR sidecar is configured).
     pub ocr: Option<Arc<dyn ocr::OcrProvider>>,
+    /// Document files in SharePoint (`[storage] backend = "sharepoint"`).
+    pub sharepoint: Option<sharepoint::SharePoint>,
     /// Microsoft Graph as PADM itself (`None` unless `[graph]` is configured).
     pub graph: Option<graph::GraphClient>,
 }
@@ -99,9 +101,21 @@ impl Core {
         } else {
             None
         };
+        let sharepoint = match config.storage.backend {
+            StorageBackend::SharePoint => {
+                let graph = graph.clone().ok_or_else(|| {
+                    CoreError::validation(
+                        "storage.backend = \"sharepoint\" needs the [graph] section (tenant_id, client_id, certificate)",
+                    )
+                })?;
+                Some(sharepoint::SharePoint::new(graph, &config.sharepoint)?)
+            }
+            _ => None,
+        };
         let allow_self_approval = config.workflow.allow_self_approval;
         Ok(Core {
             graph,
+            sharepoint,
             mailer,
             signatures: Arc::new(signatures::ManualSignatures),
             ocr: ocr::from_config(&config.ocr),
