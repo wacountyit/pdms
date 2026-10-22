@@ -149,8 +149,7 @@ async fn periodic_scheduling_is_idempotent_across_workers() {
         .await
         .unwrap();
     assert_eq!(
-        n, 8,
-        "sessions, jobs, audit, notification planning, event dispatch, audit forwarding, API log purge, \
-         Outlook calendar sync"
+        n, 7,
+        "sessions, jobs, audit, notification planning, event dispatch, audit forwarding, API log purge"
     );
 }

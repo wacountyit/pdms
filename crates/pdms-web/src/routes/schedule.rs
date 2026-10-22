@@ -9,11 +9,10 @@ use axum::response::{Html, IntoResponse, Response};
 use axum_extra::extract::{Form, Query};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use pdms_authz::Capability;
-use pdms_core::appointments::{self, SeatAttention, SeatState};
+use pdms_core::appointments::{self, SeatAttention};
 use pdms_core::calendar::{self, CalEvent, Feed};
 use pdms_core::directory::{self, Department, Group, Role, UserSummary};
-use pdms_core::documents;
-use pdms_core::documents::search::{self, DocumentFilter};
+use pdms_core::documents::search::DocumentFilter;
 use pdms_core::documents::status::DocumentStatus;
 use pdms_core::documents::tags::{self, Tag};
 use pdms_core::documents::types::{self, DocumentType};
@@ -34,6 +33,7 @@ use crate::session::{Client, CurrentUser};
 use crate::state::AppState;
 use crate::views::{FlashMsg, Layout, done, fmt_date, fmt_time, redirect_with};
 
+#[derive(Clone)]
 pub struct EventView {
     pub href: String,
     pub label: &'static str,
@@ -184,13 +184,7 @@ fn approval_row(p: &PendingStep, tz: chrono_tz::Tz) -> AttentionRow {
 }
 
 fn seat_view(a: &SeatAttention) -> SeatView {
-    let (status_class, status_text) = match a.state {
-        SeatState::DecisionOverdue => ("critical", "Decision overdue".to_owned()),
-        SeatState::DecisionDueToday => ("critical", "Decision due today".to_owned()),
-        SeatState::Holdover => ("warning", "Holdover".to_owned()),
-        SeatState::Vacant => ("neutral", "Vacant".to_owned()),
-        SeatState::TermEnding(d) => ("info", format!("Term ends {}", fmt_date(Some(d)))),
-    };
+    let (status_class, status_text) = crate::seats::status(&a.state);
     SeatView {
         href: format!("/positions/{}", a.position_id),
         label: a.label.clone(),
@@ -242,7 +236,8 @@ pub async fn dashboard(
     );
 
     let (boards, boards_more) = if appointments::any_visible(core, &user.ctx).await? {
-        let seats = appointments::attention(core, &user.ctx, today, 90).await?;
+        let seats =
+            appointments::attention(core, &user.ctx, today, crate::seats::HORIZON_DAYS).await?;
         (
             Some(seats.iter().take(BOARDS_SHOWN).map(seat_view).collect()),
             seats.len().saturating_sub(BOARDS_SHOWN),
@@ -251,42 +246,33 @@ pub async fn dashboard(
         (None, 0)
     };
 
-    let found = search::search(
-        core,
-        &user.ctx,
-        &DocumentFilter {
-            per_page: 5,
-            ..Default::default()
-        },
-    )
-    .await?;
-    let mut recent = Vec::new();
-    for d in found.items {
-        let versions = documents::versions(core, &user.ctx, d.id).await?;
-        let newest_file = versions.iter().find(|v| v.file_changed);
-        let what = match newest_file {
-            Some(v) if (v.created_at - d.updated_at).num_seconds().abs() <= 60 => format!(
-                "New version by {}",
-                v.created_by_name.as_deref().unwrap_or("PADM")
-            ),
-            _ => "Details updated".to_owned(),
-        };
-        let day = d.updated_at.with_timezone(&state.tz).date_naive();
-        let when = if day == today {
-            "Today".to_owned()
-        } else if Some(day) == today.pred_opt() {
-            "Yesterday".to_owned()
-        } else {
-            day.format("%b %-d").to_string()
-        };
-        recent.push(RecentView {
-            href: format!("/documents/{}", d.id),
-            detail: format!("{} · {}", d.external_id, d.department_name),
-            title: d.title,
-            what,
-            when,
-        });
-    }
+    // Recent activity (R2 spec §8): a fixed list of document events on
+    // documents this person may view now; see `pdms_core::activity`.
+    let recent: Vec<RecentView> = pdms_core::activity::recent(core, &user.ctx, 10)
+        .await?
+        .into_iter()
+        .map(|a| {
+            let at = a.when.with_timezone(&state.tz);
+            let day = at.date_naive();
+            let when = if day == today {
+                at.format("Today %-I:%M %p").to_string()
+            } else if Some(day) == today.pred_opt() {
+                "Yesterday".to_owned()
+            } else {
+                day.format("%b %-d").to_string()
+            };
+            RecentView {
+                href: format!("/documents/{}", a.document_id),
+                detail: format!("{} · {}", a.external_id, a.department),
+                title: a.title,
+                what: match a.actor {
+                    Some(who) => format!("{} · {who}", a.kind.label()),
+                    None => a.kind.label().to_owned(),
+                },
+                when,
+            }
+        })
+        .collect();
 
     let page = DashboardPage {
         l: Layout::new(&state, &user, flash, "Dashboard", "home"),
@@ -333,6 +319,9 @@ pub struct CalQuery {
     month: String,
     #[serde(default)]
     days: Option<i64>,
+    /// The agenda's first day (`YYYY-MM-DD`); today when absent.
+    #[serde(default)]
+    from: String,
     #[serde(default)]
     department: String,
     #[serde(default, rename = "type")]
@@ -377,10 +366,24 @@ impl CalQuery {
     }
 }
 
+/// Events a month-grid day shows before "+N more".
+const DAY_SHOWN: usize = 3;
+
 pub struct DayCell {
     pub day: u32,
     pub iso: String,
     pub in_month: bool,
+    pub today: bool,
+    /// The first [`DAY_SHOWN`] events of the day.
+    pub events: Vec<EventView>,
+    /// Events past those, shown in the agenda from this day.
+    pub more: usize,
+}
+
+/// A day with events, for the month as a list (narrow screens).
+pub struct ListDay {
+    pub label: String,
+    pub iso: String,
     pub today: bool,
     pub events: Vec<EventView>,
 }
@@ -396,8 +399,17 @@ struct CalendarPage {
     prev_month: String,
     next_month: String,
     weeks: Vec<Vec<DayCell>>,
+    /// The month's days that have events, for narrow screens.
+    month_list: Vec<ListDay>,
+    /// Overdue reviews and renewals, shown as one item on today.
+    overdue_count: usize,
+    overdue_href: String,
     agenda_days: i64,
+    /// "from today" or "from Nov 3, 2026".
+    agenda_from: String,
     agenda_groups: Vec<(String, Vec<EventView>)>,
+    /// Any filter is set (the empty state offers to clear them).
+    filtered: bool,
     types: Vec<DocumentType>,
     departments: Vec<Department>,
     tags: Vec<Tag>,
@@ -416,15 +428,17 @@ pub async fn calendar_page(
     let agenda = q.view == "agenda";
     let first = NaiveDate::parse_from_str(&format!("{}-01", q.month), "%Y-%m-%d")
         .unwrap_or_else(|_| today.with_day(1).unwrap_or(today));
-    let (mut weeks, mut groups) = (Vec::new(), Vec::new());
+    let (mut weeks, mut groups, mut month_list) = (Vec::new(), Vec::new(), Vec::new());
+    let mut overdue_count = 0;
     let agenda_days = q.days.unwrap_or(90).clamp(7, 730);
+    let agenda_start = NaiveDate::parse_from_str(&q.from, "%Y-%m-%d").unwrap_or(today);
     if agenda {
         let events = calendar::events(
             core,
             &user.ctx,
             &filter,
-            today,
-            today + Duration::days(agenda_days),
+            agenda_start,
+            agenda_start + Duration::days(agenda_days),
             true,
         )
         .await?;
@@ -448,61 +462,72 @@ pub async fn calendar_page(
             ))
             - Duration::days(1);
         let events = calendar::events(core, &user.ctx, &filter, start, end, true).await?;
-        // Overdue reviews and renewals have past dates; show them on today so
-        // they cannot be missed.
-        let mut overdue: Option<Vec<EventView>> = if today >= start && today <= end {
-            Some(
-                calendar::events(
-                    core,
-                    &user.ctx,
-                    &filter,
-                    NaiveDate::MIN,
-                    today - Duration::days(1),
-                    false,
-                )
-                .await?
-                .iter()
-                .filter(|e| {
-                    e.kind != DueEvent::Expiration && e.status != Some(DocumentStatus::Expired)
-                })
-                .map(|e| event_view(e, today))
-                .collect(),
+        // Overdue reviews and renewals have past dates; today shows how many
+        // there are, as one item linking to the overdue report, so they
+        // cannot be missed.
+        if today >= start && today <= end {
+            overdue_count = calendar::events(
+                core,
+                &user.ctx,
+                &filter,
+                NaiveDate::MIN,
+                today - Duration::days(1),
+                false,
             )
-        } else {
-            None
-        };
+            .await?
+            .iter()
+            .filter(|e| e.kind != DueEvent::Expiration && e.status != Some(DocumentStatus::Expired))
+            .count();
+        }
         let mut d = start;
         while d <= end {
             let mut week = Vec::new();
             for _ in 0..7 {
+                let mut day: Vec<EventView> = events
+                    .iter()
+                    .filter(|e| e.date == d)
+                    .map(|e| event_view(e, today))
+                    .collect();
+                let in_month = d.month() == first.month();
+                if in_month && (!day.is_empty() || (d == today && overdue_count > 0)) {
+                    month_list.push(ListDay {
+                        label: d.format("%A, %B %-d").to_string(),
+                        iso: d.to_string(),
+                        today: d == today,
+                        events: day.iter().map(EventView::clone).collect(),
+                    });
+                }
+                let more = day.len().saturating_sub(DAY_SHOWN);
+                day.truncate(DAY_SHOWN);
                 week.push(DayCell {
                     day: d.day(),
                     iso: d.to_string(),
-                    in_month: d.month() == first.month(),
+                    in_month,
                     today: d == today,
-                    events: {
-                        let mut v = if d == today {
-                            overdue.take().unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
-                        v.extend(
-                            events
-                                .iter()
-                                .filter(|e| e.date == d)
-                                .map(|e| event_view(e, today)),
-                        );
-                        v
-                    },
+                    events: day,
+                    more,
                 });
                 d += Duration::days(1);
             }
             weeks.push(week);
         }
     }
+    let filters = q.filter_query();
     let page = CalendarPage {
         l: Layout::new(&state, &user, flash, "Calendar", "calendar"),
-        filters: q.filter_query(),
+        filtered: !filters.is_empty(),
+        overdue_href: match q.department.parse::<Uuid>() {
+            Ok(id) => format!("/reports/overdue?department={id}"),
+            Err(_) => "/reports/overdue".to_owned(),
+        },
+        overdue_count,
+        month_list,
+        agenda_from: if agenda_start == today {
+            "from today".to_owned()
+        } else {
+            format!("from {}", fmt_date(Some(agenda_start)))
+        },
+        filters,
         agenda,
         month_label: first.format("%B %Y").to_string(),
         prev_month: schedule::add_months(first, -1).format("%Y-%m").to_string(),

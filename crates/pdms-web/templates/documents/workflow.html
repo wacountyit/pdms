@@ -3,7 +3,7 @@
   {% if wf.rounds.is_empty() %}<p class="muted">This document has not been submitted for review.</p>{% endif %}
   {% for r in wf.rounds %}
   <details class="round" {% if loop.first %}open{% endif %}>
-    <summary><span class="badge wf-{{ r.status }}">{{ r.status_label }}</span> {{ r.submitted }} <span class="muted small">(version {{ r.version_no }})</span></summary>
+    <summary><span class="status wf-{{ r.status }}">{{ r.status_label }}</span> <span>{{ r.submitted }}</span> <span class="muted small">version {{ r.version_no }}</span></summary>
     {% if !r.note.is_empty() %}<p class="note">{{ r.note }}</p>{% endif %}
     <div class="table-wrap">
     <table class="steps">
@@ -13,12 +13,17 @@
       {% for s in r.steps %}
         <tr>
           <td>{{ s.stage }}</td><td>{{ s.kind_label }}</td><td>{{ s.assignee }}</td>
-          <td><span class="badge step-{{ s.status }}">{{ s.status_label }}</span></td>
+          <td><span class="status step-{{ s.status }}">{{ s.status_label }}</span></td>
           <td>{% if !s.acted.is_empty() %}<span class="small">{{ s.acted }}</span>{% endif %}{% if !s.comment.is_empty() %}<br><q>{{ s.comment }}</q>{% endif %}
-            {% if s.can_act %}
+            {% if s.self_blocked %}<p class="muted small">You submitted this document, so someone else must give this sign-off.</p>{% endif %}
+          </td>
+        </tr>
+        {% if s.can_act %}
+        <tr class="step-decide">
+          <td colspan="5">
             <form method="post" action="/documents/{{ d.id }}/workflow/steps/{{ s.id }}" class="stack decision">
               <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-              <label for="c-{{ s.id }}">Comment <span class="muted small">(required to reject or request changes)</span></label>
+              <label for="c-{{ s.id }}">Your decision on step {{ s.stage }} ({{ s.kind_label }}): comment <span class="muted small">(required to reject or request changes)</span></label>
               <textarea id="c-{{ s.id }}" name="comment" rows="2" maxlength="4000"></textarea>
               <div class="toolbar">
                 <button type="submit" name="decision" value="approve" class="primary">Approve</button>
@@ -26,15 +31,15 @@
                 <button type="submit" name="decision" value="reject" class="danger">Reject</button>
               </div>
             </form>
-            {% else if s.self_blocked %}<p class="muted small">You submitted this document, so someone else must give this sign-off.</p>{% endif %}
           </td>
         </tr>
+        {% endif %}
       {% endfor %}
       </tbody>
     </table>
     </div>
-    <h3 class="visually-hidden">Activity</h3>
-    <ol class="activity">
+    <h3 class="small-heading">Activity</h3>
+    <ol class="activity timeline-activity">
       {% for e in r.events %}<li><span class="muted small">{{ e.when }}</span> {% if !e.who.is_empty() %}<strong>{{ e.who }}</strong>: {% endif %}{{ e.label }}{% if !e.comment.is_empty() %} — <q>{{ e.comment }}</q>{% endif %}</li>{% endfor %}
     </ol>
     {% if r.active %}

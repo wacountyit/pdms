@@ -19,6 +19,12 @@
 <div class="me">
   <span class="initials" aria-hidden="true">{{ l.initials() }}</span>
   <span class="who"><span class="name">{{ l.user_name }}</span>{% if !l.user_department.is_empty() %}<span class="dept">{{ l.user_department }}</span>{% endif %}</span>
-  <a href="/account/tokens" {% if l.section == "account" %}aria-current="page"{% endif %}>{% include "icons/key-round.html" %}API tokens</a>
+  <a href="/account/tokens" {% if l.section == "account" %}aria-current="page"{% endif %}>{% include "icons/key-round.html" %}Your account</a>
+  {# One click between dark and light; "Match my device" is on the account page. #}
+  <form method="post" action="/account/appearance" class="scheme-switch">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="{{ l.path }}">
+    {% if l.color_scheme == "light" %}<input type="hidden" name="color_scheme" value="dark"><button type="submit" class="signout">{% include "icons/moon.html" %}Dark mode</button>
+    {% else %}<input type="hidden" name="color_scheme" value="light"><button type="submit" class="signout">{% include "icons/sun.html" %}Light mode</button>{% endif %}
+  </form>
   <form method="post" action="/logout"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="signout">{% include "icons/log-out.html" %}Sign out</button></form>
 </div>

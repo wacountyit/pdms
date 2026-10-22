@@ -10,7 +10,7 @@ use chrono::{NaiveDate, Utc};
 use pdms_authz::Capability;
 use pdms_core::appointments::{
     self, Appointment, AppointmentEdit, AppointmentStatus, NewAppointment, Position, PositionSpec,
-    Requirement, Term,
+    Requirement, SeatState, Term,
 };
 use pdms_core::directory::{self, Department};
 use pdms_core::notifications::rules::{self, DueEvent};
@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use crate::error::AppResult;
 use crate::routes::documents::parse_date;
+use crate::seats;
 use crate::session::CurrentUser;
 use crate::state::AppState;
 use crate::views::{FlashMsg, Layout, done, fmt_date, fmt_time, iso_date};
@@ -27,25 +28,50 @@ use crate::views::{FlashMsg, Layout, done, fmt_date, fmt_time, iso_date};
 pub struct PositionRow {
     pub id: Uuid,
     pub name: String,
-    pub body_name: String,
     pub department: String,
-    pub authority: String,
     pub term: String,
     pub seats: String,
     pub holders: String,
     pub next_date: String,
-    pub attention: &'static str,
-    pub is_active: bool,
+    pub status_class: &'static str,
+    pub status_text: String,
+}
+
+/// The positions of one board or body.
+pub struct BodyGroup {
+    pub name: String,
+    pub rows: Vec<PositionRow>,
 }
 
 #[derive(Template)]
 #[template(path = "positions/list.html")]
 struct ListPage {
     l: Layout,
-    rows: Vec<PositionRow>,
+    groups: Vec<BodyGroup>,
+    /// The board counts, as on the county overview; none without positions.
+    tiles: Vec<(&'static str, i64)>,
     can_manage: bool,
     departments: Vec<Department>,
     users: Vec<(Uuid, String)>,
+}
+
+/// A position's one status: its worst seat, using the same rule and words as
+/// the dashboard and the county overview.
+fn position_status(p: &Position, current: &[&Appointment], t: NaiveDate) -> (&'static str, String) {
+    if !p.is_active {
+        return ("neutral", "Inactive".to_owned());
+    }
+    let horizon = Some(t + chrono::Duration::days(seats::HORIZON_DAYS));
+    let vacant = (appointments::vacant_seats(p) > 0).then_some(SeatState::Vacant);
+    current
+        .iter()
+        .filter_map(|a| appointments::seat_state(a, t, horizon))
+        .chain(vacant)
+        .min()
+        .map_or_else(
+            || (seats::CURRENT.0, seats::CURRENT.1.to_owned()),
+            |s| seats::status(&s),
+        )
 }
 
 async fn pickers(state: &AppState) -> CoreResult<(Vec<Department>, Vec<(Uuid, String)>)> {
@@ -76,7 +102,16 @@ pub async fn list(
     let can_manage = user.can(Capability::ManageAppointments);
     let positions = appointments::list_positions(core, &user.ctx, can_manage).await?;
     let t = today(&state);
-    let mut rows = Vec::new();
+    let active: Vec<&Position> = positions.iter().filter(|p| p.is_active).collect();
+    let tiles = if active.is_empty() {
+        Vec::new()
+    } else {
+        let attention = appointments::attention(core, &user.ctx, t, seats::HORIZON_DAYS).await?;
+        seats::Counts::of(&active, &attention.iter().collect::<Vec<_>>())
+            .rows()
+            .to_vec()
+    };
+    let mut groups: Vec<BodyGroup> = Vec::new();
     for p in positions {
         let detail = appointments::position(core, &user.ctx, p.id).await?;
         let current: Vec<&Appointment> = detail
@@ -85,11 +120,10 @@ pub async fn list(
             .filter(|a| a.status == AppointmentStatus::Active)
             .collect();
         let next = current.iter().filter_map(|a| a.end_date).min();
-        let attention = appointments::list_flag(&p, &current, t);
-        rows.push(PositionRow {
+        let (status_class, status_text) = position_status(&p, &current, t);
+        let row = PositionRow {
             id: p.id,
             department: p.department_name.clone().unwrap_or_default(),
-            authority: p.appointing_authority.clone(),
             term: p.term_label(),
             seats: format!("{} of {}", p.filled, p.seats),
             holders: current
@@ -98,11 +132,21 @@ pub async fn list(
                 .collect::<Vec<_>>()
                 .join(", "),
             next_date: fmt_date(next),
-            attention,
-            is_active: p.is_active,
+            status_class,
+            status_text,
             name: p.name,
-            body_name: p.body_name,
-        });
+        };
+        match groups.iter_mut().find(|g| g.name == p.body_name) {
+            Some(g) => g.rows.push(row),
+            None => groups.push(BodyGroup {
+                name: p.body_name,
+                rows: vec![row],
+            }),
+        }
+    }
+    groups.sort_by_key(|g| g.name.to_lowercase());
+    for g in &mut groups {
+        g.rows.sort_by_key(|r| r.name.to_lowercase());
     }
     let (departments, users) = if can_manage {
         pickers(&state).await?
@@ -111,7 +155,8 @@ pub async fn list(
     };
     let page = ListPage {
         l: Layout::new(&state, &user, flash, "Boards and appointments", "positions"),
-        rows,
+        groups,
+        tiles,
         can_manage,
         departments,
         users,
@@ -141,7 +186,7 @@ pub struct ApptView {
     pub start_iso: String,
     pub end_iso: String,
     pub reappointment_iso: String,
-    pub standing: &'static str,
+    pub standing: String,
     pub standing_class: &'static str,
     pub ended: String,
     pub notes: String,
@@ -162,6 +207,8 @@ pub struct RuleLine {
 struct ShowPage {
     l: Layout,
     p: Position,
+    status_class: &'static str,
+    status_text: String,
     term: String,
     manager: String,
     department: String,
@@ -194,7 +241,15 @@ impl ShowPage {
 }
 
 fn appt_view(state: &AppState, a: &Appointment, t: NaiveDate) -> ApptView {
-    let standing = a.standing(t);
+    let horizon = Some(t + chrono::Duration::days(seats::HORIZON_DAYS));
+    let (standing_class, standing) = if a.status == AppointmentStatus::Ended {
+        ("neutral", "Ended".to_owned())
+    } else {
+        appointments::seat_state(a, t, horizon).map_or_else(
+            || (seats::CURRENT.0, seats::CURRENT.1.to_owned()),
+            |s| seats::status(&s),
+        )
+    };
     ApptView {
         id: a.id,
         person: a.person_name.clone(),
@@ -213,11 +268,7 @@ fn appt_view(state: &AppState, a: &Appointment, t: NaiveDate) -> ApptView {
         end_iso: iso_date(a.end_date),
         reappointment_iso: iso_date(a.reappointment_due_date),
         standing,
-        standing_class: match standing {
-            "Serving" => "ok",
-            "Ended" => "muted",
-            _ => "warn",
-        },
+        standing_class,
         ended: match a.ended_on {
             Some(d) => format!("Ended {} ({})", fmt_date(Some(d)), a.end_reason),
             None => String::new(),
@@ -283,7 +334,10 @@ pub async fn show(
         })
         .collect();
     let p = detail.position.clone();
+    let (status_class, status_text) = position_status(&p, &current, t);
     let page = ShowPage {
+        status_class,
+        status_text,
         l: Layout::new(&state, &user, flash, &p.label(), "positions"),
         term: p.term_label(),
         manager: p.manager_name.clone().unwrap_or_else(|| "Not set".into()),

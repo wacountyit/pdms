@@ -1,25 +1,39 @@
 {% extends "base.html" %}
-{% block content %}
-<div class="toolbar">
-  {% if show_all %}<a href="/notifications">Show unacknowledged only</a>{% else %}<a href="/notifications?all=1">Show all, including acknowledged</a>{% endif %}
-  {% if !items.is_empty() && !show_all %}
-  <form method="post" action="/notifications/ack-all" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge all</button></form>
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">{% if l.unread == 0 %}Nothing unread.{% else %}{{ l.unread }} unread.{% endif %} Reminders and notices about documents and appointments you can see.</p>
+  </div>
+  {% if l.unread > 0 %}
+  <div class="page-actions">
+    <form method="post" action="/notifications/ack-all" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit">Acknowledge all</button></form>
+  </div>
   {% endif %}
-</div>
-<div class="table-wrap">
-<table>
-  <caption class="visually-hidden">Notifications</caption>
-  <thead><tr><th scope="col">Notice</th><th scope="col">About</th><th scope="col">Due</th><th scope="col">Received</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for i in items %}
-    <tr {% if i.0.acknowledged_at.is_none() %}class="unread"{% endif %}>
-      <td>{{ i.0.headline }}</td>
-      <td>{% if !i.0.code.is_empty() %}<code>{{ i.0.code }}</code> {% endif %}<a href="{{ i.0.href }}">{% if i.0.title.is_empty() %}Open{% else %}{{ i.0.title }}{% endif %}</a></td>
-      <td>{{ i.2 }}</td><td>{{ i.1 }}</td>
-      <td>{% if i.0.acknowledged_at.is_none() %}<form method="post" action="/notifications/{{ i.0.delivery_id }}/ack"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge</button></form>{% else %}<span class="muted small">Acknowledged</span>{% endif %}</td>
-    </tr>
-  {% else %}<tr><td colspan="5">No notifications.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
+</header>
+{% endblock %}
+{% block content %}
+<nav class="tabs" aria-label="Which notifications">
+  <a href="/notifications" {% if !show_all %}aria-current="page"{% endif %}>Unread</a>
+  <a href="/notifications?all=1" {% if show_all %}aria-current="page"{% endif %}>All, including acknowledged</a>
+</nav>
+<section class="panel" aria-labelledby="list-h">
+  <h2 id="list-h" class="visually-hidden">{% if show_all %}All notifications{% else %}Unread notifications{% endif %}</h2>
+  {% if items.is_empty() %}<p class="empty">{% if show_all %}No notifications yet.{% else %}You’re all caught up. <a href="/notifications?all=1">Show acknowledged ones</a>.{% endif %}</p>{% else %}
+  <ul class="notice-list">
+    {% for i in items %}
+    <li class="notice{% if i.0.acknowledged_at.is_none() %} unread{% endif %}">
+      <div class="notice-main">
+        <p class="notice-head">{% if i.0.acknowledged_at.is_none() %}<span class="visually-hidden">Unread: </span>{% endif %}{{ i.0.headline }}</p>
+        <p class="notice-about">{% if !i.0.code.is_empty() %}<code>{{ i.0.code }}</code> {% endif %}<a href="{{ i.0.href }}">{% if i.0.title.is_empty() %}Open{% else %}{{ i.0.title }}{% endif %}</a></p>
+        <p class="muted small">{% if !i.2.is_empty() %}Due {{ i.2 }} · {% endif %}Received {{ i.1 }}</p>
+      </div>
+      <div class="notice-action">
+        {% if i.0.acknowledged_at.is_none() %}<form method="post" action="/notifications/{{ i.0.delivery_id }}/ack" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Acknowledge<span class="visually-hidden">: {{ i.0.headline }}</span></button></form>{% else %}<span class="muted small">Acknowledged</span>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
 {% endblock %}

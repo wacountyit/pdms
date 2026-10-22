@@ -5,15 +5,15 @@
 #
 #   ./install.sh                     first install, or finish anything not yet set up
 #   ./install.sh --configure smtp    redo one part later (repeatable, comma-separated):
-#                                    network, database-port, source, sso, smtp, outlook,
-#                                    ocr, clamav, admin
+#                                    network, database-port, source, sso, smtp, ocr,
+#                                    clamav, admin
 #   ./install.sh --non-interactive   take answers from PDMS_INSTALL_* variables (see --help)
 #
 # What it does: checks prerequisites, finds free ports, asks how users will
 # reach the system (bundled Caddy with automatic HTTPS, your own reverse
 # proxy, or local testing), generates strong random secrets (database
 # passwords, the master key), optionally sets up Microsoft Entra ID sign-in,
-# email, Outlook calendar sync, OCR, and virus scanning, then builds and
+# email, OCR, and virus scanning, then builds and
 # starts everything and creates the first administrator.
 #
 # Re-running is safe: nothing already set up is changed or asked again, and
@@ -56,7 +56,6 @@ takes its default or is skipped:
   PDMS_INSTALL_TENANT_ID, PDMS_INSTALL_CLIENT_ID, PDMS_INSTALL_CLIENT_SECRET
   PDMS_INSTALL_SMTP_HOST, PDMS_INSTALL_SMTP_PORT, PDMS_INSTALL_SMTP_SECURITY (starttls|tls|none),
   PDMS_INSTALL_SMTP_USERNAME, PDMS_INSTALL_SMTP_PASSWORD, PDMS_INSTALL_SMTP_FROM
-  PDMS_INSTALL_OUTLOOK_MAILBOX (blank: no Outlook calendar sync)
   PDMS_INSTALL_OCR, PDMS_INSTALL_CLAMAV               yes | no (default: no)
 EOF
       exit 0 ;;
@@ -448,7 +447,7 @@ new_secret pg_app_password "$(rand_hex 32)"
 new_secret pdms_secret_key "$(openssl rand -base64 64 | tr -d '\n')"
 new_secret db_owner_url "postgres://pdms_owner:$(cat secrets/pg_owner_password)@postgres:5432/pdms"
 new_secret db_app_url "postgres://pdms_app:$(cat secrets/pg_app_password)@postgres:5432/pdms"
-for f in oidc_client_secret smtp_password graph_client_secret; do
+for f in oidc_client_secret smtp_password; do
   [[ -e "secrets/$f" ]] || : > "secrets/$f"; chmod 644 "secrets/$f"
 done
 note "Database passwords (256-bit) and the master key (512-bit) are random and stay in secrets/."
@@ -541,49 +540,19 @@ EOF
   fi
 fi
 
-# --- 7. Outlook calendar (Microsoft Graph) ----------------------------------------------
-if needs outlook graph_calendar; then
-  say "Outlook calendar events (optional)"
-  note "PDMS can keep all-day events for review, renewal, expiration, and appointment dates in a"
-  note "shared mailbox's calendar through Microsoft Graph. Calendar subscriptions (ICS) work"
-  note "without this. Needs an Entra app with the application permission Calendars.ReadWrite,"
-  note "limited to that mailbox (see docs/ADMIN_GUIDE.md section 10). Blank mailbox to skip."
-  ask OUTLOOK_MAILBOX "Shared mailbox address (e.g. pdms-calendar@yourdomain.org)" ""
-  if [[ -n "$OUTLOOK_MAILBOX" ]]; then
-    sso_tenant=$(sed -n 's#^issuer_url = "https://login.microsoftonline.com/\([^/]*\)/v2.0"#\1#p' "$CONFIG" | head -1)
-    sso_client=$(awk '/install.sh:sso/{f=1} f && /^client_id/{print; exit}' "$CONFIG" | sed 's/^client_id = "\(.*\)"$/\1/')
-    reuse=no
-    if [[ -n "$sso_tenant" && -n "$sso_client" ]]; then
-      yes_no reuse "Use the same app registration as sign-in (after adding Calendars.ReadWrite to it)?" y
-    fi
-    if [[ $reuse == yes ]]; then
-      g_tenant=$sso_tenant; g_client=$sso_client
-      cp secrets/oidc_client_secret secrets/graph_client_secret
-    else
-      ask TENANT_ID "Directory (tenant) ID" "$sso_tenant"
-      ask CLIENT_ID "Application (client) ID" ""
-      ask_secret CLIENT_SECRET "Client secret value"
-      g_tenant=$TENANT_ID; g_client=$CLIENT_ID
-      printf '%s' "$CLIENT_SECRET" > secrets/graph_client_secret
-    fi
-    has_table graph_calendar && ! has_block outlook && remove_table graph_calendar
-    write_block outlook <<EOF
-[graph_calendar]
-# Client secret: secrets/graph_client_secret.
-enabled = true
-tenant_id = $(toml "$g_tenant")
-client_id = $(toml "$g_client")
-mailbox = $(toml "$OUTLOOK_MAILBOX")
-EOF
-    echo "   Outlook calendar sync configured (first sync: Administration -> Outlook & OCR)."
-  else
-    write_block outlook <<'EOF'
-[graph_calendar]
-# Not set up. Run ./install.sh --configure outlook.
-enabled = false
-EOF
-  fi
+# --- 7. Removed: Outlook calendar sync --------------------------------------------------
+# The Outlook calendar sync was removed (D-087). Tidy what an earlier install wrote:
+# the [graph_calendar] block or table, and its client secret file.
+if has_block outlook || has_table graph_calendar; then
+  awk -v start="# >>> install.sh:outlook" -v end="# <<< install.sh:outlook" '
+    index($0, start) == 1 { skip = 1; next }
+    skip && index($0, end) == 1 { skip = 0; next }
+    !skip { print }' "$CONFIG" > "$CONFIG.tmp" && cat "$CONFIG.tmp" > "$CONFIG" && rm -f "$CONFIG.tmp"
+  has_table graph_calendar && remove_table graph_calendar
+  note "Removed the Outlook calendar settings: the Outlook sync is no longer part of PADM."
+  note "Events it created stay in that mailbox's calendar until someone deletes them."
 fi
+rm -f secrets/graph_client_secret
 
 # --- 8. OCR and virus scanning ---------------------------------------------------------
 if needs ocr ocr; then
@@ -723,7 +692,7 @@ fi
 cat <<EOF
 
    Settings: .env (ports, profiles), config/pdms.toml (application), secrets/ (keep private).
-   Change one part later: ./install.sh --configure sso|smtp|outlook|ocr|clamav|network|database-port|source|admin
+   Change one part later: ./install.sh --configure sso|smtp|ocr|clamav|network|database-port|source|admin
    Back up: deploy/backup/pdms-backup.sh (see docs/BACKUP.md). Check integrity: docker compose run --rm app verify-integrity
    Next steps and testing plan: docs/ROADMAP.md
 EOF

@@ -1,16 +1,28 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Deleted documents are hidden from everyone but kept with their files and history. Restoring one makes it visible again with its previous access settings.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Deleted documents are hidden from everyone but kept with their files and history. Restoring one makes it visible again with its previous access settings.</p>
-<div class="table-wrap">
-<table>
-  <caption>Deleted documents</caption>
-  <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Deleted</th><th scope="col">By</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for d in docs %}
-    <tr><td><code>{{ d.0.external_id }}</code></td><td>{{ d.0.title }}</td><td>{{ d.0.department_name }}</td><td>{{ d.1 }}</td><td>{% if let Some(b) = d.0.deleted_by %}{{ b }}{% endif %}</td>
-    <td><form method="post" action="/admin/deleted/{{ d.0.id }}/restore"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Restore</button></form></td></tr>
-  {% else %}<tr><td colspan="6">No deleted documents.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
+<section class="panel" aria-labelledby="deleted-h">
+  <div class="panel-head"><h2 id="deleted-h">{{ docs.len() }} deleted document{% if docs.len() != 1 %}s{% endif %}</h2></div>
+  {% if docs.is_empty() %}<p class="empty">No deleted documents.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Deleted documents</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Deleted</th><th scope="col">By</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for d in docs %}
+      <tr><td><code>{{ d.0.external_id }}</code></td><td>{{ d.0.title }}</td><td>{{ d.0.department_name }}</td><td class="small">{{ d.1 }}</td><td>{% if let Some(b) = d.0.deleted_by %}{{ b }}{% endif %}</td>
+      <td><form method="post" action="/admin/deleted/{{ d.0.id }}/restore" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Restore<span class="visually-hidden"> {{ d.0.external_id }}</span></button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
 {% endblock %}

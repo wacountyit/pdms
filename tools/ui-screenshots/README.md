@@ -68,7 +68,14 @@ From the repository root, in another shell:
 ```sh
 tools/ui-screenshots/run.sh                              # every page
 tools/ui-screenshots/run.sh desktop-admin phone-         # only pages whose names match
+tools/ui-screenshots/run.sh --theme=light                # every page in light mode
 ```
+
+- **Light and dark:** dark is every account's default. `--theme=dark`,
+  `--theme=light` or `--theme=system` first sets the color scheme of each
+  account the script signs in as (on **Your account → Appearance**), and
+  writes to `out/<theme>/`. Check every page in both modes before a change to
+  colors is merged.
 
 - **What `run.sh` does:** it starts Microsoft's Playwright image (`mcr.microsoft.com/playwright/python:v1.49.0-jammy`) as your user.
   - The image has the browsers but not the Playwright Python package. The first run therefore installs the package into `tools/ui-screenshots/.pylib/`, which needs internet access once.

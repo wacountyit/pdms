@@ -1,30 +1,39 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Tags are labels that cut across types and departments, such as a funding source or a project. Administrators keep the list: editors choose from it and cannot add their own.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-tag">{% include "icons/plus.html" %}Add a tag</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Curated tags are managed here. People who can edit a document may also add free-form tags, which appear below as uncurated; you can curate them or change their color.</p>
-<table>
-  <caption>Tags</caption>
-  <thead><tr><th scope="col">Tag</th><th scope="col">Documents</th><th scope="col">Edit</th></tr></thead>
-  <tbody>
-  {% for t in tags %}
-    <tr><td><span class="{{ t.1 }}">{{ t.0.name }}</span>{% if !t.0.is_curated %} <span class="muted small">(free-form)</span>{% endif %}</td><td>{{ t.0.document_count }}</td>
-    <td><form method="post" action="/admin/tags/{{ t.0.id }}" class="inline">
-      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-      <label class="visually-hidden" for="n-{{ t.0.id }}">Name</label><input id="n-{{ t.0.id }}" name="name" value="{{ t.0.name }}" required maxlength="60">
-      <label class="visually-hidden" for="c-{{ t.0.id }}">Color</label><input id="c-{{ t.0.id }}" name="color" type="color" value="{{ t.0.color }}">
-      <label class="visually-hidden" for="d-{{ t.0.id }}">Description</label><input id="d-{{ t.0.id }}" name="description" value="{{ t.0.description }}" placeholder="Description" maxlength="500">
-      <label class="check"><input type="checkbox" name="is_curated" value="true" {% if t.0.is_curated %}checked{% endif %}> Curated</label>
-      <button type="submit" class="small">Save</button>
-    </form></td></tr>
-  {% else %}<tr><td colspan="3">No tags yet.</td></tr>{% endfor %}
-  </tbody>
-</table>
-<section aria-labelledby="new-tag-h">
-  <h2 id="new-tag-h">Add a curated tag</h2>
+{% if review > 0 %}
+<section class="panel" aria-labelledby="review-h">
+  <div class="panel-head"><h2 id="review-h">Needs review</h2><span class="muted small">{{ review }}</span></div>
+  <p class="help">These tags were typed on documents while free-form tags were allowed. Keep one by ticking “Curated” and saving, or rename it to merge it into an existing tag.</p>
+  <ul class="tag-rows">
+    {% for t in tags %}{% if !t.0.is_curated %}{% include "admin/tag_row.html" %}{% endif %}{% endfor %}
+  </ul>
+</section>
+{% endif %}
+<section class="panel" aria-labelledby="tags-h">
+  <div class="panel-head"><h2 id="tags-h">Tags</h2><span class="muted small">{{ tags.len() - review }}</span></div>
+  {% if tags.len() == review %}<p class="empty">No tags yet. Add the first one below; editors can then choose it on documents.</p>{% else %}
+  <ul class="tag-rows">
+    {% for t in tags %}{% if t.0.is_curated %}{% include "admin/tag_row.html" %}{% endif %}{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="new-tag-h" id="add-tag">
+  <h2 id="new-tag-h">Add a tag</h2>
   <form method="post" action="/admin/tags" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="t-name">Name</label><input id="t-name" name="name" required maxlength="60">
     <label for="t-color">Color</label><input id="t-color" name="color" type="color" value="#0b4f8a">
-    <label for="t-desc">Description</label><input id="t-desc" name="description" maxlength="500">
+    <label for="t-desc">Description</label><input id="t-desc" name="description" maxlength="500" aria-describedby="t-desc-help">
+    <span></span><span id="t-desc-help" class="help">Say when to use it, so editors pick the same tag for the same thing.</span>
     <span></span><button type="submit" class="primary">Add tag</button>
   </form>
 </section>

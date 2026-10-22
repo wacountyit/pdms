@@ -1,17 +1,31 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Groups gather people across departments, for example a review committee. Grant access or send reminders to a whole group.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-group">{% include "icons/plus.html" %}Add a group</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<div class="table-wrap">
-<table>
-  <caption>Groups</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th><th scope="col">Synced from IdP</th></tr></thead>
-  <tbody>
-  {% for g in groups %}
-    <tr><td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a></td><td>{{ g.description }}</td><td>{{ g.member_count }}</td><td>{% if g.external_id.is_some() %}Yes{% else %}No{% endif %}</td></tr>
-  {% else %}<tr><td colspan="4">No groups yet.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<section aria-labelledby="new-group-h">
+<section class="panel" aria-labelledby="groups-h">
+  <div class="panel-head"><h2 id="groups-h">{{ groups.len() }} group{% if groups.len() != 1 %}s{% endif %}</h2></div>
+  {% if groups.is_empty() %}<p class="empty">No groups yet. Add one below.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Groups</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th><th scope="col">Synced from identity provider</th></tr></thead>
+    <tbody>
+    {% for g in groups %}
+      <tr><td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a></td><td>{{ g.description }}</td><td class="num">{{ g.member_count }}</td><td>{% if g.external_id.is_some() %}Yes{% else %}No{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="new-group-h" id="add-group">
   <h2 id="new-group-h">Add a group</h2>
   <form method="post" action="/admin/groups" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">

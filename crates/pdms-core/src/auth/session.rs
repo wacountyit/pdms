@@ -23,6 +23,8 @@ pub struct SessionUser {
     pub display_name: String,
     pub email: String,
     pub auth_method: AuthMethod,
+    /// `dark`, `light` or `system` (R2 spec §7).
+    pub color_scheme: String,
 }
 
 /// Create a session and return the bearer token for the cookie.
@@ -56,7 +58,7 @@ pub async fn lookup(db: &PgPool, cfg: &AuthConfig, token: &str) -> CoreResult<Op
     let row = sqlx::query!(
         r#"SELECT s.id, s.user_id, s.auth_method AS "auth_method: AuthMethod",
                   (s.last_seen_at < now() - make_interval(secs => $3)) AS "stale!",
-                  u.display_name, u.email
+                  u.display_name, u.email, u.color_scheme
              FROM sessions s
              JOIN users u ON u.id = s.user_id
             WHERE s.token_hash = $1
@@ -85,6 +87,7 @@ pub async fn lookup(db: &PgPool, cfg: &AuthConfig, token: &str) -> CoreResult<Op
         display_name: r.display_name,
         email: r.email,
         auth_method: r.auth_method,
+        color_scheme: r.color_scheme,
     }))
 }
 

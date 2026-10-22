@@ -1,19 +1,33 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Webhooks send events (document changes, workflow decisions, appointments) to another system as they happen. Each webhook acts as a <em>service user</em> and receives only events about what that user may see. Requests are signed; failures are retried with backoff.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-webhook">{% include "icons/plus.html" %}Add a webhook</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Webhooks send events (document changes, workflow decisions, appointments) to another system as they happen. Each webhook acts as a <em>service user</em>: it receives only events about what that user may see. Requests are signed; failures are retried with backoff and logged below.
-{% if !enabled %}<strong>Webhook delivery is turned off</strong> (<code>[integrations] webhooks_enabled</code>).{% endif %}
-{% if !providers.is_empty() %}Integration providers enabled: <code>{{ providers }}</code>.{% endif %}</p>
-<div class="table-wrap">
-<table>
-  <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Acts as</th><th scope="col">State</th></tr></thead>
-  <tbody>
-  {% for w in hooks %}
-    <tr><td><a href="/admin/webhooks/{{ w.id }}">{{ w.name }}</a></td><td><code>{{ w.url }}</code></td><td class="small">{{ w.events.join(", ") }}</td><td>{{ w.acts_as }}</td><td>{% if w.is_active %}Active{% else %}Paused{% endif %}</td></tr>
-  {% else %}<tr><td colspan="5">No webhooks.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<details {% if hooks.is_empty() %}open{% endif %}><summary>Add a webhook</summary>
+{% if !enabled %}<p class="flash flash-info" role="status">Webhook delivery is turned off (<code>[integrations] webhooks_enabled</code>). Webhooks can be set up, but nothing is sent.</p>{% endif %}
+{% if !providers.is_empty() %}<p class="muted small">Integration providers enabled: <code>{{ providers }}</code>.</p>{% endif %}
+<section class="panel" aria-labelledby="hooks-h">
+  <div class="panel-head"><h2 id="hooks-h">{{ hooks.len() }} webhook{% if hooks.len() != 1 %}s{% endif %}</h2></div>
+  {% if hooks.is_empty() %}<p class="empty">No webhooks yet. Add one to send document events to another system.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Webhooks</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Acts as</th><th scope="col">State</th></tr></thead>
+    <tbody>
+    {% for w in hooks %}
+      <tr><td><a href="/admin/webhooks/{{ w.id }}">{{ w.name }}</a></td><td><code>{{ w.url }}</code></td><td class="small">{{ w.events.join(", ") }}</td><td>{{ w.acts_as }}</td><td>{% if w.is_active %}<span class="status status-good">Active</span>{% else %}<span class="status status-neutral">Paused</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<details class="disclosure" id="add-webhook" {% if hooks.is_empty() %}open{% endif %}><summary>Add a webhook</summary>
 <form method="post" action="/admin/webhooks" class="grid-form">
   <input type="hidden" name="_csrf" value="{{ l.csrf }}">
   <label for="w-name">Name</label><input id="w-name" name="name" maxlength="200" required>
@@ -27,6 +41,8 @@ workflow.*</textarea>
   <span></span><button type="submit" class="primary">Add webhook</button>
 </form>
 </details>
-<h2>Recent deliveries</h2>
-{% include "admin/deliveries_table.html" %}
+<section class="panel" aria-labelledby="deliv-h">
+  <h2 id="deliv-h">Recent deliveries</h2>
+  {% include "admin/deliveries_table.html" %}
+</section>
 {% endblock %}

@@ -7,6 +7,7 @@
 //! same transaction as the change.
 
 pub mod acl;
+pub mod activity;
 pub mod api_tokens;
 pub mod appointments;
 pub mod audit_log;
@@ -24,7 +25,6 @@ pub mod documents;
 pub mod error;
 pub mod exports;
 pub mod graph;
-pub mod graph_calendar;
 pub mod integrations;
 pub mod integrity;
 pub mod jobs;

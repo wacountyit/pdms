@@ -620,6 +620,27 @@ struct NewPage {
     fields: Vec<FieldInput>,
     max_upload_mb: u64,
     visibility_options: Vec<(&'static str, &'static str, &'static str)>,
+    /// New tags may be typed; otherwise tags are picked from `curated`.
+    free_tags: bool,
+    /// (name, color class) of the curated tags.
+    curated: Vec<(String, String)>,
+}
+
+/// Whether this person may add tags that do not exist yet (D-088: only tag
+/// managers, unless `[documents] free_form_tags` is on), and the curated tags
+/// as (id, name, color class).
+async fn tag_choices(
+    state: &AppState,
+    user: &CurrentUser,
+) -> AppResult<(bool, Vec<(Uuid, String, String)>)> {
+    let free = state.core.config.documents.free_form_tags || user.can(Capability::ManageTags);
+    let curated = tags::list(&state.core.db)
+        .await?
+        .into_iter()
+        .filter(|t| t.is_curated)
+        .map(|t| (t.id, t.name, tag_class(t.id)))
+        .collect();
+    Ok((free, curated))
 }
 
 /// (value, label, explanation) for the visibility choices, in display order.
@@ -675,6 +696,7 @@ async fn render_new(
     } else {
         StatusCode::OK
     };
+    let (free_tags, curated) = tag_choices(state, user).await?;
     let page = NewPage {
         l: Layout::new(state, user, flash, "New document", "documents"),
         fields: field_inputs(&defs, type_id, &form, None, &all_users, &all_depts),
@@ -685,6 +707,8 @@ async fn render_new(
         error,
         max_upload_mb: state.core.config.storage.max_upload_bytes / (1024 * 1024),
         visibility_options: visibility_options(),
+        free_tags,
+        curated: curated.into_iter().map(|t| (t.1, t.2)).collect(),
     };
     Ok((status, Html(page.render()?)).into_response())
 }
@@ -770,9 +794,13 @@ pub async fn create(
             _ => DocumentStatus::Active,
         };
         let visibility = parse_visibility(form.v("visibility"))?;
+        // Typed as a comma-separated list, or ticked one per box (curated).
         let tags: Vec<String> = form
-            .v("tags")
-            .split(',')
+            .0
+            .get("tags")
+            .into_iter()
+            .flatten()
+            .flat_map(|v| v.split(','))
             .map(|t| t.trim().to_owned())
             .filter(|t| !t.is_empty())
             .collect();
@@ -866,6 +894,10 @@ struct ShowPage {
     review_interval: String,
     custom: Vec<CustomRow>,
     tags: Vec<(Uuid, String, String)>,
+    /// New tags may be typed; otherwise one is picked from `tag_options`.
+    free_tags: bool,
+    /// Curated tags not yet on this document.
+    tag_options: Vec<String>,
     versions: Vec<VersionRow>,
     current_file: Option<VersionRow>,
     next: Vec<(&'static str, &'static str)>,
@@ -1291,7 +1323,15 @@ pub async fn show(
         .find(|v| v.file_changed && v.blob_sha256.is_some())
         .map(|v| v.version_no);
 
+    let (free_tags, curated) = tag_choices(&state, &user).await?;
+    let tag_options = curated
+        .into_iter()
+        .filter(|c| !d.tags.iter().any(|t| t.id == c.0))
+        .map(|c| c.1)
+        .collect();
     let page = ShowPage {
+        free_tags,
+        tag_options,
         visibility_options: visibility_options(),
         can_set_visibility,
         l: Layout::new(&state, &user, flash, &d.title, "documents"),

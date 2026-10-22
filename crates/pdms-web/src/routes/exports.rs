@@ -11,7 +11,7 @@ use axum_extra::extract::{Form, Query};
 use chrono::{Datelike, Duration, Months, NaiveDate, Utc};
 use pdms_authz::Capability;
 use pdms_authz::Permission;
-use pdms_core::appointments::{self, SeatState};
+use pdms_core::appointments;
 use pdms_core::calendar;
 use pdms_core::documents::DocumentStatus;
 use pdms_core::documents::search::{self, DocumentFilter};
@@ -36,6 +36,8 @@ pub struct PackageRow {
     pub p: PackageInfo,
     pub when: String,
     pub size: String,
+    /// The first 12 hex digits of the package's SHA-256, for the table.
+    pub sha_short: String,
 }
 
 pub struct Candidate {
@@ -109,6 +111,7 @@ pub async fn page(
             .map(|p| PackageRow {
                 when: fmt_time(state.tz, p.created_at),
                 size: human_size(Some(p.size_bytes)),
+                sha_short: p.package_sha256.chars().take(12).collect(),
                 p,
             })
             .collect(),
@@ -412,9 +415,9 @@ async fn build_overview(
     let due_total: i64 = data.iter().map(|d| d.1).sum();
     let due_chart = crate::charts::vbars(&data, "Items due per month");
 
-    let other = count_of(DocumentStatus::Draft)
-        + count_of(DocumentStatus::Expired)
-        + count_of(DocumentStatus::Superseded);
+    // Superseded documents are left out, as the Documents tile leaves them
+    // out, so the chart's total equals the tile.
+    let other = count_of(DocumentStatus::Draft) + count_of(DocumentStatus::Expired);
     let status_chart = crate::charts::stacked(
         &[
             ("chart-seg-good", "Active", count_of(DocumentStatus::Active)),
@@ -462,18 +465,16 @@ async fn build_overview(
             .filter(|p| department.is_none_or(|id| p.department_id == Some(id)))
             .collect();
         let position_ids: BTreeSet<Uuid> = positions.iter().map(|p| p.id).collect();
-        let attention: Vec<_> = appointments::attention(core, ctx, today, 90)
-            .await?
-            .into_iter()
-            .filter(|a| position_ids.contains(&a.position_id))
-            .collect();
-        let n = |f: fn(&SeatState) -> bool| attention.iter().filter(|a| f(&a.state)).count() as i64;
-        let decision = n(|s| matches!(s, SeatState::DecisionOverdue | SeatState::DecisionDueToday));
-        let holdover = n(|s| matches!(s, SeatState::Holdover));
-        let vacant = n(|s| matches!(s, SeatState::Vacant));
-        let ending = n(|s| matches!(s, SeatState::TermEnding(_)));
-        let filled: i64 = positions.iter().map(|p| p.filled).sum();
-        let current = (filled - holdover - decision - ending).max(0);
+        let attention: Vec<_> =
+            appointments::attention(core, ctx, today, crate::seats::HORIZON_DAYS)
+                .await?
+                .into_iter()
+                .filter(|a| position_ids.contains(&a.position_id))
+                .collect();
+        let counts = crate::seats::Counts::of(
+            &positions.iter().collect::<Vec<_>>(),
+            &attention.iter().collect::<Vec<_>>(),
+        );
         Some(Boards {
             scope: if department.is_some() {
                 "Seats you can see in this department"
@@ -481,28 +482,11 @@ async fn build_overview(
                 "Seats you can see"
             },
             empty: department.is_some() && positions.is_empty(),
-            rows: vec![
-                BoardRow {
-                    label: "Filled and current",
-                    count: current,
-                },
-                BoardRow {
-                    label: "Decision due or overdue",
-                    count: decision,
-                },
-                BoardRow {
-                    label: "Holdover",
-                    count: holdover,
-                },
-                BoardRow {
-                    label: "Term ending soon",
-                    count: ending,
-                },
-                BoardRow {
-                    label: "Vacant",
-                    count: vacant,
-                },
-            ],
+            rows: counts
+                .rows()
+                .into_iter()
+                .map(|(label, count)| BoardRow { label, count })
+                .collect(),
         })
     } else {
         None
@@ -528,9 +512,11 @@ async fn build_overview(
         },
         overdue: Tile {
             value: dash.overdue.len(),
+            // The tile counts overdue dates of documents and board terms; the
+            // status chart counts documents in Overdue status.
             sub: oldest.map_or_else(
-                || "Nothing overdue".to_owned(),
-                |d| format!("Oldest: {}", plural_days(d)),
+                || "Documents and board terms · none".to_owned(),
+                |d| format!("Documents and board terms · oldest {}", plural_days(d)),
             ),
             href: in_department("/reports/overdue", department),
         },
@@ -595,7 +581,13 @@ pub struct ReportQuery {
     to: String,
     #[serde(default)]
     department: String,
+    /// The page of rows shown (the CSV always has every row).
+    #[serde(default)]
+    page: Option<usize>,
 }
+
+/// Rows per page of a report.
+const REPORT_PAGE: usize = 100;
 
 impl ReportQuery {
     fn params(&self) -> CoreResult<ReportParams> {
@@ -640,8 +632,14 @@ impl ReportQuery {
 struct ReportPage {
     l: Layout,
     info: &'static ReportInfo,
+    /// Only this page's rows.
     r: Report,
     q: ReportQuery,
+    total: usize,
+    page: usize,
+    pages: usize,
+    /// The query string without the page, for pager links.
+    query: String,
     csv_link: String,
     departments: Vec<pdms_core::directory::Department>,
 }
@@ -665,9 +663,22 @@ pub async fn report(
         Ok(p) => p,
         Err(e) => return done::<()>(&state, &format!("/reports/{key}"), Err(e), ""),
     };
-    let r = reports::run(&state.core, &user.ctx, &key, &params).await?;
+    let mut r = reports::run(&state.core, &user.ctx, &key, &params).await?;
+    let total = r.rows.len();
+    let pages = total.div_ceil(REPORT_PAGE).max(1);
+    let page = q.page.unwrap_or(1).clamp(1, pages);
+    r.rows = r
+        .rows
+        .into_iter()
+        .skip((page - 1) * REPORT_PAGE)
+        .take(REPORT_PAGE)
+        .collect();
     let page = ReportPage {
         l: Layout::new(&state, &user, flash, info.title, "reports"),
+        total,
+        page,
+        pages,
+        query: q.query_string(),
         csv_link: format!("/reports/{key}.csv?{}", q.query_string()),
         departments: pdms_core::directory::list_departments(&state.core.db).await?,
         info,

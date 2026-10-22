@@ -1,19 +1,33 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Map identity-provider groups (for Entra ID, the group’s object ID) to departments, groups or roles. Unless the Entra directory sync is on, memberships created this way are updated at each sign-in; memberships added by hand are never changed.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-mapping">{% include "icons/plus.html" %}Add a mapping</a></div>
+</header>
+{% endblock %}
 {% block content %}
 {% if entra_sync %}<p class="flash flash-info" role="status">These mappings are not applied while the Entra directory sync is on: departments come from the Entra Department field, and roles and groups are assigned in PADM. Roles and group memberships that earlier mappings granted stay until an administrator removes them: roles on the person’s page, group memberships on the group’s page.</p>{% endif %}
-<p>Map identity-provider groups (for Entra ID, the group’s object ID) to departments, groups, or roles. Unless the Entra directory sync is on, memberships created this way are updated at each sign-in; memberships added by hand are never changed.</p>
-<div class="table-wrap">
-<table>
-  <thead><tr><th scope="col">IdP group ID</th><th scope="col">Description</th><th scope="col">Maps to</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for m in mappings %}
-    <tr><td><code>{{ m.idp_group_id }}</code></td><td>{{ m.description }}</td><td>{{ m.target }}</td>
-    <td><form method="post" action="/admin/idp/{{ m.id }}/delete"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Delete</button></form></td></tr>
-  {% else %}<tr><td colspan="4">No mappings.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<section aria-labelledby="new-map-h">
+<section class="panel" aria-labelledby="maps-h">
+  <div class="panel-head"><h2 id="maps-h">{{ mappings.len() }} mapping{% if mappings.len() != 1 %}s{% endif %}</h2></div>
+  {% if mappings.is_empty() %}<p class="empty">No mappings.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Mappings</caption>
+    <thead><tr><th scope="col">IdP group ID</th><th scope="col">Description</th><th scope="col">Maps to</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for m in mappings %}
+      <tr><td><code>{{ m.idp_group_id }}</code></td><td>{{ m.description }}</td><td>{{ m.target }}</td>
+      <td><form method="post" action="/admin/idp/{{ m.id }}/delete" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Delete<span class="visually-hidden"> mapping {{ m.idp_group_id }}</span></button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="new-map-h" id="add-mapping">
   <h2 id="new-map-h">Add a mapping</h2>
   <form method="post" action="/admin/idp" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">

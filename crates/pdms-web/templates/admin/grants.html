@@ -1,8 +1,19 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Organization-wide and department-level grants. Document-level sharing is managed on each document. Grants never reach Restricted documents.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#new-grant">{% include "icons/plus.html" %}Grant access</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Organization-wide and department-level grants. Document-level sharing is managed on each document. Grants never reach Restricted documents.</p>
-{% include "admin/grants_table.html" %}
-<section aria-labelledby="new-grant-h">
+<section class="panel" aria-labelledby="grants-h">
+  <div class="panel-head"><h2 id="grants-h">{{ grants.len() }} grant{% if grants.len() != 1 %}s{% endif %}</h2></div>
+  {% include "admin/grants_table.html" %}
+</section>
+<section class="panel" aria-labelledby="new-grant-h" id="new-grant">
   <h2 id="new-grant-h">Grant access</h2>
   {% include "admin/grant_form.html" %}
 </section>

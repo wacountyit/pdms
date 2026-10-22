@@ -7,7 +7,7 @@
     clippy::field_reassign_with_default
 )]
 //! Phase 5 through the pages and the API: comments, date suggestions, and the
-//! Outlook/OCR administration page.
+//! text extraction (OCR) administration page.
 
 mod support;
 
@@ -62,7 +62,7 @@ async fn comments_and_date_suggestions_on_the_document_page() {
     let mut o = Browser::new(&app);
     o.login("owner@x.org", &owner_secret).await;
     let csrf = o.get("/documents/new").await.csrf();
-    let t = pdms_core::documents::types::type_by_key(&app.core.db, "partnership_agreement")
+    let t = pdms_core::documents::types::type_by_key(&app.core.db, "interlocal_agreement")
         .await
         .unwrap()
         .id
@@ -234,22 +234,27 @@ async fn comments_and_date_suggestions_on_the_document_page() {
 }
 
 #[tokio::test]
-async fn outlook_and_ocr_page_is_for_integration_managers() {
+async fn ocr_page_is_for_integration_managers() {
     let app = app().await;
     let (_, admin_secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
     let (_, staff_secret) = user(&app.core, "staff@x.org", None, None).await;
     let mut a = Browser::new(&app);
     a.login("admin@x.org", &admin_secret).await;
-    let page = a.get("/admin/outlook").await;
+    let page = a.get("/admin/ocr").await;
     assert_eq!(page.status, StatusCode::OK);
-    assert!(
-        page.body
-            .contains("Calendar subscriptions (ICS) work without it")
-    );
+    assert!(page.body.contains("<h1>Text extraction (OCR)</h1>"));
     assert!(page.body.contains("docker compose --profile ocr up -d"));
+    assert!(
+        !page.body.contains("Outlook"),
+        "the Outlook sync is gone (D-087)"
+    );
+    // The old address leads to the new page.
+    let old = a.get("/admin/outlook").await;
+    assert_eq!(old.status, StatusCode::PERMANENT_REDIRECT);
+    assert_eq!(old.location(), "/admin/ocr");
     let mut s = Browser::new(&app);
     s.login("staff@x.org", &staff_secret).await;
-    assert_eq!(s.get("/admin/outlook").await.status, StatusCode::FORBIDDEN);
+    assert_eq!(s.get("/admin/ocr").await.status, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
@@ -260,7 +265,7 @@ async fn county_wide_document_page_hides_comment_forms_from_non_owners() {
         .unwrap();
     let (owner, owner_secret) = user(&app.core, "owner@x.org", Some(dept), None).await;
     let (_, col_secret) = user(&app.core, "col@x.org", Some(dept), None).await;
-    let t = pdms_core::documents::types::type_by_key(&app.core.db, "partnership_agreement")
+    let t = pdms_core::documents::types::type_by_key(&app.core.db, "interlocal_agreement")
         .await
         .unwrap()
         .id;

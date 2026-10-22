@@ -1,0 +1,10 @@
+<ul class="admin-nav-groups">
+  {% for g in l.admin_groups() %}
+  <li>
+    <p class="admin-nav-label" id="{{ nav_id }}-{{ loop.index }}">{{ g.0 }}</p>
+    <ul aria-labelledby="{{ nav_id }}-{{ loop.index }}">
+      {% for a in g.1 %}<li><a href="/admin/{{ a.key }}" {% if l.admin_page == a.key %}aria-current="page"{% endif %}>{{ a.label }}</a></li>{% endfor %}
+    </ul>
+  </li>
+  {% endfor %}
+</ul>

@@ -1,25 +1,43 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Every API token, and the most recent API requests. People create their own tokens on their account page; the API reference is at <a href="/api/docs">/api/docs</a>.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Every API token, and the most recent API requests. Users create their own tokens under <a href="/account/tokens">API tokens</a>; the API reference is at <a href="/api/docs">/api/docs</a>. {% if !enabled %}<strong>The API is turned off</strong> (<code>[api] enabled</code>).{% endif %}</p>
-<h2>Tokens</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th scope="col">User</th><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Scopes</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for t in tokens %}
-    <tr><td>{{ t.user }}</td><td>{{ t.name }}</td><td><code>{{ t.prefix }}</code></td><td class="small">{{ t.scopes }}</td><td class="small">{{ t.expires }}</td><td class="small">{{ t.last_used }}</td><td>{{ t.state }}</td>
-    <td>{% if t.live %}<form method="post" action="/admin/api/tokens/{{ t.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small danger">Revoke</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="8">No tokens.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<h2>Recent requests</h2>
-<div class="table-wrap"><table class="report-table">
-  <thead><tr><th scope="col">When</th><th scope="col">Token</th><th scope="col">User</th><th scope="col">Request</th><th scope="col">Status</th><th scope="col">ms</th><th scope="col">IP</th></tr></thead>
-  <tbody>
-  {% for r in requests %}
-    <tr><td>{{ times[loop.index0] }}</td><td>{% if let Some(n) = r.token_name %}{{ n }}{% endif %}</td><td>{% if let Some(n) = r.user_name %}{{ n }}{% endif %}</td><td><code>{{ r.method }} {{ r.path }}</code></td><td>{{ r.status }}</td><td>{{ r.duration_ms }}</td><td>{% if let Some(ip) = r.ip %}{{ ip }}{% endif %}</td></tr>
-  {% else %}<tr><td colspan="7">No requests yet.</td></tr>{% endfor %}
-  </tbody>
-</table></div>
+{% if !enabled %}<p class="flash flash-info" role="status">The API is turned off (<code>[api] enabled</code>). Tokens can exist, but no request is accepted.</p>{% endif %}
+<section class="panel" aria-labelledby="tokens-h">
+  <div class="panel-head"><h2 id="tokens-h">All tokens</h2><span class="muted small">{{ tokens.len() }}</span></div>
+  {% if tokens.is_empty() %}<p class="empty">No tokens.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">All tokens</caption>
+    <thead><tr><th scope="col">User</th><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Scopes</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for t in tokens %}
+      <tr><td>{{ t.user }}</td><td>{{ t.name }}</td><td><code>{{ t.prefix }}</code></td><td class="small">{{ t.scopes }}</td><td class="small">{{ t.expires }}</td><td class="small">{{ t.last_used }}</td><td>{{ t.state }}</td>
+      <td>{% if t.live %}<form method="post" action="/admin/api/tokens/{{ t.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small danger">Revoke<span class="visually-hidden"> {{ t.name }}</span></button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="req-h">
+  <div class="panel-head"><h2 id="req-h">Recent requests</h2><span class="muted small">{{ requests.len() }}</span></div>
+  {% if requests.is_empty() %}<p class="empty">No requests yet.</p>{% else %}
+  <div class="table-wrap"><table class="report-table">
+    <caption class="visually-hidden">Recent requests</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Token</th><th scope="col">User</th><th scope="col">Request</th><th scope="col">Status</th><th scope="col">ms</th><th scope="col">IP</th></tr></thead>
+    <tbody>
+    {% for r in requests %}
+      <tr><td class="small">{{ times[loop.index0] }}</td><td>{% if let Some(n) = r.token_name %}{{ n }}{% endif %}</td><td>{% if let Some(n) = r.user_name %}{{ n }}{% endif %}</td><td><code>{{ r.method }} {{ r.path }}</code></td><td>{{ r.status }}</td><td class="num">{{ r.duration_ms }}</td><td>{% if let Some(ip) = r.ip %}{{ ip }}{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
 {% endblock %}

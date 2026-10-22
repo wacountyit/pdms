@@ -1,11 +1,32 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/audit">Audit log</a></li><li aria-current="page">Integrity check</li></ol>
+    </nav>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Every entry’s hash was recomputed and checked against the next one.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-{% if intact %}
-<div class="flash flash-ok" role="status">The audit chain is intact: {{ checked }} entries verified, ending at entry {{ last_seq }}.</div>
-{% else %}
-<div class="flash flash-error" role="alert">Integrity check FAILED: {{ breaks.len() }} problem(s) found in {{ checked }} entries. Preserve the database and investigate.</div>
-<ul>{% for b in breaks %}<li><code>{{ b }}</code></li>{% endfor %}</ul>
-{% endif %}
-<p class="muted">Last entry hash: <code>{{ last_hash }}</code></p>
+<section class="panel" aria-labelledby="result-h">
+  <h2 id="result-h">Result</h2>
+  {% if intact %}
+  <div class="flash flash-ok" role="status">The audit chain is intact: {{ checked }} entries verified, ending at entry {{ last_seq }}.</div>
+  {% else %}
+  <div class="flash flash-error" role="alert">Integrity check FAILED: {{ breaks.len() }} problem(s) found in {{ checked }} entries. Preserve the database and investigate.</div>
+  {% endif %}
+  <dl class="facts">
+    <dt>Entries checked</dt><dd>{{ checked }}</dd>
+    <dt>Last entry</dt><dd>{{ last_seq }}</dd>
+    <dt>Last entry hash</dt><dd><code>{{ last_hash }}</code></dd>
+  </dl>
+  {% if !breaks.is_empty() %}
+  <h3>Problems</h3>
+  <ul>{% for b in breaks %}<li><code>{{ b }}</code></li>{% endfor %}</ul>
+  {% endif %}
+</section>
 <p><a href="/audit">Back to the audit log</a></p>
 {% endblock %}

@@ -65,7 +65,7 @@ prefix = ""
 allow_http = false
 
 [documents]
-free_form_tags = true           # editors may add new, uncurated tags
+free_form_tags = false          # true lets editors add new, uncurated tags (D-088)
 
 [notifications]
 send_hour = 7                   # local hour (org.timezone) after which reminders go out

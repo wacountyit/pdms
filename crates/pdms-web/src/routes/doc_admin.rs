@@ -525,6 +525,8 @@ pub async fn deprecate_field(
 struct TagsPage {
     l: Layout,
     tags: Vec<(Tag, String)>,
+    /// Uncurated tags, left from when free-form tags were allowed.
+    review: usize,
 }
 
 pub async fn tags_page(
@@ -534,10 +536,11 @@ pub async fn tags_page(
 ) -> AppResult<Html<String>> {
     user.require(&state, Capability::ManageTags, "/admin/tags")
         .await?;
+    let all = tags::list(&state.core.db).await?;
     let page = TagsPage {
         l: Layout::new(&state, &user, flash, "Tags", "admin").admin_tab("tags"),
-        tags: tags::list(&state.core.db)
-            .await?
+        review: all.iter().filter(|t| !t.is_curated).count(),
+        tags: all
             .into_iter()
             .map(|t| {
                 let c = tag_class(t.id);

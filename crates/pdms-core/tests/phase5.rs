@@ -6,28 +6,24 @@
     clippy::panic,
     clippy::field_reassign_with_default
 )]
-//! Phase 5: comments, text extraction and date suggestions, and the Outlook
-//! calendar (Microsoft Graph) provider.
+//! Phase 5: comments, and text extraction with date suggestions. (The Outlook
+//! calendar sync was removed by D-087.)
 
 mod common;
 
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use chrono::{Duration, NaiveDate, Utc};
 use common::*;
 use futures_util::future::BoxFuture;
 use pdms_authz::{Permission, Scope, Subject};
-use pdms_core::appointments::{self, NewAppointment, PositionSpec};
 use pdms_core::config::Config;
 use pdms_core::documents::search::DocumentFilter;
 use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
 use pdms_core::notifications::inbox;
 use pdms_core::ocr::{self, OcrError, OcrProvider};
-use pdms_core::{Core, CoreError, acl, comments, directory, graph_calendar, schedule};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use pdms_core::{Core, CoreError, acl, comments, directory};
 use uuid::Uuid;
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
@@ -44,7 +40,7 @@ async fn new_doc(
     title: &str,
     file: Option<(&str, Vec<u8>)>,
 ) -> Uuid {
-    let t = types::type_by_key(&core.db, "partnership_agreement")
+    let t = types::type_by_key(&core.db, "interlocal_agreement")
         .await
         .unwrap()
         .id;
@@ -126,7 +122,7 @@ async fn comments_thread_mention_and_keep_every_revision() {
         headlines(&core, gus)
             .await
             .iter()
-            .any(|h| h.starts_with("test user mentioned you: PAG-"))
+            .any(|h| h.starts_with("test user mentioned you: ILA-"))
     );
     assert!(headlines(&core, outsider).await.is_empty());
     let reply = comments::post(&core, &g, doc, Some(c1), "Section 4 is fine.")
@@ -829,322 +825,5 @@ async fn real_ocr_sidecar_reads_a_scan() {
     assert!(
         s.iter()
             .any(|x| x.field == "review_interval_months" && x.months == Some(12))
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Outlook calendar through Microsoft Graph (against a mock Graph)
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct Graph {
-    tokens: usize,
-    next: usize,
-    /// event id -> (mailbox, body)
-    events: HashMap<String, (String, serde_json::Value)>,
-    requests: Vec<String>,
-}
-
-async fn mock_graph() -> (String, Arc<Mutex<Graph>>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let state = Arc::new(Mutex::new(Graph::default()));
-    let st = state.clone();
-    tokio::spawn(async move {
-        loop {
-            let Ok((mut sock, _)) = listener.accept().await else {
-                return;
-            };
-            let st = st.clone();
-            tokio::spawn(async move {
-                loop {
-                    let mut buf = Vec::new();
-                    let mut chunk = [0u8; 8192];
-                    let (head_end, len) = loop {
-                        let n = sock.read(&mut chunk).await.unwrap_or(0);
-                        if n == 0 {
-                            return;
-                        }
-                        buf.extend_from_slice(&chunk[..n]);
-                        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                            let head = String::from_utf8_lossy(&buf[..i]).to_lowercase();
-                            let len = head
-                                .lines()
-                                .find_map(|l| l.strip_prefix("content-length:"))
-                                .and_then(|v| v.trim().parse::<usize>().ok())
-                                .unwrap_or(0);
-                            break (i + 4, len);
-                        }
-                    };
-                    while buf.len() < head_end + len {
-                        let n = sock.read(&mut chunk).await.unwrap_or(0);
-                        if n == 0 {
-                            break;
-                        }
-                        buf.extend_from_slice(&chunk[..n]);
-                    }
-                    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
-                    let mut first = head.lines().next().unwrap_or("").split(' ');
-                    let (method, path) = (
-                        first.next().unwrap_or("").to_owned(),
-                        first.next().unwrap_or("").to_owned(),
-                    );
-                    let body = buf[head_end..head_end + len].to_vec();
-                    let (status, out) = {
-                        let mut g = st.lock().unwrap();
-                        g.requests.push(format!("{method} {path}"));
-                        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
-                        match (method.as_str(), parts.as_slice()) {
-                            ("POST", [_tenant, "oauth2", "v2.0", "token"]) => {
-                                g.tokens += 1;
-                                (
-                                    200,
-                                    r#"{"access_token":"tok","expires_in":3600}"#.to_owned(),
-                                )
-                            }
-                            ("POST", ["users", mailbox, "calendar", "events"]) => {
-                                g.next += 1;
-                                let id = format!("evt-{}", g.next);
-                                let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                                g.events
-                                    .insert(id.clone(), ((*mailbox).replace("%40", "@"), v));
-                                (201, format!(r#"{{"id":"{id}"}}"#))
-                            }
-                            ("PATCH", ["users", _, "events", id]) => match g.events.get_mut(*id) {
-                                Some(e) => {
-                                    e.1 = serde_json::from_slice(&body).unwrap();
-                                    (200, "{}".to_owned())
-                                }
-                                None => (404, "{}".to_owned()),
-                            },
-                            ("DELETE", ["users", _, "events", id]) => match g.events.remove(*id) {
-                                Some(_) => (204, String::new()),
-                                None => (404, "{}".to_owned()),
-                            },
-                            _ => (400, "{}".to_owned()),
-                        }
-                    };
-                    let resp = format!(
-                        "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{out}",
-                        out.len()
-                    );
-                    if sock.write_all(resp.as_bytes()).await.is_err() {
-                        return;
-                    }
-                }
-            });
-        }
-    });
-    (format!("http://{addr}"), state)
-}
-
-fn subjects(g: &Arc<Mutex<Graph>>) -> Vec<(String, String, String)> {
-    let mut v: Vec<(String, String, String)> = g
-        .lock()
-        .unwrap()
-        .events
-        .values()
-        .map(|(mb, e)| {
-            (
-                mb.clone(),
-                e["subject"].as_str().unwrap().to_owned(),
-                e["start"]["dateTime"].as_str().unwrap()[..10].to_owned(),
-            )
-        })
-        .collect();
-    v.sort();
-    v
-}
-
-#[tokio::test]
-async fn outlook_events_follow_dates_through_graph() {
-    let (base, graph) = mock_graph().await;
-    let (core, _db) = core_with(|c| {
-        let g = &mut c.graph_calendar;
-        g.enabled = true;
-        g.tenant_id = "tenant".into();
-        g.client_id = "client".into();
-        g.client_secret = pdms_core::config::Secret::new("secret");
-        g.mailbox = "pdms@example.org".into();
-        g.department_mailboxes
-            .insert("OPS".into(), "ops@example.org".into());
-        g.login_base_url = base.clone();
-        g.graph_base_url = base.clone();
-    })
-    .await;
-    // Disabled installations do nothing.
-    let (off, _db2) = common::core().await;
-    assert_eq!(
-        graph_calendar::sync(&off).await.unwrap(),
-        Default::default()
-    );
-
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
-    let (owner, ops) = user_in_new_department(&core, "OPS", "o@x.org").await;
-    let hr = directory::create_department(&core.db, &system(), "HR", "HR")
-        .await
-        .unwrap();
-    let mk = |dept: Uuid, title: &'static str, renewal: NaiveDate| {
-        let core = core.clone();
-        async move {
-            let t = types::type_by_key(&core.db, "contract").await.unwrap().id;
-            documents::create(
-                &core,
-                &system(),
-                NewDocument {
-                    visibility: Default::default(),
-                    metadata: MetadataInput {
-                        title: title.into(),
-                        document_type_id: t,
-                        department_id: dept,
-                        renewal_date: Some(renewal),
-                        ..Default::default()
-                    },
-                    owner_id: owner,
-                    status: DocumentStatus::Active,
-                    tags: vec![],
-                    file: None,
-                    note: String::new(),
-                },
-            )
-            .await
-            .unwrap()
-        }
-    };
-    let asphalt = mk(ops, "Asphalt", today + Duration::days(40)).await;
-    let _copier = mk(hr, "Copier lease", today + Duration::days(50)).await;
-    let secret = mk(hr, "Settlement", today + Duration::days(60)).await;
-    documents::set_visibility(&core, &system(), secret, pdms_authz::Visibility::Restricted)
-        .await
-        .unwrap();
-    let _far = mk(hr, "Far future", today + Duration::days(5000)).await;
-    let pos = appointments::create_position(
-        &core,
-        &system(),
-        PositionSpec {
-            name: "Seat 1".into(),
-            body_name: "Program Board".into(),
-            department_id: Some(hr),
-            term_months: Some(24),
-            seats: 1,
-            reappointment_lead_days: 30,
-            is_active: true,
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    appointments::appoint(
-        &core,
-        &system(),
-        pos,
-        NewAppointment {
-            person_name: "Jane Doe".into(),
-            start_date: today - Duration::days(600),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-
-    let r = graph_calendar::sync(&core).await.unwrap();
-    assert_eq!((r.created, r.updated, r.deleted), (4, 0, 0), "{r:?}");
-    let ev = subjects(&graph);
-    let asphalt_date = (today + Duration::days(40)).to_string();
-    assert!(
-        ev.iter().any(|e| e.0 == "ops@example.org"
-            && e.1.starts_with("Renewal due: CON-")
-            && e.1.ends_with("Asphalt")
-            && e.2 == asphalt_date),
-        "{ev:?}"
-    );
-    assert!(
-        ev.iter()
-            .any(|e| e.0 == "pdms@example.org" && e.1.contains("Copier lease"))
-    );
-    assert!(ev.iter().any(|e| {
-        e.1.starts_with("Term ends: Jane Doe (Seat 1, Program Board)")
-    }));
-    assert!(
-        ev.iter()
-            .any(|e| e.1.starts_with("Reappointment decision due: Jane Doe"))
-    );
-    assert!(
-        !ev.iter().any(|e| e.1.contains("Settlement")),
-        "Restricted documents are never sent"
-    );
-    assert!(
-        !ev.iter().any(|e| e.1.contains("Far future")),
-        "outside the window"
-    );
-    {
-        let g = graph.lock().unwrap();
-        let (_, body) = g.events.values().next().unwrap();
-        assert_eq!(body["isAllDay"], true);
-        assert!(
-            body["body"]["content"]
-                .as_str()
-                .unwrap()
-                .contains("Open in PDMS")
-        );
-    }
-
-    // Nothing changed: nothing sent.
-    let before = graph.lock().unwrap().requests.len();
-    let r = graph_calendar::sync(&core).await.unwrap();
-    assert_eq!((r.created, r.updated, r.deleted, r.unchanged), (0, 0, 0, 4));
-    assert_eq!(graph.lock().unwrap().requests.len(), before);
-    assert_eq!(graph.lock().unwrap().tokens, 1, "token reused");
-
-    // A changed date updates the event; archiving removes it; an event deleted
-    // in Outlook is recreated when its date changes.
-    let d = documents::view(&core, &system(), asphalt)
-        .await
-        .unwrap()
-        .document;
-    let mut m = MetadataInput {
-        title: d.title.clone(),
-        document_type_id: d.document_type_id,
-        department_id: d.department_id,
-        renewal_date: Some(today + Duration::days(45)),
-        ..Default::default()
-    };
-    documents::update(&core, &system(), asphalt, m.clone(), d.row_version)
-        .await
-        .unwrap();
-    documents::change_status(&core, &system(), _copier, DocumentStatus::Archived, "")
-        .await
-        .unwrap();
-    let r = graph_calendar::sync(&core).await.unwrap();
-    assert_eq!((r.created, r.updated, r.deleted), (0, 1, 1), "{r:?}");
-    assert!(
-        subjects(&graph)
-            .iter()
-            .any(|e| e.1.contains("Asphalt") && e.2 == (today + Duration::days(45)).to_string())
-    );
-    assert!(!subjects(&graph).iter().any(|e| e.1.contains("Copier")));
-    graph
-        .lock()
-        .unwrap()
-        .events
-        .retain(|_, (_, e)| !e["subject"].as_str().unwrap().contains("Asphalt"));
-    let d = documents::view(&core, &system(), asphalt)
-        .await
-        .unwrap()
-        .document;
-    m.renewal_date = Some(today + Duration::days(46));
-    documents::update(&core, &system(), asphalt, m, d.row_version)
-        .await
-        .unwrap();
-    let r = graph_calendar::sync(&core).await.unwrap();
-    assert_eq!(
-        (r.created, r.updated),
-        (1, 0),
-        "recreated after a 404: {r:?}"
-    );
-    assert!(
-        audit_actions(&core)
-            .await
-            .contains(&"calendar.graph_synced".to_owned())
     );
 }

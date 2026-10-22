@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.id, s.user_id, s.auth_method AS \"auth_method: AuthMethod\",\n                  (s.last_seen_at < now() - make_interval(secs => $3)) AS \"stale!\",\n                  u.display_name, u.email\n             FROM sessions s\n             JOIN users u ON u.id = s.user_id\n            WHERE s.token_hash = $1\n              AND s.revoked_at IS NULL\n              AND s.expires_at > now()\n              AND s.last_seen_at > now() - make_interval(mins => $2)\n              AND u.status = 'active'",
+  "query": "SELECT s.id, s.user_id, s.auth_method AS \"auth_method: AuthMethod\",\n                  (s.last_seen_at < now() - make_interval(secs => $3)) AS \"stale!\",\n                  u.display_name, u.email, u.color_scheme\n             FROM sessions s\n             JOIN users u ON u.id = s.user_id\n            WHERE s.token_hash = $1\n              AND s.revoked_at IS NULL\n              AND s.expires_at > now()\n              AND s.last_seen_at > now() - make_interval(mins => $2)\n              AND u.status = 'active'",
   "describe": {
     "columns": [
       {
@@ -76,6 +76,17 @@
             "name": "email"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "color_scheme",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "color_scheme"
+          }
+        }
       }
     ],
     "parameters": {
@@ -91,8 +102,9 @@
       false,
       null,
       false,
+      false,
       false
     ]
   },
-  "hash": "5b65ba90329bfbfc07f277bf9597d15397e95ea196054a30e34d6f54b2083405"
+  "hash": "8cba16d239221d9bd76d6f9b46d882b6eb1a2386c5a6640395990fdf6014da57"
 }

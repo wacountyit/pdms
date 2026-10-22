@@ -24,7 +24,6 @@ build takes several minutes).
 | Secrets | Generated once and never overwritten: PostgreSQL superuser, owner, and app passwords (256-bit, hex), and the 512-bit master key. One file each in `secrets/` (directory `0700`), mounted as Docker secrets, never written to `.env` or the configuration. |
 | Microsoft Entra ID | Optional (needs HTTPS): tenant ID, client ID, client secret (hidden), and the redirect URI to register: `<public URL>/auth/oidc/callback`. If Microsoft cannot be reached, local sign-in keeps working and the problem is logged. |
 | Email | Optional: SMTP host, security (STARTTLS 587, TLS 465, or none for a trusted relay), port, username, password (hidden), from address. |
-| Outlook calendar | Optional: shared mailbox; can reuse the sign-in app registration (add `Calendars.ReadWrite`). See section 10. |
 | OCR, virus scanning | Optional extra containers (each about 1 GB). |
 | First administrator | Email, username (default `sysadmin`; preset `PDMS_INSTALL_ADMIN_USERNAME`; checked against the username rules below and shown in the summary), and name. The password is generated and shown once at the end, with the **authenticator (TOTP) secret**: add it to an authenticator app right away. |
 
@@ -38,8 +37,8 @@ Files it writes:
 | `secrets/` | Passwords and keys. Back them up securely (see BACKUP.md). |
 
 **Later changes.** `./install.sh --configure <part>` redoes one part (comma-separated
-for several): `network`, `database-port`, `sso`, `smtp`, `outlook`, `ocr`,
-`clamav`, or `admin` (resets the break-glass administrator). The services are
+for several): `network`, `database-port`, `sso`, `smtp`, `ocr`, `clamav`, or
+`admin` (resets the break-glass administrator). The services are
 restarted only if a setting actually changed. Running `./install.sh` with no
 options asks only about parts that are not set up yet, so it is also the
 upgrade step. Settings written by hand (or by an earlier installer) are kept;
@@ -161,6 +160,18 @@ required. Setting a username is audited as `user.username_set`.
 Everything here is under **Administration** (requires the Administrator role).
 Every change is recorded in the audit log with before and after values.
 
+**Finding an admin page.** Administration has a menu of its own, beside the
+page (on a phone, behind **Administration: …** at the top), in five groups:
+- *People and access:* Users, Departments, Groups, Roles, Access grants,
+  Identity provider mappings, Entra ID sync;
+- *Documents and records:* Document types, Custom fields, Tags, Retention,
+  Deleted documents;
+- *Notifications:* Notification rules, Delivery log;
+- *Integrations:* Webhooks, API;
+- *System:* Branding, Text extraction (OCR).
+
+You see only the pages your roles allow.
+
 ### The access model in brief
 
 - **Read-only by default.** Creating a department also grants its members
@@ -207,8 +218,8 @@ PADM presents your county. No config edit or restart is needed.
 | Field | Rules |
 |---|---|
 | County name | 1–120 characters. Leave blank to use `[org] name` from the config file. |
-| Accent color | Pick a color or type a hex code. White text on it must reach a 4.5:1 contrast ratio, or the page refuses it with a message (choose a darker color). Hover, link, and tint shades are derived automatically. |
-| Seal | PNG or JPEG, at most 512 KB, 16–2048 pixels per side. The real file type is checked, and SVG is refused. It is stored in PADM's database, so backups include it. |
+| Accent color | Pick a color or type a hex code. White text on it must reach a 4.5:1 contrast ratio, or the page refuses it with a message (choose a darker color). Hover, link, and tint shades are derived automatically, for light and for dark mode; an accent with no readable dark-mode shades is refused too. |
+| Seal | PNG or JPEG, at most 512 KB, 16–2048 pixels per side. The real file type is checked, and SVG is refused. It is stored in PADM's database, so backups include it. It is also the browser-tab icon; without a seal the tab shows a generic PADM icon. A square seal works best there. |
 
 Two more actions: **Remove seal**, and **Reset to defaults** (asks you to
 confirm on a separate page).
@@ -224,6 +235,21 @@ confirm on a separate page).
 - **Audit entries:** `branding.updated`, `branding.seal_set`,
   `branding.seal_removed`, `branding.reset`.
 
+### Dark and light mode
+
+PADM is **dark by default**. Each person chooses for themselves, and nobody
+else can change it for them (D-098):
+- **Your account → Appearance:** Dark, Light, or Match my device (follows the
+  computer's or phone's setting).
+- **The switch at the bottom of the sidebar** flips between dark and light in
+  one click and stays on the same page.
+
+Things to know:
+- The choice is saved with the account, so it follows the person to another
+  computer.
+- The sign-in page is always dark, and printed pages are always light.
+- Each change is recorded in the audit log as `user.color_scheme_set`.
+
 ### Preparing a demo for leadership
 
 To show PADM to county leadership on a test or demo server, after it is
@@ -234,7 +260,8 @@ installed or updated:
 2. **Brand it.** Administration → Branding: set the county name, accent color,
    and seal. Placeholders are fine until the county decides.
 3. **Let leadership see the whole county.** The county overview (top of
-   **Reports**) and the dashboard show only what the viewer can see. For each
+   **Reports**) and the dashboard (including its **Recent activity** panel)
+   show only what the viewer can see. For each
    leadership account:
    - **Documents.** Administration → Access grants → **Grant access**. Set
      *Applies to* to **All documents except Restricted ones**, *Grant to* to
@@ -445,7 +472,11 @@ chapter 5). People cannot set them by hand.
 ### Document types and custom fields
 
 **Administration → Document types**:
-- **Seeded types:** Policy, Contract, Partnership Agreement, and Other.
+- **Seeded types:** Policy, Contract, Interlocal Agreement (ILA), and Other.
+  Interlocal Agreement was called Partnership Agreement before D-088; the
+  upgrade renamed it and changed its ID prefix from `PAG` to `ILA`. Documents
+  keep the IDs they already have (`PAG-…`); new ones are numbered `ILA-…`.
+  If you had already renamed the type or its prefix, your choice was kept.
 - **Each type sets:** its ID prefix, default review cycle, whether legal review
   or signatures are required (used by the Phase 3 workflow), and its retention
   policy.
@@ -466,10 +497,19 @@ deprecate the old one.
 
 ### Tags
 
-Anyone who can edit a document can add tags, and new names become free-form
-tags. Turn this off with `[documents] free_form_tags = false`.
-Administrators manage curated tags and colors under
-**Administration → Tags**.
+Tags are kept by administrators (D-088), so the list stays short and
+consistent for everyone who filters by it:
+- **Administration → Tags** (under *Documents and records*) adds a tag, with
+  a color and a description that says when to use it, and edits or renames
+  existing ones.
+- People who edit a document **choose** tags from that list, on the
+  new-document form and in the document's **Tags** panel. They cannot type a
+  new one. Tag managers can still add a new name there, which creates it.
+- **Needs review** lists tags typed on documents while free-form tags were
+  allowed (before D-088, or when the setting below is on). Tick **Curated**
+  to keep one for everyone, or rename it to the name of an existing tag.
+- To let editors add their own tags again, set `[documents] free_form_tags =
+  true` and restart.
 
 ### Retention and legal holds
 
@@ -582,14 +622,20 @@ Put the mailbox password in `secrets/smtp_password` and restart:
 To run planning immediately (it runs every 15 minutes anyway):
 `docker compose run --rm app run-scheduler`.
 
-### Calendar and Outlook
+### Calendar and calendar subscriptions
 
 **Calendar** shows reviews, renewals, and expirations by month or as an
-agenda, filtered by department, type, status, tags, or "owned by me".
-- **Dashed entries:** projected future review cycles.
-- **Overdue items:** pinned to today.
+agenda, filtered by department, type and status (tags and "owned by me" are
+under **More filters**).
+- **Dashed entries, marked "projected":** future review cycles worked out
+  from the review interval.
+- **Overdue items:** today shows how many there are as one **N overdue**
+  link, which opens the overdue report.
+- **A busy day** shows three items and **+N more**, which opens the agenda
+  from that day.
+- **On a phone** the month is a list of the days that have something on them.
 
-**Calendar → Subscribe in Outlook…** creates a private calendar address for
+**Calendar → Subscribe** creates a private calendar address for
 Outlook (**Add calendar → Subscribe from web**) or any calendar app:
 - **Address:** shown only once. Treat it like a password and revoke it if it
   leaks.
@@ -605,7 +651,7 @@ review** (anyone who can edit it). Choose:
 - **Approvers** (at least one): each must approve. They need the *approve*
   permission on the document (Department Heads have it for their department).
 - **Legal review:** added automatically for types that require it (Contract
-  and Partnership Agreement by default; change it per type), or tick the box for any document.
+  and Interlocal Agreement by default; change it per type), or tick the box for any document.
   Any holder of the Legal Counsel role can give it.
 
 The document moves to **In Review**. People are told when it is their turn,
@@ -673,13 +719,18 @@ subscriptions of everyone who can see the position.
 
 ## 8. Records requests and reports
 
-**Records requests.** Records officers use **Records requests** in the menu:
-1. search for the documents (only documents you may *export* appear;
-   Restricted ones need an explicit grant);
-2. tick the documents, enter the **request reference** (for example
-   `REQ-2026-014`), choose the files (current, every version, or none), whether
-   to include each document's audit history, and which details to include;
-3. **Build package**, then **Download**.
+**Records requests.** Records officers use **Records requests** in the menu.
+**New package** takes three numbered steps:
+1. **Find documents:** search by title, ID or text. Only documents you may
+   *export* appear; Restricted ones need an explicit grant.
+2. **Choose documents:** tick the ones the request covers.
+3. **Package options:** the **request reference** (for example
+   `REQ-2026-014`), the files (current, every version, or none), whether to
+   include each document's audit history, a note, and which details to
+   include. Then **Build package**.
+
+The package appears under **Your packages**, with a **Download** button. Its
+SHA-256 checksum is shortened in the table; click it to see the full value.
 
 The ZIP contains a README, `manifest.json` (the request, the options, every
 document and file), each document's `metadata.json` and files, the optional
@@ -703,7 +754,8 @@ transfer documents owned by people who have left.
 
 ## 9. API, webhooks, and integrations
 
-**REST API.** Every user can create **API tokens** (link next to your name):
+**REST API.** Every user can create **API tokens** under **Your account** (the
+link under your name in the sidebar):
 choose a name, scopes, and a lifetime (up to `[api] max_token_days`). The
 token is shown once. A token acts as you and can never do more than you can;
 revoking it, or deactivating you, stops it immediately. The reference is at
@@ -744,7 +796,7 @@ your log shipper at it) or `"syslog"` with `syslog_addr`. Every entry is sent
 once, in order, including its hash; denied actions are sent at warning
 severity.
 
-## 10. Comments, file text, and Outlook
+## 10. Comments and file text
 
 **Comments.** Every document has a **Comments** section. Anyone who can see
 the document can comment and reply (set `[comments] viewers_can_comment =
@@ -784,44 +836,31 @@ engine, OCR runs in a separate container (OCRmyPDF with Tesseract):
 English is installed; other Tesseract languages can be added by extending
 `deploy/ocr/Dockerfile` and setting `PDMS_OCR_LANGUAGES` (for example
 `eng+spa`). Without OCR everything else works; scanned files simply have no
-searchable text. **Administration → Outlook & OCR** shows whether OCR is on.
+searchable text. **Administration → Text extraction (OCR)** (under *System*)
+shows whether OCR is on and how to turn it on.
 
-**Outlook calendar through Microsoft Graph (optional).** Calendar
-subscriptions (section 5) work without any setup. If you prefer real Outlook
-events in a shared calendar, PDMS can create one all-day event per review,
-renewal, and expiration date (and appointment term ends and reappointment
-decisions), update it when the date changes, and remove it when the date no
-longer applies. Restricted documents are never included.
-1. Create a shared mailbox, for example `pdms-calendar@yourdomain.org`, and
-   share its calendar with the staff who should see it (or create one per
-   department).
-2. In the Entra admin center: **App registrations → New registration**
-   ("PDMS calendar"). Under **API permissions** add Microsoft Graph
-   **Application** permission `Calendars.ReadWrite` and grant admin consent.
-   Under **Certificates & secrets** create a client secret.
-3. Limit the app to those mailboxes (Exchange Online PowerShell), for example
-   `New-ApplicationAccessPolicy -AppId <client id> -PolicyScopeGroupId
-   pdms-calendars@yourdomain.org -AccessRight RestrictAccess` (or an
-   equivalent RBAC for Applications assignment), so it cannot touch any other
-   mailbox.
-4. Put the secret in `secrets/graph_client_secret`, and in
-   `config/pdms.toml` set `[graph_calendar] enabled = true`, `tenant_id`,
-   `client_id`, `mailbox`, and optionally `[graph_calendar.department_mailboxes]`
-   (department code = mailbox). Restart: `docker compose up -d app worker`.
-5. **Administration → Outlook & OCR → Synchronize now** runs the first sync;
-   afterwards it runs every `sync_interval_minutes`. Problems are listed there.
-Events are owned by PDMS: edits made to them in Outlook are overwritten at the
-next change, and events deleted in Outlook are recreated when their date
-changes.
+**The Outlook calendar sync was removed (D-087).** The calendar is PADM's own
+look-ahead. People who want the dates in Outlook subscribe to their calendar
+feed (section 5), which needs no setup. If an earlier version kept events in
+a shared mailbox:
+- the upgrade stops the sync and forgets which events it made;
+- the events it created stay in that mailbox until someone deletes them, so
+  delete them, or the whole calendar, in Outlook;
+- re-running `./install.sh` removes the `[graph_calendar]` settings and
+  `secrets/graph_client_secret`;
+- you can remove the `Calendars.ReadWrite` permission and the mailbox access
+  policy from that app registration in Entra.
 
 ## 11. The audit log
 
-**Audit log** in the top navigation (Administrators and Auditors).
+**Audit log** in the sidebar, under *Manage* (Administrators and Auditors).
 
-- Filter by action prefix (`auth.`, `acl.`, `department.`), category, outcome,
-  user, object, and date range. Each row shows who, when (in your time zone),
-  how they signed in, from which IP, and a field-by-field before/after table.
-- **Export CSV / JSON** (Auditors only). The export itself is logged. CSV cells
+- Filter by action prefix (`auth.`, `acl.`, `department.`), category, outcome
+  and date range; the user and object ID filters are under **More filters**.
+  Each row shows who, when (in your time zone), how they signed in, from which
+  IP, and a field-by-field before/after table. **Older entries** pages back
+  through the log.
+- **Export → CSV or JSON** (Auditors only). The export itself is logged. CSV cells
   that begin with formula characters are neutralized for spreadsheet safety.
 - **Verify integrity** recomputes the hash chain. The worker also verifies it
   nightly and logs an `AUDIT CHAIN BREAK` error if anything is wrong.

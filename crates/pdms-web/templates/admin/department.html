@@ -1,22 +1,45 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/admin/departments">Departments</a></li><li aria-current="page">{{ d.name }}</li></ol>
+    </nav>
+    <p class="doc-badges">{% if d.is_active %}<span class="status status-good">Active</span>{% else %}<span class="status status-neutral">Inactive</span>{% endif %}</p>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Code <code>{{ d.code }}</code> · {{ members.len() }} member{% if members.len() != 1 %}s{% endif %}</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/admin/departments">← All departments</a></p>
-<form method="post" action="/admin/departments/{{ d.id }}" class="grid-form">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  <label>Code</label><code>{{ d.code }}</code>
-  <label for="name">Name</label><input id="name" name="name" value="{{ d.name }}" required maxlength="200">
-  <label for="active">Active</label><input id="active" type="checkbox" name="is_active" value="true" {% if d.is_active %}checked{% endif %}>
-  <span></span><button type="submit">Save</button>
-</form>
-
-<section aria-labelledby="members-h">
-  <h2 id="members-h">Members ({{ members.len() }})</h2>
-  <ul class="columns">{% for m in members %}<li><a href="/admin/users/{{ m.user_id }}">{{ m.display_name }}</a></li>{% else %}<li>No members.</li>{% endfor %}</ul>
-</section>
-
-<section aria-labelledby="grants-h">
+<div class="doc-layout">
+<div class="doc-main">
+<section class="panel" aria-labelledby="grants-h">
   <h2 id="grants-h">Access to this department’s documents</h2>
+  <p class="help">Members can view this department’s documents. Grants here add more: editing, approving, or access for people outside the department. They never reach Restricted documents.</p>
   {% include "admin/grants_table.html" %}
-  {% include "admin/grant_form.html" %}
+  <details class="disclosure" {% if grants.is_empty() %}open{% endif %}>
+    <summary>Grant access</summary>
+    {% include "admin/grant_form.html" %}
+  </details>
 </section>
+</div>
+<aside class="doc-side" aria-label="About this department">
+<section class="panel" aria-labelledby="settings-h">
+  <h2 id="settings-h">Settings</h2>
+  <form method="post" action="/admin/departments/{{ d.id }}" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="name">Name</label><input id="name" name="name" value="{{ d.name }}" required maxlength="200">
+    <label class="check" for="active"><input id="active" type="checkbox" name="is_active" value="true" {% if d.is_active %}checked{% endif %}> Active</label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+<section class="panel" aria-labelledby="members-h">
+  <div class="panel-head"><h2 id="members-h">Members</h2><span class="muted small">{{ members.len() }}</span></div>
+  {% if members.is_empty() %}<p class="empty">No members. Add people to this department on their user page.</p>{% else %}
+  <ul class="detail-links">{% for m in members %}<li><a href="/admin/users/{{ m.user_id }}">{{ m.display_name }}</a></li>{% endfor %}</ul>
+  {% endif %}
+</section>
+</aside>
+</div>
 {% endblock %}

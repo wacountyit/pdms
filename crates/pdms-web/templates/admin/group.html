@@ -1,23 +1,37 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/admin/groups">Groups</a></li><li aria-current="page">{{ g.name }}</li></ol>
+    </nav>
+    <h1>{{ l.title }}</h1>
+    {% if !g.description.is_empty() %}<p class="page-lede">{{ g.description }}</p>{% endif %}
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/admin/groups">← All groups</a></p>
-<p>{{ g.description }}</p>
-<div class="table-wrap">
-<table>
-  <caption>Members</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for m in members %}
-    <tr><td><a href="/admin/users/{{ m.user_id }}">{{ m.display_name }}</a></td><td>{{ m.email }}</td><td>{{ m.source.as_str() }}</td>
-    <td><form method="post" action="/admin/groups/{{ g.id }}/members/{{ m.user_id }}/remove"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Remove</button></form></td></tr>
-  {% else %}<tr><td colspan="4">No members.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<form method="post" action="/admin/groups/{{ g.id }}/members" class="inline">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  <label for="u">Add member</label>
-  <select id="u" name="user_id" required>{% for u in users %}<option value="{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}</select>
-  <button type="submit">Add</button>
-</form>
+<section class="panel" aria-labelledby="members-h">
+  <div class="panel-head"><h2 id="members-h">{{ members.len() }} member{% if members.len() != 1 %}s{% endif %}</h2></div>
+  {% if members.is_empty() %}<p class="empty">No members yet. Add someone below.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Members</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for m in members %}
+      <tr><td><a href="/admin/users/{{ m.user_id }}">{{ m.display_name }}</a></td><td>{{ m.email }}</td><td>{{ m.source.as_str() }}</td>
+      <td><form method="post" action="/admin/groups/{{ g.id }}/members/{{ m.user_id }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Remove<span class="visually-hidden"> {{ m.display_name }}</span></button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/groups/{{ g.id }}/members" class="inline-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="u">Add member</label>
+    <select id="u" name="user_id" required>{% for u in users %}<option value="{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}</select>
+    <button type="submit">Add</button>
+  </form>
+</section>
 {% endblock %}

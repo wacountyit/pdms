@@ -1,17 +1,31 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Every document belongs to one department. Members of a department can view its documents.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-dept">{% include "icons/plus.html" %}Add a department</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<div class="table-wrap">
-<table>
-  <caption>Departments</caption>
-  <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Members</th><th scope="col">Status</th></tr></thead>
-  <tbody>
-  {% for d in departments %}
-    <tr><td><code>{{ d.code }}</code></td><td><a href="/admin/departments/{{ d.id }}">{{ d.name }}</a></td><td>{{ d.member_count }}</td><td>{% if d.is_active %}Active{% else %}Inactive{% endif %}</td></tr>
-  {% else %}<tr><td colspan="4">No departments yet.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<section aria-labelledby="new-dept-h">
+<section class="panel" aria-labelledby="depts-h">
+  <div class="panel-head"><h2 id="depts-h">{{ departments.len() }} department{% if departments.len() != 1 %}s{% endif %}</h2></div>
+  {% if departments.is_empty() %}<p class="empty">No departments yet. Add the first one below.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Departments</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">Code</th><th scope="col">Members</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+    {% for d in departments %}
+      <tr><td><a href="/admin/departments/{{ d.id }}">{{ d.name }}</a></td><td><code>{{ d.code }}</code></td><td class="num">{{ d.member_count }}</td><td>{% if d.is_active %}<span class="status status-good">Active</span>{% else %}<span class="status status-neutral">Inactive</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="new-dept-h" id="add-dept">
   <h2 id="new-dept-h">Add a department</h2>
   <p class="help">Members of a new department can view its documents by default. Grant more access on the department page.</p>
   <form method="post" action="/admin/departments" class="grid-form">

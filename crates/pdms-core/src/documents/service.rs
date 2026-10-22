@@ -266,7 +266,7 @@ async fn fetch_live(conn: &mut PgConnection, id: Uuid) -> CoreResult<Document> {
         .ok_or(CoreError::NotFound)
 }
 
-/// The ID of the live document with this external ID (e.g. `PAG-2026-000001`).
+/// The ID of the live document with this external ID (e.g. `ILA-2026-000001`).
 /// Finding a document says nothing about access: callers authorize next.
 pub async fn id_by_external_id(core: &Core, external_id: &str) -> CoreResult<Option<Uuid>> {
     Ok(sqlx::query_scalar!(

@@ -1,0 +1,17 @@
+{# One tag on the Tags page: its name, use and an Edit disclosure. Expects `t` = (Tag, color class). #}
+<li class="tag-row">
+  <div class="tag-row-main">
+    <span class="tag {{ t.1 }}">{{ t.0.name }}</span>
+    <span class="muted small">{{ t.0.document_count }} document{% if t.0.document_count != 1 %}s{% endif %}{% if !t.0.description.is_empty() %} · {{ t.0.description }}{% endif %}</span>
+  </div>
+  <details><summary class="small">Edit<span class="visually-hidden"> {{ t.0.name }}</span></summary>
+    <form method="post" action="/admin/tags/{{ t.0.id }}" class="grid-form">
+      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+      <label for="n-{{ t.0.id }}">Name</label><input id="n-{{ t.0.id }}" name="name" value="{{ t.0.name }}" required maxlength="60">
+      <label for="c-{{ t.0.id }}">Color</label><input id="c-{{ t.0.id }}" name="color" type="color" value="{{ t.0.color }}">
+      <label for="d-{{ t.0.id }}">Description</label><input id="d-{{ t.0.id }}" name="description" value="{{ t.0.description }}" maxlength="500">
+      <span></span><label class="check"><input type="checkbox" name="is_curated" value="true" {% if t.0.is_curated %}checked{% endif %}> Curated (editors can choose it)</label>
+      <span></span><button type="submit" class="small">Save</button>
+    </form>
+  </details>
+</li>

@@ -376,6 +376,13 @@ async fn token_webhook_export_and_report_pages() {
     s.login("staff@x.org", &staff_secret).await;
     let page = s.get("/account/tokens").await;
     assert!(page.body.contains("documents:read"));
+    // "Your account": the page and the sidebar link carry the new name.
+    assert!(page.body.contains("<h1>Your account</h1>"));
+    assert!(page.body.contains("Your account</a>"), "sidebar link");
+    assert!(page.body.contains("You have no tokens."));
+    for name in ["name", "scope", "days"] {
+        assert!(page.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
     let r = s
         .post(
             "/account/tokens",
@@ -469,6 +476,28 @@ async fn token_webhook_export_and_report_pages() {
     o.login("officer@x.org", &officer_secret).await;
     let page = o.get("/exports?search=1&q=network").await;
     assert!(page.body.contains("Network policy"));
+    // The builder is three numbered steps in one panel, and keeps its fields.
+    for step in [
+        "Find documents</h3>",
+        "Choose documents</h3>",
+        "Package options</h3>",
+    ] {
+        assert!(page.body.contains(step), "{step}");
+    }
+    for name in [
+        "request_reference",
+        "document",
+        "versions",
+        "include_audit",
+        "note",
+        "field",
+    ] {
+        assert!(page.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
+    assert!(
+        page.body
+            .contains(r#"<form method="post" action="/exports" class="stack">"#)
+    );
     let did = d.to_string();
     let r = o
         .post(
@@ -486,6 +515,17 @@ async fn token_webhook_export_and_report_pages() {
     assert_eq!(r.status, StatusCode::SEE_OTHER);
     let page = o.get("/exports").await;
     assert!(page.body.contains("Package built.") && page.body.contains("REQ-2026-001"));
+    // The checksum is short in the table, with the full value one click away.
+    let full = regex::Regex::new(r#"<code class="small sha-full">([0-9a-f]{64})</code>"#)
+        .unwrap()
+        .captures(&page.body)
+        .unwrap()[1]
+        .to_owned();
+    assert!(
+        page.body
+            .contains(&format!("<code>{}…</code>", &full[..12]))
+    );
+    assert_eq!(page.body.matches("<h1").count(), 1);
     let link = regex::Regex::new(r"/exports/[0-9a-f-]{36}/download")
         .unwrap()
         .captures(&page.body)

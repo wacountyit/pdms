@@ -36,11 +36,14 @@ pub async fn metrics(State(state): State<AppState>) -> Response {
 
 const CSS: &[u8] = include_bytes!("../../static/app.css");
 const HTMX: &[u8] = include_bytes!("../../static/htmx.min.js");
+/// The generic browser-tab icon, used when no seal is set (R2 spec §9).
+const ICON: &[u8] = include_bytes!("../../static/icon.svg");
 
 pub async fn static_file(Path(name): Path<String>) -> Response {
     let (body, ctype) = match name.as_str() {
         "app.css" => (CSS, "text/css; charset=utf-8"),
         "htmx.min.js" => (HTMX, "text/javascript; charset=utf-8"),
+        "icon.svg" => (ICON, "image/svg+xml"),
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     (
@@ -78,9 +81,17 @@ pub async fn static_font(Path(name): Path<String>) -> Response {
 /// `GET /theme.css`: the accent family from Administration -> Branding.
 pub async fn theme_css(State(state): State<AppState>) -> Response {
     let t = state.branding().theme;
+    // Light values, then the dark-mode shades under the same two selectors as
+    // the dark tokens in app.css (R2 spec §7). Print stays light.
+    let dark = format!(
+        "--accent-link: {}; --accent-mark: {}; --accent-tint: {};",
+        t.dark.link, t.dark.mark, t.dark.tint
+    );
     let css = format!(
-        ":root {{ --accent: {}; --accent-hover: {}; --accent-link: {}; --accent-tint: {}; }}\n",
-        t.accent, t.hover, t.link, t.tint
+        ":root {{ --accent: {}; --accent-hover: {}; --accent-link: {}; --accent-tint: {}; --accent-mark: {}; }}\n\
+         @media screen {{ :root[data-theme=\"dark\"] {{ {dark} }} }}\n\
+         @media screen and (prefers-color-scheme: dark) {{ :root[data-theme=\"system\"] {{ {dark} }} }}\n",
+        t.accent, t.hover, t.link, t.tint, t.accent
     );
     (
         [
@@ -121,6 +132,27 @@ pub async fn seal(State(state): State<AppState>) -> AppResult<Response> {
         .into_response())
 }
 
+/// `GET /favicon.ico`: the browser-tab icon for pages that do not know the
+/// branding (the error page, `/source`, `/license`) and for browsers that ask
+/// on their own. The seal when one is set (it is public, D-093), otherwise the
+/// generic icon. Cached briefly, since the seal can change.
+pub async fn favicon(State(state): State<AppState>) -> AppResult<Response> {
+    let (ctype, body) = match pdms_core::branding::seal_bytes(&state.core.db).await? {
+        Some((ctype, bytes)) if ctype == "image/png" => ("image/png", bytes),
+        Some((_, bytes)) => ("image/jpeg", bytes),
+        None => ("image/svg+xml", ICON.to_vec()),
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, ctype),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (header::CACHE_CONTROL, "public, max-age=300"),
+        ],
+        body,
+    )
+        .into_response())
+}
+
 /// The license PDMS is distributed under (served as shipped).
 const LICENSE: &str = include_str!("../../../../LICENSE");
 
@@ -149,7 +181,7 @@ pub async fn source(State(state): State<AppState>) -> Response {
     let body = format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" \
          content=\"width=device-width, initial-scale=1\"><title>Source code – {org}</title>\
-         <link rel=\"stylesheet\" href=\"/static/app.css\"></head><body><main id=\"main\">\
+         <link rel=\"stylesheet\" href=\"/static/app.css\"><link rel=\"icon\" href=\"/favicon.ico\"></head><body><main id=\"main\">\
          <h1>Source code</h1>\
          <p>This system runs PDMS, free software licensed under the \
          <a href=\"/license\">GNU Affero General Public License, version 3 or later</a>. \

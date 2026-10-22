@@ -1,36 +1,56 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/admin/fields">Custom fields</a></li><li aria-current="page">{{ f.label }}</li></ol>
+    </nav>
+    <p class="doc-badges">{% if f.is_deprecated %}<span class="status status-neutral">Deprecated</span>{% else %}<span class="status status-good">Active</span>{% endif %}</p>
+    <h1>{{ f.label }}</h1>
+    <p class="page-lede">{{ f.field_type.label() }} · key <code>{{ f.key }}</code> · {% if let Some(t) = f.document_type_name %}{{ t }}{% else %}all document types{% endif %} · version {{ f.version }}</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/admin/fields">← All custom fields</a></p>
-<dl class="facts">
-  <dt>Key</dt><dd><code>{{ f.key }}</code></dd>
-  <dt>Type</dt><dd>{{ f.field_type.label() }}</dd>
-  <dt>Applies to</dt><dd>{% if let Some(t) = f.document_type_name %}{{ t }}{% else %}All document types{% endif %}</dd>
-  <dt>Current version</dt><dd>{{ f.version }}</dd>
-  <dt>Status</dt><dd>{% if f.is_deprecated %}Deprecated (hidden from forms; values kept and exported){% else %}Active{% endif %}</dd>
-</dl>
-<form method="post" action="/admin/fields/{{ f.id }}" class="grid-form">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  <label for="f-label">Label</label><input id="f-label" name="label" value="{{ f.label }}" required maxlength="200">
-  {% include "admin/field_form.html" %}
-  <span></span><button type="submit" class="primary">Save as new version</button>
-</form>
-<form method="post" action="/admin/fields/{{ f.id }}/deprecate" class="inline">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  {% if f.is_deprecated %}
-  <input type="hidden" name="deprecated" value="false"><button type="submit">Reactivate field</button>
-  {% else %}
-  <input type="hidden" name="deprecated" value="true"><button type="submit" class="danger">Deprecate field</button>
-  {% endif %}
-</form>
-<div class="table-wrap">
-<table>
-  <caption>Version history</caption>
-  <thead><tr><th scope="col">Version</th><th scope="col">Label</th><th scope="col">Required</th><th scope="col">Options</th><th scope="col">By</th><th scope="col">When</th></tr></thead>
-  <tbody>
-  {% for h in history %}
-    <tr><td>{{ h.0.version }}</td><td>{{ h.0.label }}</td><td>{% if h.0.required %}Yes{% endif %}</td><td><code class="small">{{ h.0.options }}</code></td><td>{% if let Some(b) = h.0.created_by %}{{ b }}{% else %}System{% endif %}</td><td>{{ h.1 }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="doc-layout">
+<div class="doc-main">
+<section class="panel" aria-labelledby="edit-h">
+  <h2 id="edit-h">Settings</h2>
+  <form method="post" action="/admin/fields/{{ f.id }}" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="f-label">Label</label><input id="f-label" name="label" value="{{ f.label }}" required maxlength="200">
+    {% include "admin/field_form.html" %}
+    <span></span><button type="submit" class="primary">Save as new version</button>
+  </form>
+</section>
+<section class="panel" aria-labelledby="hist-h">
+  <h2 id="hist-h">Version history</h2>
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Version history</caption>
+    <thead><tr><th scope="col">Version</th><th scope="col">Label</th><th scope="col">Required</th><th scope="col">Options</th><th scope="col">By</th><th scope="col">When</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+      <tr><td class="num">{{ h.0.version }}</td><td>{{ h.0.label }}</td><td>{% if h.0.required %}Yes{% endif %}</td><td><code class="small">{{ h.0.options }}</code></td><td>{% if let Some(b) = h.0.created_by %}{{ b }}{% else %}System{% endif %}</td><td class="small">{{ h.1 }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+</div>
+<aside class="doc-side" aria-label="Field status">
+<section class="panel" aria-labelledby="status-h">
+  <h2 id="status-h">{% if f.is_deprecated %}Reactivate{% else %}Deprecate{% endif %}</h2>
+  <p class="help">{% if f.is_deprecated %}The field is hidden from forms; its values are kept and exported. Reactivating shows it on forms again.{% else %}Deprecating hides the field from forms. Its values are kept and exported.{% endif %}</p>
+  <form method="post" action="/admin/fields/{{ f.id }}/deprecate">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    {% if f.is_deprecated %}
+    <input type="hidden" name="deprecated" value="false"><button type="submit">Reactivate field</button>
+    {% else %}
+    <input type="hidden" name="deprecated" value="true"><button type="submit" class="danger">Deprecate field</button>
+    {% endif %}
+  </form>
+</section>
+</aside>
 </div>
 {% endblock %}

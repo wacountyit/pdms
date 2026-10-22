@@ -10,6 +10,10 @@ Microsoft's Playwright image.
 Writes PNGs to /w/out/ and a findings summary to /w/out/report.json
 (horizontal overflow, h1 count, console/CSP errors, HTTP status per page).
 A name filter such as `desktop-admin` or `phone-` limits the run.
+`--theme=dark`, `--theme=light` or `--theme=system` (or PADM_SHOTS_THEME)
+sets each signed-in account's color scheme first, and writes to
+/w/out/<theme>/ instead. Without it, accounts keep their own setting (dark by
+default).
 """
 
 import json
@@ -24,7 +28,15 @@ USER = os.environ.get("PADM_SHOTS_USER", "admin@example.org")
 PASSWORD = os.environ.get("PADM_SHOTS_PASSWORD", "demo-password-change-me")
 IDS = json.load(open(os.environ.get("PADM_SHOTS_IDS", "/w/ids.json")))
 
-FILTERS = sys.argv[1:]
+THEME = os.environ.get("PADM_SHOTS_THEME", "")
+FILTERS = []
+for arg in sys.argv[1:]:
+    if arg.startswith("--theme="):
+        THEME = arg.split("=", 1)[1]
+    else:
+        FILTERS.append(arg)
+if THEME:
+    OUT = f"{OUT}/{THEME}"
 
 
 def wanted(name):
@@ -36,11 +48,14 @@ DESKTOP_PAGES = [
     ("dashboard-range-7", "/?range=7"),
     ("documents", "/documents"),
     ("documents-in-review", "/documents?status=in_review"),
+    ("documents-archived", "/documents?status=archived"),
     ("documents-search", "/documents?q=contract"),
     ("document", f"/documents/{IDS['doc']}"),
     ("document-overdue", f"/documents/{IDS['doc2']}"),
+    ("document-workflow", f"/documents/{IDS['doc3']}"),
     ("document-history", f"/documents/{IDS['doc']}/history"),
     ("calendar", "/calendar"),
+    ("calendar-agenda", "/calendar?view=agenda&days=365"),
     ("calendar-feeds", "/calendar/feeds"),
     ("positions", "/positions"),
     ("position", f"/positions/{IDS['position']}"),
@@ -48,6 +63,7 @@ DESKTOP_PAGES = [
     ("report-overdue", "/reports/overdue"),
     ("report-upcoming", "/reports/upcoming?days=90"),
     ("exports", "/exports"),
+    ("exports-search", "/exports?search=1&q=contract"),
     ("notifications", "/notifications"),
     ("audit", "/audit"),
     ("account-tokens", "/account/tokens"),
@@ -74,8 +90,8 @@ DESKTOP_PAGES = [
     ("admin-notifications", "/admin/notifications"),
     ("admin-webhooks", "/admin/webhooks"),
     ("admin-api", "/admin/api"),
-    # Removed by sub-project 3 (D-087); a 404 here is expected after that.
-    ("admin-outlook", "/admin/outlook"),
+    # Sub-project 3 (D-087) removed the Outlook part; the OCR status has its own page.
+    ("admin-ocr", "/admin/ocr"),
     # Added by plan P2 (Entra ID sync); a 404 here means P2 is not merged yet.
     ("admin-entra", "/admin/entra"),
     ("error-404", "/documents/00000000-0000-0000-0000-000000000000"),
@@ -98,6 +114,13 @@ PHONE_PAGES = [
     ("document", f"/documents/{IDS['doc']}"),
     ("document-overdue", f"/documents/{IDS['doc2']}"),
     ("reports", "/reports"),
+    # R2 key screens (spec §2, answer 7).
+    ("positions", "/positions"),
+    ("position", f"/positions/{IDS['position']}"),
+    ("calendar", "/calendar"),
+    ("calendar-agenda", "/calendar?view=agenda&days=365"),
+    ("notifications", "/notifications"),
+    ("account-tokens", "/account/tokens"),
 ]
 
 PROBE = """() => {
@@ -141,6 +164,11 @@ def login(page, user=USER):
     page.wait_for_load_state("networkidle")
     if "/login" in page.url:
         raise SystemExit("login failed: " + page.url)
+    if THEME:
+        page.goto(f"{BASE}/account/tokens")
+        page.check(f"input[type=radio][name='color_scheme'][value='{THEME}']")
+        page.click("form[action='/account/appearance'].stack button[type=submit]")
+        page.wait_for_load_state("networkidle")
 
 
 def capture(page, name, url, results, errors, full=True):

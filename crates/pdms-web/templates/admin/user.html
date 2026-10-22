@@ -1,74 +1,63 @@
 {% extends "base.html" %}
+{% block heading %}
+{% let st = u.user.status.as_str() %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/admin/users">Users</a></li><li aria-current="page">{{ u.user.display_name }}</li></ol>
+    </nav>
+    <p class="doc-badges">{% if st == "active" %}<span class="status status-good">Active</span>{% else if st == "disabled" %}<span class="status status-neutral">Disabled</span>{% else %}<span class="status status-neutral">Departed</span>{% endif %}</p>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">{{ u.user.email }} · {{ methods }} · last signed in {{ last_login }}</p>
+  </div>
+  {% if l.can_audit %}<div class="page-actions"><a class="button" href="/audit?object_id={{ u.user.id }}">{% include "icons/scroll-text.html" %}Audit history</a></div>{% endif %}
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/admin/users">← All users</a></p>
-<dl class="facts">
-  <dt>Status</dt><dd><span class="badge status-{{ u.user.status.as_str() }}">{{ u.user.status.as_str() }}</span></dd>
-  <dt>Sign-in</dt><dd>{{ methods }}</dd>
-  <dt>Last sign-in</dt><dd>{{ last_login }}</dd>
-</dl>
-
-<section aria-labelledby="profile-h">
-  <h2 id="profile-h">Profile</h2>
-  <form method="post" action="/admin/users/{{ u.user.id }}" class="grid-form">
-    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="dn">Display name</label><input id="dn" name="display_name" value="{{ u.user.display_name }}" required maxlength="200">
-    <label for="em">Email</label><input id="em" name="email" type="email" value="{{ u.user.email }}" required maxlength="320">
-    <span></span><button type="submit">Save profile</button>
-  </form>
-  <form method="post" action="/admin/users/{{ u.user.id }}/status" class="inline">
-    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="st">Account status</label>
-    <select id="st" name="status">
-      {% for s in ["active", "disabled", "departed"] %}
-      <option value="{{ s }}" {% if *s == u.user.status.as_str() %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit">Change status</button>
-    <span class="help">Disabling or marking departed signs the user out immediately.</span>
-  </form>
-</section>
-
-<section aria-labelledby="dept-h">
-  <h2 id="dept-h">Departments</h2>
+<div class="doc-layout">
+<div class="doc-main">
+<section class="panel" aria-labelledby="dept-h">
+  <div class="panel-head"><h2 id="dept-h">Departments</h2><span class="muted small">{{ u.memberships.len() }}</span></div>
+  {% if u.memberships.is_empty() %}<p class="empty">Not in any department. Until added, this person sees only what is shared with them.</p>{% else %}
   <div class="table-wrap">
   <table>
+    <caption class="visually-hidden">Departments</caption>
     <thead><tr><th scope="col">Department</th><th scope="col">Primary</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
     {% for m in u.memberships %}
       <tr><td>{{ m.department_name }}</td><td>{% if m.is_primary %}Yes{% endif %}</td><td>{{ m.source.as_str() }}</td>
-      <td><form method="post" action="/admin/users/{{ u.user.id }}/departments/{{ m.department_id }}/remove"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Remove</button></form></td></tr>
-    {% else %}<tr><td colspan="4">No departments.</td></tr>{% endfor %}
+      <td><form method="post" action="/admin/users/{{ u.user.id }}/departments/{{ m.department_id }}/remove" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="danger small">Remove<span class="visually-hidden"> from {{ m.department_name }}</span></button></form></td></tr>
+    {% endfor %}
     </tbody>
   </table>
   </div>
-  <form method="post" action="/admin/users/{{ u.user.id }}/departments" class="inline">
+  {% endif %}
+  <form method="post" action="/admin/users/{{ u.user.id }}/departments" class="inline-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="add-dept">Add to department</label>
     <select id="add-dept" name="department_id" required>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select>
-    <label><input type="checkbox" name="is_primary" value="true"> Primary</label>
+    <label class="check"><input type="checkbox" name="is_primary" value="true"> Primary</label>
     <button type="submit">Add</button>
   </form>
 </section>
 
-<section aria-labelledby="groups-h">
-  <h2 id="groups-h">Groups</h2>
-  <ul>{% for g in u.groups %}<li><a href="/admin/groups/{{ g.group_id }}">{{ g.group_name }}</a> <span class="muted">({{ g.source.as_str() }})</span></li>{% else %}<li>No groups.</li>{% endfor %}</ul>
-</section>
-
-<section aria-labelledby="roles-h">
-  <h2 id="roles-h">Roles</h2>
+<section class="panel" aria-labelledby="roles-h">
+  <div class="panel-head"><h2 id="roles-h">Roles</h2><span class="muted small">{{ u.roles.len() }}</span></div>
+  {% if u.roles.is_empty() %}<p class="empty">No roles. Without one, this person can view their department’s documents and nothing more.</p>{% else %}
   <div class="table-wrap">
   <table>
+    <caption class="visually-hidden">Roles</caption>
     <thead><tr><th scope="col">Role</th><th scope="col">Applies to</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
     {% for r in u.roles %}
       <tr><td>{{ r.role_name }}</td><td>{% if let Some(d) = r.department_name %}{{ d }}{% else %}Whole organization{% endif %}</td><td>{{ r.source.as_str() }}</td>
-      <td><form method="post" action="/admin/role-assignments/{{ r.id }}/revoke"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/admin/users/{{ u.user.id }}"><button type="submit" class="danger small">Revoke</button></form></td></tr>
-    {% else %}<tr><td colspan="4">No roles.</td></tr>{% endfor %}
+      <td><form method="post" action="/admin/role-assignments/{{ r.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/admin/users/{{ u.user.id }}"><button type="submit" class="danger small">Revoke<span class="visually-hidden"> {{ r.role_name }}</span></button></form></td></tr>
+    {% endfor %}
     </tbody>
   </table>
   </div>
-  <form method="post" action="/admin/users/{{ u.user.id }}/roles" class="inline">
+  {% endif %}
+  <form method="post" action="/admin/users/{{ u.user.id }}/roles" class="inline-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="role">Assign role</label>
     <select id="role" name="role_id" required>{% for r in roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}</select>
@@ -78,10 +67,44 @@
   </form>
 </section>
 
+<section class="panel" aria-labelledby="groups-h">
+  <h2 id="groups-h">Groups</h2>
+  {% if u.groups.is_empty() %}<p class="empty">Not in any group. Add people to groups on each group’s page.</p>{% else %}
+  <ul class="detail-links">{% for g in u.groups %}<li><a href="/admin/groups/{{ g.group_id }}">{{ g.group_name }}</a> <span class="muted small">({{ g.source.as_str() }})</span></li>{% endfor %}</ul>
+  {% endif %}
+</section>
+</div>
+
+<aside class="doc-side" aria-label="Account">
+<section class="panel" aria-labelledby="profile-h">
+  <h2 id="profile-h">Profile</h2>
+  <form method="post" action="/admin/users/{{ u.user.id }}" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="dn">Display name</label><input id="dn" name="display_name" value="{{ u.user.display_name }}" required maxlength="200">
+    <label for="em">Email</label><input id="em" name="email" type="email" value="{{ u.user.email }}" required maxlength="320">
+    <button type="submit">Save profile</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="status-h">
+  <h2 id="status-h">Account status</h2>
+  <form method="post" action="/admin/users/{{ u.user.id }}/status" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="st">Status</label>
+    <select id="st" name="status" aria-describedby="st-help">
+      {% for s in ["active", "disabled", "departed"] %}
+      <option value="{{ s }}" {% if *s == u.user.status.as_str() %}selected{% endif %}>{% if *s == "active" %}Active{% else if *s == "disabled" %}Disabled{% else %}Departed{% endif %}</option>
+      {% endfor %}
+    </select>
+    <p id="st-help" class="help">Disabling or marking departed signs the user out immediately.</p>
+    <button type="submit">Change status</button>
+  </form>
+</section>
+
 {% if u.user.has_local_login %}
-<section aria-labelledby="local-h">
+<section class="panel" aria-labelledby="local-h">
   <h2 id="local-h">Emergency sign-in</h2>
-  <p>This user has break-glass local credentials. Reset them with <code>pdms create-admin</code> on the server.</p>
+  <p class="help">This user has break-glass local credentials. Reset them with <code>pdms create-admin</code> on the server.</p>
   <form method="post" action="/admin/users/{{ u.user.id }}/username" class="stack">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <label for="username">Username</label>
@@ -89,11 +112,14 @@
     <p id="username-help" class="help">Used with the password on the sign-in page. Leave blank to sign in with the email address only.</p>
     <button type="submit">Save</button>
   </form>
+  <h3>Remove</h3>
+  <p class="help">Removing the local credentials leaves single sign-on as the only way in.</p>
   <form method="post" action="/admin/users/{{ u.user.id }}/local-credentials/remove">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <button type="submit" class="danger">Remove local credentials</button>
   </form>
 </section>
 {% endif %}
-<p><a href="/audit?object_id={{ u.user.id }}">View this user’s audit history</a></p>
+</aside>
+</div>
 {% endblock %}

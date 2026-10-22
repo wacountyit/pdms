@@ -1,9 +1,9 @@
 <p class="comment-meta"><strong>{{ c.author }}</strong> <span class="muted small">{{ c.when }}{% if !c.edited.is_empty() %} · {{ c.edited }}{% endif %}</span></p>
 {% if c.deleted.is_empty() %}<div class="comment-body">{{ c.body_html|safe }}</div>{% else %}<p class="muted"><em>{{ c.deleted }}.</em></p>{% endif %}
-<div class="toolbar small">
+<div class="comment-actions">
   {% if c.can_see_history %}<a href="/documents/{{ d.id }}/comments/{{ c.id }}/history">History</a>{% endif %}
   {% if c.can_edit %}
-  <details><summary>Edit</summary>
+  <details><summary>Edit<span class="visually-hidden"> comment by {{ c.author }}</span></summary>
     <form method="post" action="/documents/{{ d.id }}/comments/{{ c.id }}/edit" class="stack">
       <input type="hidden" name="_csrf" value="{{ l.csrf }}">
       <label for="e-{{ c.id }}" class="visually-hidden">Edit comment</label>
@@ -12,5 +12,5 @@
     </form>
   </details>
   {% endif %}
-  {% if c.can_delete %}<form method="post" action="/documents/{{ d.id }}/comments/{{ c.id }}/delete" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small danger">Delete</button></form>{% endif %}
+  {% if c.can_delete %}<form method="post" action="/documents/{{ d.id }}/comments/{{ c.id }}/delete" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="link danger-link">Delete<span class="visually-hidden"> comment by {{ c.author }}</span></button></form>{% endif %}
 </div>

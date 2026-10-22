@@ -171,6 +171,8 @@ one, they update this table in the same commit.
   - `integrity::verify_with(core, VerifyOptions)`, with `verify(core, rehash)` kept as a wrapper.
 - **Storage selection in Docker:** `PDMS_STORAGE__BACKEND=sharepoint` in `config/pdms.env` (Compose `env_file`, so Docker Compose ≥ 2.24 is needed). The installer creates the Graph certificate with `openssl`, in the same format as `pdms gen-graph-cert`; the file is mode 644 inside the 700 `secrets/` directory, like the other Compose secrets.
 - **Admin page:** `/admin/sharepoint` lives in `doc_admin_routes`.
+- **Admin page pattern (added by R2, 2026-10-22):** build `admin/sharepoint.html` to R2's admin pattern ([R2 spec](../specs/2026-10-22-ui-redesign-r2-design.md) §5.2), not the markup in P4 Task 7. Concretely: a `{% block heading %}` with `<header class="page-head">` (h1, `.page-lede`, `.page-actions`); each section a `.panel` with a `.panel-head`; notices as `flash-info` with `role="status"`; problems as `flash-error` with `role="alert"`; empty states as `<p class="empty">`. The page has no tab in `base.html` any more: add `link("sharepoint", "SharePoint")` to the *Integrations* group in `Layout::admin_groups()` (`src/views.rs`), behind its capability, and set `.admin_tab("sharepoint")` in the handler. `admin/entra.html` already uses the pattern; add P4's section as another `.panel`.
+- **Migrations (R2, 2026-10-22):** R2 took `0011` (`0011_small_changes.sql`) and `0012` (`0012_color_scheme.sql`), so P3's is `0013` and P4's `0014`. R2 also took decisions D-097 to D-101.
 - **Audit:** extra action `sharepoint.unexpected_dismissed`.
 - **Edits to earlier plans' code:**
   - P2's `entra_sync::run_job` and `sync_one` queue a folder-access run;

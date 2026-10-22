@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">PADM reads the text of every uploaded file so it can be searched and so dates can be suggested. Scanned PDFs and images need the OCR service.</p>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="ocr-h">
+  <div class="panel-head"><h2 id="ocr-h">Status</h2>{% if enabled %}<span class="status status-good">On</span>{% else %}<span class="status status-neutral">Off</span>{% endif %}</div>
+  <dl class="facts">
+    <dt>Scanned PDFs and images</dt><dd>{% if enabled %}Read by the OCR service at <code>{{ url }}</code>{% else %}Not read: the OCR service is not set up{% endif %}</dd>
+    <dt>Ordinary PDFs and Word documents</dt><dd>Always read; their text is searchable</dd>
+    <dt>Date suggestions</dt><dd>{% if suggest_dates %}On: dates found in a file are offered on the document page, and nothing changes until someone confirms them{% else %}Off{% endif %}</dd>
+  </dl>
+</section>
+{% if !enabled %}
+<section class="panel" aria-labelledby="turn-on-h">
+  <h2 id="turn-on-h">Turn on OCR</h2>
+  <ol class="steps-list">
+    <li>Start the OCR service: <code>docker compose --profile ocr up -d</code>, or run <code>./install.sh --configure ocr</code>.</li>
+    <li>Set <code>[ocr] sidecar_url = "http://ocr:8080"</code> in the configuration file, then restart PADM.</li>
+    <li>Use “Read the file again” on a document page to read a file uploaded before OCR was on.</li>
+  </ol>
+</section>
+{% endif %}
+{% endblock %}

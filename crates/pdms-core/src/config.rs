@@ -72,7 +72,6 @@ pub struct Config {
     pub exports: ExportsConfig,
     pub comments: CommentsConfig,
     pub ocr: OcrConfig,
-    pub graph_calendar: GraphCalendarConfig,
     /// Microsoft Graph as PADM itself (app-only, certificate). Used by the
     /// Entra user sync and, later, SharePoint storage.
     pub graph: GraphConfig,
@@ -321,19 +320,12 @@ impl Default for S3StorageConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct DocumentsConfig {
-    /// Let anyone who can edit a document add new (uncurated) tags.
+    /// Let anyone who can edit a document add new (uncurated) tags. Off by
+    /// default: tags are kept by administrators (D-088).
     pub free_form_tags: bool,
-}
-
-impl Default for DocumentsConfig {
-    fn default() -> Self {
-        DocumentsConfig {
-            free_form_tags: true,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -582,51 +574,6 @@ impl Default for OcrConfig {
     }
 }
 
-/// Optional Outlook calendar events through Microsoft Graph (application
-/// permission `Calendars.ReadWrite`, limited to the mailboxes below with an
-/// Exchange application access policy).
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
-pub struct GraphCalendarConfig {
-    pub enabled: bool,
-    pub tenant_id: String,
-    pub client_id: String,
-    pub client_secret: Secret,
-    /// Mailbox whose calendar receives the events (e.g. a shared mailbox).
-    pub mailbox: String,
-    /// Optional per-department calendars: department code -> mailbox.
-    pub department_mailboxes: std::collections::BTreeMap<String, String>,
-    /// Include appointment term ends and reappointment decisions.
-    pub include_appointments: bool,
-    /// Events are kept for dates from this many days ago...
-    pub past_days: i64,
-    /// ...to this many days ahead.
-    pub future_days: i64,
-    pub sync_interval_minutes: u64,
-    /// Overridable for testing.
-    pub login_base_url: String,
-    pub graph_base_url: String,
-}
-
-impl Default for GraphCalendarConfig {
-    fn default() -> Self {
-        GraphCalendarConfig {
-            enabled: false,
-            tenant_id: String::new(),
-            client_id: String::new(),
-            client_secret: Secret::default(),
-            mailbox: String::new(),
-            department_mailboxes: std::collections::BTreeMap::new(),
-            include_appointments: true,
-            past_days: 30,
-            future_days: 730,
-            sync_interval_minutes: 15,
-            login_base_url: "https://login.microsoftonline.com".into(),
-            graph_base_url: "https://graph.microsoft.com/v1.0".into(),
-        }
-    }
-}
-
 /// Microsoft Graph with an app registration ("PADM Service") and a
 /// certificate credential. All three of `tenant_id`, `client_id`, and
 /// `certificate` are needed; with none of them set, Graph is off.
@@ -787,16 +734,6 @@ impl Config {
         if !(1..=3650).contains(&self.api.max_token_days) || self.api.request_log_days < 1 {
             return bad(
                 "api.max_token_days must be 1–3650 and api.request_log_days at least 1".into(),
-            );
-        }
-        if self.graph_calendar.enabled
-            && (self.graph_calendar.tenant_id.is_empty()
-                || self.graph_calendar.client_id.is_empty()
-                || self.graph_calendar.mailbox.is_empty()
-                || self.graph_calendar.client_secret.expose().is_empty())
-        {
-            return bad(
-                "graph_calendar needs tenant_id, client_id, client_secret, and mailbox when enabled".into(),
             );
         }
         if self.audit_forward.target == AuditForwardTarget::Syslog

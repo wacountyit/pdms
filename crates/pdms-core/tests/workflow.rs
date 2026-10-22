@@ -156,7 +156,7 @@ async fn send_all(core: &Core) {
 #[tokio::test]
 async fn ila_goes_through_review_legal_and_approval() {
     let w = world().await;
-    let doc = draft(&w, "partnership_agreement").await;
+    let doc = draft(&w, "interlocal_agreement").await;
     let owner = as_user(&w.core, w.owner).await;
     let id = workflow::submit(
         &w.core,
@@ -190,7 +190,7 @@ async fn ila_goes_through_review_legal_and_approval() {
     // Only the first stage was told.
     assert_eq!(
         inbox_subjects(&w.core, w.reviewer).await,
-        vec!["Review requested: PAG-2026-000001 Equipment maintenance agreement".to_owned()]
+        vec!["Review requested: ILA-2026-000001 Equipment maintenance agreement".to_owned()]
             .into_iter()
             .map(|s| s.replace("2026", &Utc::now().format("%Y").to_string()))
             .collect::<Vec<_>>()
@@ -269,7 +269,7 @@ async fn ila_goes_through_review_legal_and_approval() {
             "completed"
         ]
     );
-    assert!(inbox_subjects(&w.core, w.owner).await[0].starts_with("Approved: PAG-"));
+    assert!(inbox_subjects(&w.core, w.owner).await[0].starts_with("Approved: ILA-"));
 
     // Every action notice also went out by email.
     send_all(&w.core).await;
@@ -281,7 +281,7 @@ async fn ila_goes_through_review_legal_and_approval() {
             .any(|s| s.contains("Legal review requested"))
     );
     assert!(subjects.iter().any(|s| s.contains("Approval requested")));
-    assert!(subjects.iter().any(|s| s.contains("Approved: PAG-")));
+    assert!(subjects.iter().any(|s| s.contains("Approved: ILA-")));
     let msg = w
         .mail
         .messages()
@@ -308,7 +308,7 @@ async fn ila_goes_through_review_legal_and_approval() {
 #[tokio::test]
 async fn separation_of_duties_holds() {
     let w = world().await;
-    let doc = draft(&w, "partnership_agreement").await;
+    let doc = draft(&w, "interlocal_agreement").await;
     // The approver (department head) submits, so they cannot approve their own submission.
     let approver = as_user(&w.core, w.approver).await;
     acl::grant(
@@ -630,7 +630,7 @@ async fn revising_an_active_document_keeps_it_active_on_rejection() {
 #[tokio::test]
 async fn signatures_are_requested_recorded_and_stored() {
     let w = world().await;
-    let doc = draft(&w, "partnership_agreement").await;
+    let doc = draft(&w, "interlocal_agreement").await;
     let owner = as_user(&w.core, w.owner).await;
     let chair = signatures::add(
         &w.core,
@@ -697,7 +697,7 @@ async fn signatures_are_requested_recorded_and_stored() {
         inbox_subjects(&w.core, w.approver)
             .await
             .iter()
-            .any(|s| s.starts_with("Signature requested: PAG-"))
+            .any(|s| s.starts_with("Signature requested: ILA-"))
     );
     let file = upload(&w.core, "signed.pdf", &pdf("signed")).await;
     signatures::record_signed(

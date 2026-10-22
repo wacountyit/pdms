@@ -111,7 +111,7 @@ async fn create_with_file_stores_versions_and_audits() {
     let (core, _db) = core().await;
     let (dept, alice) = editing_department(&core, "OPS", "alice@x.org").await;
     let ctx = as_user(&core, alice).await;
-    let agreement = type_id(&core, "partnership_agreement").await;
+    let agreement = type_id(&core, "interlocal_agreement").await;
     let mut input = meta(agreement, dept, "Facilities Maintenance agreement");
     input.effective_date = date("2013-05-01");
     let content = pdf("original 2013");
@@ -120,7 +120,7 @@ async fn create_with_file_stores_versions_and_audits() {
     let view = documents::view(&core, &ctx, id).await.unwrap();
     let d = &view.document;
     assert!(
-        d.external_id.starts_with("PAG-") && d.external_id.ends_with("-000001"),
+        d.external_id.starts_with("ILA-") && d.external_id.ends_with("-000001"),
         "{}",
         d.external_id
     );
@@ -513,6 +513,19 @@ async fn tags_search_and_filters() {
         None,
     )
     .await;
+    // Tags are curated (D-088): an editor picks from what an administrator
+    // set up, and cannot invent a new one.
+    for name in ["Capital Projects", "Funding: State"] {
+        pdms_core::documents::tags::create_curated(&core.db, &system(), name, "#1f6feb", "")
+            .await
+            .unwrap();
+    }
+    assert!(
+        documents::add_tag(&core, &ctx, a, "Made up here")
+            .await
+            .is_err(),
+        "free-form tags are off"
+    );
     documents::add_tag(&core, &ctx, a, "Capital Projects")
         .await
         .unwrap();
@@ -1131,7 +1144,7 @@ async fn acceptance_audit_scenario() {
     )
     .await
     .unwrap();
-    let agreement = type_id(&core, "partnership_agreement").await;
+    let agreement = type_id(&core, "interlocal_agreement").await;
 
     let mut m = meta(agreement, dept, "Partnership agreement with Partner");
     m.renewal_date = date("2026-12-31");

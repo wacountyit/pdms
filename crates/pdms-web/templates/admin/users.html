@@ -1,32 +1,46 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Everyone who can sign in to PADM, their departments and how they sign in.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-user">{% include "icons/plus.html" %}Add a user</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<form method="get" action="/admin/users" class="inline" role="search">
-  <label for="q">Find users</label>
-  <input id="q" name="q" type="search" value="{{ q }}" placeholder="Name or email">
-  <button type="submit">Search</button>
-</form>
-<div class="table-wrap">
-<table>
-  <caption>Users{% if !q.is_empty() %} matching “{{ q }}”{% endif %}</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Departments</th><th scope="col">Sign-in</th><th scope="col">Last sign-in</th></tr></thead>
-  <tbody>
-  {% for u in users %}
-    <tr>
-      <td><a href="/admin/users/{{ u.id }}">{{ u.name }}</a></td>
-      <td>{{ u.email }}</td>
-      <td><span class="badge status-{{ u.status }}">{{ u.status }}</span></td>
-      <td>{{ u.departments }}</td>
-      <td>{{ u.methods }}</td>
-      <td>{{ u.last_login }}</td>
-    </tr>
-  {% else %}
-    <tr><td colspan="6">No users found.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+<section class="panel" aria-labelledby="users-h">
+  <div class="panel-head">
+    <h2 id="users-h">{{ users.len() }} user{% if users.len() != 1 %}s{% endif %}{% if !q.is_empty() %} matching “{{ q }}”{% endif %}</h2>
+    <form method="get" action="/admin/users" class="inline-form" role="search">
+      <label for="q" class="visually-hidden">Find users</label>
+      <input id="q" name="q" type="search" value="{{ q }}" placeholder="Name or email">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+  {% if users.is_empty() %}<p class="empty">{% if q.is_empty() %}No users yet.{% else %}No users match “{{ q }}”. <a href="/admin/users">Show everyone</a>.{% endif %}</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Users</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Departments</th><th scope="col">Sign-in</th><th scope="col">Last sign-in</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><a href="/admin/users/{{ u.id }}">{{ u.name }}</a></td>
+        <td>{{ u.email }}</td>
+        <td>{% include "admin/user_status.html" %}</td>
+        <td>{{ u.departments }}</td>
+        <td>{{ u.methods }}</td>
+        <td class="small">{{ u.last_login }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
 
-<section aria-labelledby="new-user-h">
+<section class="panel" aria-labelledby="new-user-h" id="add-user">
   <h2 id="new-user-h">Add a user</h2>
   <p class="help">Single sign-on matches people by their Entra account, never by email, so nobody signs in with single sign-on as a user added here. Such a user also keeps anyone with the same email address from signing in with single sign-on, until that user’s email address is changed on their page. New users can only view their department’s documents until granted more.</p>
   <form method="post" action="/admin/users" class="grid-form">

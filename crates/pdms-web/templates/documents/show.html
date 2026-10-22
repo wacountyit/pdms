@@ -189,10 +189,12 @@
     </li>
     {% else %}<li class="muted">No tags.</li>{% endfor %}
   </ul>
-  {% if can_edit %}
+  {% if can_edit && (free_tags || !tag_options.is_empty()) %}
   <form method="post" action="/documents/{{ d.id }}/tags" class="inline">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <label for="tag-name">Add tag</label><input id="tag-name" name="name" maxlength="200" required>
+    <label for="tag-name">Add tag</label>
+    {% if free_tags %}<input id="tag-name" name="name" maxlength="200" required>
+    {% else %}<select id="tag-name" name="name" required>{% for t in tag_options %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>{% endif %}
     <button type="submit">Add</button>
   </form>
   {% endif %}

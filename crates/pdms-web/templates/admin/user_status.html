@@ -1,0 +1,2 @@
+{# A user's status as a word with a status mark. Expects `u.status` (a string) in scope. #}
+{% if u.status == "active" %}<span class="status status-good">Active</span>{% else if u.status == "disabled" %}<span class="status status-neutral">Disabled</span>{% else %}<span class="status status-neutral">Departed</span>{% endif %}
