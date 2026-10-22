@@ -83,7 +83,7 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **UI redesign R2** (5b) | WACountyIT | Spec: on `main` as a draft ([PR #2](https://github.com/wacountyit/pdms/pull/2), merged 2026-10-22 before owner review); waiting for the owner's approval. R1 fixes (spec §3, allowed ahead of the spec): **In progress**. Plan: **Not started**. Build parts, all **Not started**: appointments; calendar and feeds; report detail; admin pages; records requests; notifications, audit and account; document forms and sections; activity feed and tab icon; dark mode | `r2-r1-fixes`; later parts on their own `r2-…` branches. PR titles start with `R2:` | 2026-10-22 |
+| **UI redesign R2** (5b) | WACountyIT | Spec: on `main` ([PR #2](https://github.com/wacountyit/pdms/pull/2)); approved by the owner 2026-10-22, recorded on the branch. R1 fixes (spec §3, allowed ahead of the spec): **Done**, [PR #3](https://github.com/wacountyit/pdms/pull/3), merged 2026-10-22 before owner review; screenshot check passed 2026-10-22. Plan: **Done** (on the branch). Build: **Done** on one branch, `r2-build`, as one pull request (started before the spec's approval, which followed the same day). Parts 1 (appointments), 2 (calendar and feeds), 3 (report detail), 4 (admin pages, with sub-project 3 built inside it), 5 (records requests), 6 (notifications, audit and account), 7 (document forms and sections), 8 (activity feed and tab icon) and 9 (dark mode): **Done** on the branch, not yet pushed | `r2-build` (draft PR to come). PR titles start with `R2:` | 2026-10-22 |
 
 Nothing else is claimed. §0.5 lists what can start next.
 
