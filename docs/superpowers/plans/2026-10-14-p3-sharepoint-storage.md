@@ -3472,7 +3472,7 @@ This job gives each file its final name and sets its columns. It also moves and 
   - `pub async fn mirror_sweep(core) -> CoreResult<u64>`;
   - `pub fn register_jobs(worker: Worker, core: &Core) -> Worker`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 ```rust
 async fn pending_mirrors(core: &Core, id: Uuid) -> i64 {
@@ -3596,12 +3596,14 @@ async fn the_nightly_sweep_queues_every_document_once() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+> **As built:** every folder move or rename, by the mirror job or by a narrowing change, is written by `record_folder_move`: the `sharepoint_document_folders` update and a `sharepoint.folder_moved` event (category system; context `from`, `to`, `reason`) in one transaction (D-102 point 3). The mirror records `reason = "mirror"`. `every_kind_of_change_queues_the_mirror` creates the curated tag "Roads" first, because tags are curated by default (D-088).
+
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --test sharepoint mirror`
 Expected: compile errors `cannot find function mirror_document in module sharepoint`.
 
-- [ ] **Step 3: Implement the job.** Create `crates/pdms-core/src/sharepoint/mirror.rs`:
+- [x] **Step 3: Implement the job.** Create `crates/pdms-core/src/sharepoint/mirror.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -3838,7 +3840,7 @@ pub use mirror::{
 pub(crate) use mirror::mirror_later;
 ```
 
-- [ ] **Step 4: Register the jobs in the worker.** In `crates/pdms-core/src/maintenance.rs` `worker()`, the function's body ends in one long builder chain that starts with `worker` (the variable) and ends with `.every(API_LOG_PURGE, Duration::from_secs(24 * 3600))`. P2 may have added handlers to this chain. Whatever its current form:
+- [x] **Step 4: Register the jobs in the worker.** In `crates/pdms-core/src/maintenance.rs` `worker()`, the function's body ends in one long builder chain that starts with `worker` (the variable) and ends with `.every(API_LOG_PURGE, Duration::from_secs(24 * 3600))`. P2 may have added handlers to this chain. Whatever its current form:
 
 1. Bind the whole chain to a variable: change the leading `worker` of the chain to `let worker = worker`.
 2. Put a `;` after its final `.every(…)`.
@@ -3848,7 +3850,7 @@ pub(crate) use mirror::mirror_later;
     crate::sharepoint::register_jobs(worker, core)
 ```
 
-- [ ] **Step 5: Queue the mirror at every change.** In each function below, add `crate::sharepoint::mirror_later(core, &mut tx, <document id>).await?;` immediately **before** the `pdms_audit::append(…)` that precedes the final `tx.commit()`. The audit write must stay last (D-004).
+- [x] **Step 5: Queue the mirror at every change.** In each function below, add `crate::sharepoint::mirror_later(core, &mut tx, <document id>).await?;` immediately **before** the `pdms_audit::append(…)` that precedes the final `tx.commit()`. The audit write must stay last (D-004).
 
 `crates/pdms-core/src/documents/service.rs`. The document ID variable is `id` in every function here:
 
@@ -3867,12 +3869,12 @@ pub(crate) use mirror::mirror_later;
 
 `crates/pdms-core/src/ocr/mod.rs` `accept`: before the `pdms_audit::append(` whose list starts with `change,`, using `doc_id`.
 
-- [ ] **Step 6: Run the tests and confirm they pass.**
+- [x] **Step 6: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test workflow && cargo test -p pdms-core --test notifications && cargo test -p pdms-core --test phase5`
 Expected: all `test result: ok.` Without SharePoint, `mirror_later` queues nothing, so the other suites are unchanged.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -3905,7 +3907,7 @@ Loosening changes wait for the mirror job (spec §7.3). If the database change f
   - `pub async fn apply_placement_now(core: &Core, document_id: Uuid, to: Spot) -> CoreResult<()>`. This deviates from the index: it takes the target, because it runs before the change is saved;
   - the constant `MOVE_UNAVAILABLE`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 ```rust
 #[tokio::test]
@@ -3991,7 +3993,9 @@ async fn deleted_documents_leave_the_department_folder() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+> **As built:** `apply_placement_now` also takes a `reason` (`visibility`, `department` or `deleted`) for the `sharepoint.folder_moved` event. `tightening_visibility_…` also checks that event.
+
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --test sharepoint -- tightening loosening department_transfer deleted_documents`
 Expected:
@@ -3999,7 +4003,7 @@ Expected:
 - `tightening_is_refused_…` FAILS because the change succeeds.
 - `loosening_waits_…` already PASSES.
 
-- [ ] **Step 3: Implement `apply_placement_now`.** Append to `mirror.rs`:
+- [x] **Step 3: Implement `apply_placement_now`.** Append to `mirror.rs`:
 
 ```rust
 /// Move the document's folder to `to` now, before the change that requires
@@ -4059,7 +4063,7 @@ pub const MOVE_UNAVAILABLE: &str =
     "File storage (SharePoint) is unavailable right now, so the change was not made. Try again in a few minutes.";
 ```
 
-- [ ] **Step 4: Call it from the three narrowing changes.** In `service.rs` (with `use crate::sharepoint::{self, layout::{Spot, narrows}};` added to the imports):
+- [x] **Step 4: Call it from the three narrowing changes.** In `service.rs` (with `use crate::sharepoint::{self, layout::{Spot, narrows}};` added to the imports):
 
 (a) `set_visibility`: directly after the `if from == to { return Ok(()); }` block, add:
 
@@ -4097,12 +4101,12 @@ pub const MOVE_UNAVAILABLE: &str =
     }
 ```
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test documents`
 Expected: all `test result: ok.`
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -4227,7 +4231,7 @@ git commit -m "sharepoint: example config, opt-in live test, and plan/roadmap st
 
 **Index contracts:**
 
-- `apply_placement_now(core, document_id)` became `apply_placement_now(core, document_id, to: Spot)`. It runs before the change is saved, so it can't read the target from the database.
+- `apply_placement_now(core, document_id)` became `apply_placement_now(core, document_id, to: Spot, reason: &str)`. It runs before the change is saved, so it can't read the target from the database; the reason goes into the `sharepoint.folder_moved` audit event (D-102).
 - `put_version_file(core, tx_ctx: &PutCtx, file)` became `put_version_file(core, &PutTarget, &StoredFile, src: &Path)`. It is joined by `filestore::open(core, document_id, version_no, hash, size)` for callers that already have the version number.
 - `SharePoint` resolves the site, library, and area folders **lazily** on first use rather than at startup. This keeps the server starting when SharePoint is down, as D-021 does for OIDC.
 

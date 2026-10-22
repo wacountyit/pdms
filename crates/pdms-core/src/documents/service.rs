@@ -25,6 +25,10 @@ use super::tags::{self, TagRef};
 use crate::context::Ctx;
 use crate::error::{CoreError, CoreResult};
 use crate::model::UserStatus;
+use crate::sharepoint::{
+    self,
+    layout::{Spot, narrows},
+};
 use crate::{Core, acl};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, sqlx::Type)]
@@ -896,6 +900,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
             f,
         ));
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(id)
@@ -934,6 +939,13 @@ pub async fn update(
     )
     .await?;
 
+    if core.sharepoint.is_some() {
+        let v = before_doc.visibility;
+        let target = Spot::of(v, meta.department_id, false);
+        if narrows(Spot::of(v, before_doc.department_id, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "department").await?;
+        }
+    }
     let mut tx = core.db.begin().await?;
     let updated = sqlx::query!(
         "UPDATE documents SET title = $3, description = $4, document_type_id = $5, department_id = $6,
@@ -1002,6 +1014,7 @@ pub async fn update(
                 .context("to_department_id", meta.department_id),
         );
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
@@ -1043,6 +1056,7 @@ pub async fn change_status(
     }
     let mut tx = core.db.begin().await?;
     let e = set_status(&mut tx, ctx, &doc_ref, current, to, note).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, vec![e]).await?;
     tx.commit().await?;
     Ok(())
@@ -1105,6 +1119,7 @@ pub async fn transfer_owner(
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1156,6 +1171,13 @@ pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) ->
     if from == to {
         return Ok(());
     }
+    if core.sharepoint.is_some() {
+        let dept = doc_ref.attrs.department_id;
+        let target = Spot::of(to, dept, false);
+        if narrows(Spot::of(from, dept, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "visibility").await?;
+        }
+    }
     sqlx::query!(
         "UPDATE documents SET visibility = $2::text::document_visibility, updated_at = now() WHERE id = $1",
         id,
@@ -1164,6 +1186,7 @@ pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) ->
     .execute(&mut *tx)
     .await?;
     refresh_search(&mut tx, id).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1283,6 +1306,13 @@ pub async fn delete(core: &Core, ctx: &Ctx, id: Uuid, reason: &str) -> CoreResul
     if let Some(why) = deletion_eligibility(core, id).await?.reason() {
         return Err(CoreError::Conflict(why));
     }
+    if core.sharepoint.is_some() {
+        let a = &doc_ref.attrs;
+        let target = Spot::of(a.visibility, a.department_id, true);
+        if narrows(Spot::of(a.visibility, a.department_id, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "deleted").await?;
+        }
+    }
     let mut tx = core.db.begin().await?;
     let d = fetch_live(&mut tx, id).await?;
     sqlx::query!(
@@ -1292,6 +1322,7 @@ pub async fn delete(core: &Core, ctx: &Ctx, id: Uuid, reason: &str) -> CoreResul
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1348,6 +1379,7 @@ pub async fn restore_deleted(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()>
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1401,6 +1433,7 @@ pub async fn add_tag(core: &Core, ctx: &Ctx, id: Uuid, name: &str) -> CoreResult
             .change("tags", names(&before), after)
             .context("tag", tag.name.clone()),
     );
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
@@ -1427,6 +1460,7 @@ pub async fn remove_tag(core: &Core, ctx: &Ctx, id: Uuid, tag_id: Uuid) -> CoreR
         .filter(|t| t.id != tag_id)
         .map(|t| t.name.clone())
         .collect();
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1525,6 +1559,7 @@ pub async fn add_version(
     if let Some(m) = milestone_date {
         e = e.context("milestone_date", m);
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, vec![e]).await?;
     tx.commit().await?;
     Ok(version)
@@ -1773,6 +1808,7 @@ pub async fn restore_version(
         }
     };
     refresh_search(&mut tx, id).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(version)

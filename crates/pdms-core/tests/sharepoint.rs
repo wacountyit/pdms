@@ -667,3 +667,403 @@ async fn restoring_a_file_makes_a_new_file() {
     assert_eq!(dl.version_no, 3);
     assert_eq!(read_all(dl.stream).await.unwrap(), original);
 }
+
+async fn pending_mirrors(core: &Core, id: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM jobs WHERE kind = 'sharepoint.mirror_document' AND status = 'pending'
+           AND payload->>'document_id' = $1",
+    )
+    .bind(id.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+async fn clear_mirrors(core: &Core) {
+    sqlx::query("DELETE FROM jobs WHERE kind = 'sharepoint.mirror_document'")
+        .execute(&core.db)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn the_mirror_names_files_and_fills_columns() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel Supply Agreement",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("v1"))),
+    )
+    .await;
+    documents::add_version(
+        &core,
+        &ctx,
+        id,
+        upload(&core, "b.pdf", &pdf("v2")).await,
+        documents::VersionKind::Amendment,
+        "",
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        pending_mirrors(&core, id).await,
+        1,
+        "one pending job, however many changes"
+    );
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    let ext = external_id(&core, id).await;
+    let folder = format!("Departments/Road and Bridge/{ext} – Fuel Supply Agreement");
+    assert_eq!(
+        sp.names(&folder),
+        vec![
+            format!("{ext} v1 – Original.pdf"),
+            format!("{ext} v2 – Amendment.pdf")
+        ]
+    );
+    let v1 = sp.fields(&format!("{folder}/{ext} v1 – Original.pdf"));
+    let v2 = sp.fields(&format!("{folder}/{ext} v2 – Amendment.pdf"));
+    assert_eq!(v1["PadmCurrent"], serde_json::json!(false));
+    assert_eq!(v2["PadmCurrent"], serde_json::json!(true));
+    assert_eq!(v2["PadmDocumentId"], serde_json::json!(ext));
+    assert_eq!(v2["PadmDepartment"], serde_json::json!("Road and Bridge"));
+    assert_eq!(v2["PadmVisibility"], serde_json::json!("Department"));
+    assert!(
+        v2["PadmLink"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("/documents/{id}"))
+    );
+    // Running it again changes nothing in SharePoint.
+    let before = sp.requests().len();
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    let patches = sp.requests()[before..]
+        .iter()
+        .filter(|r| r.starts_with("PATCH"))
+        .count();
+    assert_eq!(patches, 0);
+}
+
+#[tokio::test]
+async fn retitling_renames_the_document_folder() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("v1"))),
+    )
+    .await;
+    let (doc, _) = documents::for_edit(&core, &ctx, id).await.unwrap();
+    let input = MetadataInput {
+        title: "Fuel Supply Agreement".into(),
+        document_type_id: doc.document_type_id,
+        department_id: doc.department_id,
+        ..Default::default()
+    };
+    documents::update(&core, &ctx, id, input, doc.row_version)
+        .await
+        .unwrap();
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    let ext = external_id(&core, id).await;
+    assert_eq!(
+        sp.names("Departments/Road and Bridge"),
+        vec![format!("{ext} – Fuel Supply Agreement")]
+    );
+}
+
+#[tokio::test]
+async fn every_kind_of_change_queues_the_mirror() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let bob = directory::create_user(&core.db, &system(), "Bob", "bob@x.org", Some(dept))
+        .await
+        .unwrap();
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("v1"))),
+    )
+    .await;
+    clear_mirrors(&core).await;
+
+    // Tags are curated (D-088).
+    documents::tags::create_curated(&core.db, &system(), "Roads", "#1f6feb", "")
+        .await
+        .unwrap();
+    documents::add_tag(&core, &ctx, id, "Roads").await.unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "tag added");
+    clear_mirrors(&core).await;
+
+    documents::change_status(&core, &ctx, id, DocumentStatus::Archived, "")
+        .await
+        .unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "status");
+    clear_mirrors(&core).await;
+
+    documents::transfer_owner(&core, &system(), id, bob, "handover")
+        .await
+        .unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "owner");
+    clear_mirrors(&core).await;
+
+    documents::set_visibility(
+        &core,
+        &as_user(&core, bob).await,
+        id,
+        Visibility::CountyWide,
+    )
+    .await
+    .unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "visibility");
+    clear_mirrors(&core).await;
+
+    documents::delete(&core, &system(), id, "duplicate")
+        .await
+        .unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "deleted");
+    clear_mirrors(&core).await;
+
+    documents::restore_deleted(&core, &system(), id)
+        .await
+        .unwrap();
+    assert_eq!(pending_mirrors(&core, id).await, 1, "restored");
+}
+
+#[tokio::test]
+async fn the_nightly_sweep_queues_every_document_once() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let a = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "A",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("a"))),
+    )
+    .await;
+    let b = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "B",
+        Visibility::Department,
+        Some(("b.pdf", &pdf("b"))),
+    )
+    .await;
+    new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "No file",
+        Visibility::Department,
+        None,
+    )
+    .await;
+    clear_mirrors(&core).await;
+    assert_eq!(sharepoint::mirror_sweep(&core).await.unwrap(), 2);
+    assert_eq!(
+        sharepoint::mirror_sweep(&core).await.unwrap(),
+        0,
+        "already pending"
+    );
+    assert_eq!(
+        pending_mirrors(&core, a).await + pending_mirrors(&core, b).await,
+        2
+    );
+}
+
+#[tokio::test]
+async fn tightening_visibility_moves_the_folder_before_saving() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::CountyWide,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    let ext = external_id(&core, id).await;
+    assert_eq!(
+        sp.names("County-wide/Road and Bridge"),
+        vec![format!("{ext} – Fuel")]
+    );
+    documents::set_visibility(&core, &ctx, id, Visibility::Restricted)
+        .await
+        .unwrap();
+    // No mirror job has run: the move happened as part of the change.
+    assert!(sp.names("County-wide/Road and Bridge").is_empty());
+    assert_eq!(
+        sp.names("Restricted/Road and Bridge"),
+        vec![format!("{ext} – Fuel")]
+    );
+    // The move is audited (D-102).
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"sharepoint.folder_moved".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn tightening_is_refused_when_sharepoint_is_down() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::CountyWide,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    sp.fail("PATCH /drives/drive-1/items/");
+    let err = documents::set_visibility(&core, &ctx, id, Visibility::Restricted)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, CoreError::Unavailable(m) if m.contains("the change was not made")),
+        "{err:?}"
+    );
+    let doc = documents::view(&core, &ctx, id).await.unwrap().document;
+    assert_eq!(doc.visibility, Visibility::CountyWide, "PADM unchanged");
+    assert_eq!(
+        sp.names("County-wide/Road and Bridge").len(),
+        1,
+        "folder unchanged"
+    );
+}
+
+#[tokio::test]
+async fn loosening_waits_for_the_mirror_job() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    documents::set_visibility(&core, &ctx, id, Visibility::CountyWide)
+        .await
+        .unwrap();
+    assert_eq!(
+        sp.names("Departments/Road and Bridge").len(),
+        1,
+        "not moved yet"
+    );
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    assert!(sp.names("Departments/Road and Bridge").is_empty());
+    assert_eq!(sp.names("County-wide/Road and Bridge").len(), 1);
+}
+
+#[tokio::test]
+async fn department_transfer_moves_the_folder_now() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ops = new_department(&core, "OPS", "Operations").await;
+    acl::grant(
+        &core.db,
+        &system(),
+        Subject::User(alice),
+        Scope::Department(ops),
+        Permission::Create,
+        None,
+        "test",
+    )
+    .await
+    .unwrap();
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    let (doc, _) = documents::for_edit(&core, &ctx, id).await.unwrap();
+    let input = MetadataInput {
+        title: doc.title.clone(),
+        document_type_id: doc.document_type_id,
+        department_id: ops,
+        ..Default::default()
+    };
+    documents::update(&core, &ctx, id, input, doc.row_version)
+        .await
+        .unwrap();
+    assert!(sp.names("Departments/Road and Bridge").is_empty());
+    assert_eq!(sp.names("Departments/Operations").len(), 1);
+}
+
+#[tokio::test]
+async fn deleted_documents_leave_the_department_folder() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    documents::delete(&core, &system(), id, "duplicate")
+        .await
+        .unwrap();
+    assert!(sp.names("Departments/Road and Bridge").is_empty());
+    assert_eq!(sp.names("Restricted/Road and Bridge").len(), 1);
+    documents::restore_deleted(&core, &system(), id)
+        .await
+        .unwrap();
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    assert_eq!(sp.names("Departments/Road and Bridge").len(), 1);
+}

@@ -256,6 +256,7 @@ pub async fn complete(core: &Core, ctx: &Ctx, task_id: Uuid, c: Completion) -> C
         .bind(t.document_id)
         .execute(&mut *tx)
         .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, t.document_id).await?;
     pdms_audit::append(
         &mut tx,
         vec![

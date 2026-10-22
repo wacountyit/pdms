@@ -671,6 +671,7 @@ pub async fn accept(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()> {
         .bind(doc_id)
         .execute(&mut *tx)
         .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, doc_id).await?;
     pdms_audit::append(
         &mut tx,
         vec![

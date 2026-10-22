@@ -12,6 +12,7 @@
 mod files;
 mod folders;
 pub mod layout;
+mod mirror;
 pub mod quickxor;
 
 use std::sync::Arc;
@@ -27,6 +28,11 @@ pub use files::{UploadTarget, UploadedFile};
 pub(crate) use files::{open, record_upload, spool_copy, upload_staged};
 pub use folders::{DocumentFolder, department_folder_id};
 pub use layout::{Area, Spot};
+pub(crate) use mirror::mirror_later;
+pub use mirror::{
+    MIRROR_JOB, MIRROR_SWEEP_JOB, apply_placement_now, enqueue_mirror, mirror_document,
+    mirror_sweep, register_jobs,
+};
 
 /// Shown when an upload cannot reach SharePoint.
 pub const UPLOAD_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable right now, so nothing was saved. Try again in a few minutes.";
@@ -34,6 +40,9 @@ pub const UPLOAD_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable r
 /// Shown when a download cannot reach SharePoint.
 pub const READ_UNAVAILABLE: &str =
     "File storage (SharePoint) is unavailable right now. Try again in a few minutes.";
+
+/// Shown when a change that must move files first cannot reach SharePoint.
+pub const MOVE_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable right now, so the change was not made. Try again in a few minutes.";
 
 /// Log the underlying failure and return the user-facing "unavailable" error.
 pub(crate) fn unavailable(message: &'static str, e: impl std::fmt::Display) -> CoreError {

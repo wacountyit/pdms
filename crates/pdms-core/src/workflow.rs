@@ -747,6 +747,7 @@ pub async fn submit(core: &Core, ctx: &Ctx, document_id: Uuid, s: Submission) ->
             .context("legal_review", legal)
             .context("note", note.clone()),
     );
+    crate::sharepoint::mirror_later(core, &mut tx, doc.id()).await?;
     pdms_audit::append(&mut tx, events).await?;
     notify_stage(&mut tx, core, ctx, &doc, id, 1).await?;
     tx.commit().await?;
@@ -1133,6 +1134,7 @@ pub async fn decide_step(
             refresh = true;
         }
     }
+    crate::sharepoint::mirror_later(core, &mut tx, doc.id()).await?;
     if !events.is_empty() {
         pdms_audit::append(&mut tx, events).await?;
     }
@@ -1252,6 +1254,7 @@ pub async fn cancel(core: &Core, ctx: &Ctx, workflow_id: Uuid, reason: &str) -> 
         "review cancelled",
     )
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, document_id).await?;
     pdms_audit::append(
         &mut tx,
         vec![

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_files SET name = $2, fields_hash = $3, last_known_path = $4\n              WHERE document_version_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bdb1c8ddfb448c067279c814c7ed4329acbff38c4ac94dba8bd4934e70c7dd30"
+}
