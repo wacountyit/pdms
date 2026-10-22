@@ -18,7 +18,8 @@ plan plus this index.
 
 - `cargo fmt`, `clippy -D warnings`, and `cargo test --workspace` pass.
 - `.sqlx/` is refreshed.
-- `docs/ROADMAP.md` §0.3 is updated.
+- `docs/ROADMAP.md` §0 is updated: the status in §0.3, §0.5 and §0.6, and
+  the claim in §0.1a removed.
 - The plan's tasks are ticked.
 
 ## Refinements to the spec (decided while planning)
@@ -111,7 +112,7 @@ one, they update this table in the same commit.
 - **Config check:** `entra_sync.enabled` requires `[graph]`, `auth.oidc.issuer_url` and `auth.oidc.subject_claim = "oid"`.
 - **Sign-in:** when the sync is on, a first sign-in asks Entra about the person and is denied with `email_in_use` if an unlinked account has that email; a Graph error denies sign-in. The token never sets names or groups while the sync is on.
 - **Downloads:** download streams have no total deadline, so P3's large files are safe from it, but the download's pre-authenticated GET does not yet retry 429/503/504.
-- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 must be renumbered from D-097 when P4 is executed.
+- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 must be renumbered from the next free number (D-097 on 2026-10-21) when P4 is executed.
 - **Left to P4:** the Docker Compose secret and `install.sh` wiring for the certificate.
 - **Open behaviour:** an account that is departed and later re-enabled in Entra is **not** reactivated automatically; an admin reactivates it. A simultaneous first sign-in and nightly sync are resolved with `ON CONFLICT DO NOTHING`.
 

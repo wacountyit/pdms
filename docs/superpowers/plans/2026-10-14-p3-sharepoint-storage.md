@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Before you start (added 2026-10-21):** this plan was written on 2026-10-15, before P2 and UI redesign R1 were built. Run a pre-flight check against `main`, and correct this plan in your branch before Task 1:
+> - **Migrations:** P2's is `0010`, not `0009`. This plan's migration takes the next free number on `main` and in open PRs (`0011` on 2026-10-21), not `0010`. Change every mention: the "Depends on" line, the Global Constraints ("Never edit 0001–0009", "through 0010"), and Task 5's file name and commit message.
+> - **Names:** P2 changed some names and behaviour; the [plan index](2026-10-14-padm-sharepoint-entra-index.md) lists them under "Changes recorded when P2 was written". Check every name this plan consumes against the code.
+> - **Claim P3 first**, and check for work in flight on the same files (ROADMAP §0.1a and §0.6, and `gh pr list`).
+
 **Goal:** Store every document file uploaded through PADM in one SharePoint library. Files are organised as `Departments/` / `County-wide/` / `Restricted/` → department → document folder, with one file per version. Downloads are streamed back through PADM and checked against the recorded SHA-256. PADM's metadata is mirrored into SharePoint columns, and folders move whenever a document's visibility, department, or deletion state changes.
 
 **Architecture:**

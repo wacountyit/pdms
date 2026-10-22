@@ -5,6 +5,8 @@
   spec, which the project owner must approve before any build (ROADMAP §0.4).
 - **For:** the contributor, and their Claude session, picking up R2. Read
   [`CLAUDE.md`](../../../CLAUDE.md) at the repository root first.
+- **Who has it:** [ROADMAP §0.1a](../../ROADMAP.md#01a-who-is-working-on-what).
+  Whoever does R2 keeps that row current.
 - **Roadmap:** sub-project 5b in [ROADMAP §0.3](../../ROADMAP.md#03-sub-projects).
   On 2026-10-21 the owner started R2 in parallel with sub-projects 1–3.
   Decision D-092 had placed it after them.
@@ -32,7 +34,10 @@ one.
 
 ## 2. Read first
 
-1. [`CLAUDE.md`](../../../CLAUDE.md): rules, commands, and the work in flight.
+1. [`CLAUDE.md`](../../../CLAUDE.md): rules, commands, and how two people
+   take turns ("Working in turns"). Then ROADMAP §0.1a and §0.5 to §0.7:
+   who has what, what can start next, which files other work touches,
+   and the questions waiting for the owner.
 2. [The R1 spec](2026-10-15-ui-redesign-r1-design.md):
    - §3 Constraints;
    - §4 Visual system (tokens, type scale, components);
@@ -41,8 +46,8 @@ one.
    - §15 Testing.
 
    **R2 inherits all of it.**
-3. **The five R1 screens in the code.** They are the reference
-   implementation:
+3. **The five R1 screens in the code** (paths under `crates/pdms-web/`).
+   They are the reference implementation:
    - `templates/dashboard.html`;
    - `templates/documents/list.html`;
    - `templates/documents/show.html`;
@@ -276,18 +281,22 @@ screens you touch. The items on R2 screens were checked as still open on
 | Work | State on 2026-10-21 | What it changes that R2 also touches |
 |---|---|---|
 | **P2, Entra user sync**, [PR #1](https://github.com/wacountyit/pdms/pull/1) | **Merged** to `main` on 2026-10-21 | It added `/admin/entra` (`admin/entra.html`) and its tab in `base.html`, a notice in `admin/idp.html`, and new help text in `admin/users.html`, plus migration `0010` and decision D-096. Nothing is pending; listed so you know where those pages came from |
-| **P3/P4, SharePoint storage** (plans in `docs/superpowers/plans/`) | Planned, not started; they come after P2 | P4 adds `/admin/sharepoint` and a section on `/admin/entra`. P3 changes uploads and downloads on the document pages |
-| **Sub-project 3, small changes** (D-087, D-088) | Not started | Removes the Outlook sync (`admin/outlook.html`, config, installer). Renames the Partnership Agreement type to ILA. Makes tags admin-curated (`admin/tags.html`, tag entry on the document forms) |
+| **P3/P4, SharePoint storage** (plans in `docs/superpowers/plans/`) | Planned, not started. P3 can run alongside R2; P4 waits until R2's admin pages are merged (ROADMAP §0.5) | P4 adds `/admin/sharepoint`, a section on `/admin/entra`, an admin tab, a `Layout` flag, and a notice on the document page. P3 changes the upload and download code under the document pages, but not their templates |
+| **Sub-project 3, small changes** (D-087, D-088) | Not started. Agree with the owner who does it, and whether before or after R2's admin pages (ROADMAP §0.5) | Removes the Outlook sync (`admin/outlook.html`, config, installer). Renames the Partnership Agreement type to ILA. Makes tags admin-curated (`admin/tags.html`, tag entry on the document forms) |
 | **Security fixes** (private findings; ROADMAP §0.3) | Not started; can run alongside | May touch the same handlers and templates. Before a large refactor of a route or template, ask the owner whether a fix is planned there |
+
+This table was correct on 2026-10-21. For the current state, read ROADMAP
+§0.1a and §0.6, and run `gh pr list`.
 
 **How to coordinate:**
 
 - **Branch from `main`.** P2 is merged, and `gh pr list` shows anything else
-  in flight.
+  in flight. Follow "Working in turns" in `CLAUDE.md`: open a draft PR as
+  soon as you start each part, and push at the end of every session.
 - **Set the admin page pattern early, and write it down in the R2 spec.** P4
   builds `/admin/sharepoint` after it. P4's plan was written before R1 and
   uses the old markup (`<section aria-labelledby>` without `.panel`, and
-  `flash-error` with `role="status"`; P4 plan around line 3834). So when the
+  `flash-error` with `role="status"`; P4 Task 7, the `admin/sharepoint.html` template). So when the
   pattern is set, add a line to the plan index
   (`docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, under
   "Changes recorded when P4 was written") telling P4 to use it.
@@ -303,7 +312,10 @@ screens you touch. The items on R2 screens were checked as still open on
 
 ## 8. How to do it
 
-1. **Settle scope and priorities with the owner** (§9).
+1. **Settle scope and priorities with the owner** (§9). After you claim
+   R2, open the spec's draft PR (step 3) and put the §9 questions at the top
+   of its description. Then ask the person you work for to take them to the
+   owner, or mention `@wc-sstevens` in a comment on the PR.
 2. **Write the R2 design spec** at
    `docs/superpowers/specs/<date>-ui-redesign-r2-design.md`. Use R1's spec as
    the model: purpose, scope, constraints, then one section per screen
@@ -317,12 +329,16 @@ screens you touch. The items on R2 screens were checked as still open on
 
    Mockups for the owner are fine. Keep them out of the repository, as R1 did.
 3. **Get the owner's approval.**
-   - Open a pull request that contains only the draft spec, with its status
-     set to "Draft for owner review". The owner reviews it there.
-   - Once the owner approves, set the status to "Approved" with the date,
-     and merge the PR.
-   - Record new decisions in `docs/DECISIONS.md`. Add a dated update to D-092
-     if the order changes again.
+   - Put the spec in its own pull request, opened as a GitHub draft while
+     you write it. Put the §9 questions, and the owner's answers, at the top
+     of the PR description.
+   - When the spec is complete, mark the PR ready for review and ask the
+     owner (`@wc-sstevens`) to review it. Until the owner approves, the
+     spec's Status line reads "Draft for owner review".
+   - Once the owner approves, set the Status line to "Approved" with the
+     date. In the same PR, record new decisions in `docs/DECISIONS.md`, and
+     add a dated update to D-092 if the order changes again. The owner
+     merges.
 4. **Write the implementation plan** in `docs/superpowers/plans/`. Split it
    by area so each part can merge on its own. For example:
    - admin pages;
@@ -351,6 +367,10 @@ screens you touch. The items on R2 screens were checked as still open on
    - the README, if it describes old screens.
 7. **The owner deploys** to the test server: backup first, then
    `git pull && ./install.sh`.
+8. **When R2 is done:**
+   - mark row 5b **Done** in ROADMAP §0.3;
+   - remove the R2 row from §0.1a, and update §0.5 and §0.6;
+   - pick the next unclaimed item from §0.5.
 
 ## 9. Questions to settle with the owner before the spec
 

@@ -738,7 +738,7 @@ sub-projects 1–3 so it covers the final features. See
 - The owner started R2 now, with a second contributor, in parallel with
   sub-projects 1–3 rather than after them.
 - R2 therefore coordinates with the work that touches the same screens: plan
-  P2's Entra ID sync page, P4's SharePoint page, and sub-project 3's
+  P2's Entra ID sync page (since merged), P4's SharePoint page, and sub-project 3's
   removal of the Outlook sync and change to tags.
 - See [the R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
 

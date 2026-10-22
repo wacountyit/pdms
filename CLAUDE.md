@@ -10,7 +10,7 @@ The README ("Layout") describes each crate.
 
 ## Start here
 
-1. **[docs/ROADMAP.md §0](docs/ROADMAP.md#0-where-things-stand-updated-2026-10-21)**
+1. **[docs/ROADMAP.md §0](docs/ROADMAP.md#0-where-things-stand)**
    is the status and the plan of record: what is done, what is next, and
    in what order.
 2. **[docs/DECISIONS.md](docs/DECISIONS.md)** is the decision log. Check it
@@ -19,14 +19,83 @@ The README ("Layout") describes each crate.
    - `specs/` holds design specs, one per piece of work. The project owner
      approves each one.
    - `plans/` holds step-by-step implementation plans.
-4. **What is in progress right now:** ROADMAP §0.1a and §0.3, plus
-   `gh pr list`. Don't rely on a copy of that list anywhere else; it goes
-   stale.
+4. **What is in progress right now:** `gh pr list`, plus these ROADMAP
+   sections:
+   - §0.1a: who is working on what;
+   - §0.3: the status of each sub-project;
+   - §0.5: what can start next;
+   - §0.6: which work touches which files;
+   - §0.7: questions waiting for the owner.
+
+   Don't rely on a copy of these lists anywhere else; copies go stale.
+   Two people work on PADM in turns, so read "Working in turns" below
+   before you start.
    - **Working on the UI redesign, round 2 (R2)?** Start with the
      [R2 brief](docs/superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
    - **Working on SharePoint storage (plans P3, P4)?** Start with the
      [plan index](docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md),
      which holds their shared contracts.
+
+## Working in turns
+
+Two people work on PADM, often one after the other, each with their own
+Claude session. These rules keep either one from overwriting or breaking the
+other's work. The owner (GitHub `@wc-sstevens`) follows them too.
+
+- **Before your first session:** you need Write access to `wacountyit/pdms`
+  (ask the owner), and `gh auth login`. Commit under your own git identity;
+  never copy one from an earlier plan.
+- **At the start of every session:**
+  1. `git checkout main && git pull`.
+  2. Read ROADMAP §0.1a (who has what), §0.5 (what can start next) and §0.7
+     (questions waiting for the owner).
+  3. Run `gh pr list`. Draft PRs are work in flight.
+  4. If you are resuming your own branch, read the "Where I stopped" note in
+     its PR, rebase the branch on `main`, and push it with
+     `git push --force-with-lease`.
+- **Claim work before you start it:**
+  1. Take the first unclaimed item in ROADMAP §0.5 whose prerequisites are
+     met, or the one the owner gives you.
+  2. Add your row to §0.1a and push that one change straight to `main`
+     (`docs: claim <item>`). If the push is rejected because `main` has
+     moved, pull, read §0.1a again, and choose again if someone else took
+     your item. Claims, and questions added to §0.7, are the only changes
+     pushed to `main` without a PR.
+  3. Create your branch and open a **draft** PR straight away. Name the
+     branch after the item (`r2-admin-pages`, `p3-sharepoint-storage`), and
+     start the PR title with it (`R2:`, `P3:`, `SP3:`).
+
+  Before starting work that shares a row in §0.6 with claimed work, agree
+  the order with the owner.
+- **Never leave work only on your machine.** Push your branch at the end of
+  every session, even when the work is unfinished or failing.
+- **When you stop partway,** fill in "Where I stopped" in the PR description
+  (the PR template has the heading). Say what is done, what the next step
+  is, the open questions, and anything half-done or failing.
+- **Taking over paused work:** agree it with the owner first. Then work on
+  the same branch, change "Who" in §0.1a, and add a line under "Where I
+  stopped". Only one person works on a branch at a time.
+- **When you finish:**
+  1. Rebase on `main` and push with `git push --force-with-lease`. That is
+     expected on your own PR branch; never force-push `main` or someone
+     else's branch. If `main` has taken a migration or decision number you
+     were using, renumber yours.
+  2. Run the checks under "Commands".
+  3. Update the docs in the same PR: the status in ROADMAP §0.3, §0.5 and
+     §0.6 if they changed, and the other docs listed under "Good to know".
+     When the whole item is done, remove your row from §0.1a.
+  4. Mark the PR ready for review. The owner merges it.
+  5. After the merge, delete the branch on GitHub and locally, so only
+     `main` and work in progress remain.
+- **Questions for the owner:**
+  - If a question blocks you, ask the owner straight away: through the
+    person you work for, or in a comment on your PR that mentions
+    `@wc-sstevens` (`gh pr comment`).
+  - If it can wait, add it to ROADMAP §0.7.
+  - Don't guess at a product decision. Once you have the answer, record it
+    where it belongs and remove the question from §0.7.
+- **Private material stays out of the repository:** the security findings
+  and the notes from earlier builds. Ask the owner for what you need.
 
 ## Rules that always apply
 

@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Before you start (added 2026-10-21):** this plan was written on 2026-10-15, before P2, P3 and UI redesign R1 were built. Run a pre-flight check against `main`, and correct this plan in your branch before Task 1:
+> - **When:** start only once P3 and R2's admin pages are merged (ROADMAP §0.5).
+> - **Migrations:** this plan's migration takes the next free number after P3's (`0012` if nothing else takes one), not `0011`. The other migration names in the text are off by one too. For example, the ARCHITECTURE row in Task 9 names `0009_entra_sync`, but P2's is `0010_entra_sync`.
+> - **Decisions:** this plan creates D-091 to D-097, but `main` already has D-091 to D-096. Number them from the next free number on `main` and in open PRs, and change every mention in the text: the headings, the DECISIONS and ROADMAP rows, a code comment, and Task 9's commit message.
+> - **Pages:** `/admin/sharepoint` and the `admin/entra.html` section must follow R2's admin page pattern, not this plan's pre-R1 markup. The document page notice must fit R1's document page as built. Task 7's insertion point (`<div class="toolbar">` inside `doc-header`) no longer exists; put the notice in `header.doc-head`.
+> - **Names:** check every name this plan consumes from P2 and P3 against the code. The [plan index](2026-10-14-padm-sharepoint-entra-index.md) lists what changed.
+> - **Claim P4 first**, and check for work in flight on the same files (ROADMAP §0.1a and §0.6, and `gh pr list`).
+
 **Goal:** Finish SharePoint storage so it can run in the county:
 
 - staff can browse their own department's folder read-only;
@@ -4859,7 +4867,7 @@ git commit -m "docs: SharePoint setup guide, admin guide, decisions D-091 to D-0
 
 > **Warning:** step 1 erases the test server's database and files. Confirm with the owner before running it.
 
-1. On the test server: `cd /srv/docker/pdms && git pull && docker compose down -v`.
+1. On the test server: `cd <install directory> && git pull && docker compose down -v`.
 2. `./install.sh`. Answer the SharePoint step with the test site, the tenant ID, and the `PADM Service – Test` client ID. Do SHAREPOINT_SETUP.md B4 to B6.
 3. `docker compose run --rm app seed-demo`. Demo files go to the test site.
 4. From a workstation with the repository, run the three live tests against the test site. Set the `PDMS_LIVE_*` variables, with `PDMS_LIVE_CERTIFICATE_FILE` pointing at a copy of the test server's `secrets/graph_certificate`. Delete that copy afterwards.

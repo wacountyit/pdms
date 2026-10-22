@@ -120,17 +120,6 @@ workspace. Each task dispatch gives its value; run
   export PDMS_TEST_DATABASE_URL=postgres://postgres:devsuper@127.0.0.1:55432/postgres
   export PDMS_TEST_OWNER_PASSWORD=devowner PDMS_TEST_APP_PASSWORD=devapp
   ```
-- **Worktree harness quirk:**
-  - Commands that contain the substring `git` anywhere, other than plain git
-    commands, and `bash script.sh` invocations are blocked.
-  - awk or sed with shell variables is blocked too.
-  - Use the Write and Edit tools for file changes and literal paths in
-    commands.
-- **Commit identity:**
-  ```bash
-  git -c user.name=wc-sstevens -c user.email=274070763+wc-sstevens@users.noreply.github.com commit …
-  ```
-  End each message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Review Focus
 

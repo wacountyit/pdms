@@ -1,7 +1,8 @@
 # Roadmap: testing, go-live, and what comes next
 
 Every phase in the original specification (0–5) is built and covered by
-automated tests (about 230 tests, including the eight acceptance tests). What
+automated tests, including the eight acceptance tests (§0.1 has the current
+count). What
 remains is to prove it in your environment with your people and documents,
 close the gaps listed below, and decide which additions matter most.
 
@@ -11,7 +12,9 @@ record**. Read it first if you are picking up the work.
 
 ---
 
-## 0. Where things stand (updated 2026-10-21)
+## 0. Where things stand
+
+Last updated 2026-10-21.
 
 The product is now called **PADM**. The code, crates, binary, and Docker
 images are still named `pdms`.
@@ -30,9 +33,8 @@ images are still named `pdms`.
   `install.sh`.
   - It uses the bundled Caddy (HTTPS with an internal certificate), OCR,
     ClamAV, and the demo data.
-  - For the demo users, local sign-in there is password-only
-    (`require_totp = false`, marked "TEST SERVER ONLY" in its config). Never
-    copy that setting to production.
+  - Only the owner deploys to it (see "Good to know" in
+    [`CLAUDE.md`](../CLAUDE.md)).
 - **Security and code review** of the initial release, 2026-10-14. The
   findings are kept privately, **not in this public repository**; ask the
   project owner for them. Fixing the High and Medium findings is part of
@@ -60,16 +62,19 @@ images are still named `pdms`.
   server with the sync off; the admin guide's "Entra ID user sync" section
   explains how to turn it on.
 
-### 0.1a In progress
+### 0.1a Who is working on what
 
-- **UI redesign R2** (from 2026-10-21): start with the
-  [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
-  - It lists every remaining screen, R1's design system and constraints, and
-    the R1 follow-ups to fold in.
-  - It also lists the files R2 shares with work still to come: P3/P4,
-    sub-project 3, and the security fixes.
-  - [`CLAUDE.md`](../CLAUDE.md) at the repository root has the rules and
-    commands for anyone, or any Claude session, working in this repository.
+Two people work on PADM, often in turns, each with their own Claude session.
+This table shows who has each piece of work, so nobody starts something the
+other person already has. Add your row here **before** you start, as
+"Working in turns" in [`CLAUDE.md`](../CLAUDE.md) describes. Open pull
+requests (`gh pr list`, drafts included) show the branches in flight.
+
+| Work | Who | Branches and PRs | State |
+|---|---|---|---|
+| **UI redesign R2** (5b) | The second contributor. Put your GitHub name here when you start | Branches `r2-…`; PR titles start with `R2:` | Ready to start (2026-10-21). The [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md) is written. The questions for the owner in brief §9 come first |
+
+Nothing else is claimed. §0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -97,20 +102,22 @@ images are still named `pdms`.
 
 ### 0.3 Sub-projects
 
-Work through these in order unless noted. Each one gets its own spec and plan.
+Each one gets its own spec and plan. §0.5 sets the order in which they are
+taken up.
 
 | # | Sub-project | Scope | Status | Spec / plan |
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
-| 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | final P1 review |
-| 1 | **SharePoint document storage** | Graph client (certificate, app-only, `Sites.Selected`); SharePoint store; folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility), P3 (storage), P4 (access, change detection, operations) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
+| 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility, done), P3 (storage) and P4 (access, change detection, operations). P3 and P4 were written before P2 and R1 were built, so each needs a pre-flight check against `main` first (§0.5). Not started | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
-| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started | D-087, D-088 (no separate spec needed) |
+| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started. Needs a short plan. It shares screens with R2 (§0.6) | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
-| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | **Designing** (from 2026-10-21, a second contributor). On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them, so R2 coordinates with them (brief §7) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md); the R2 spec and plan come next |
-| — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live | private |
+| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | **Not started**: the brief is ready, and the work is claimed by the second contributor (§0.1a). On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them, so R2 coordinates with them (§0.6, brief §7) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md); the R2 spec and plan come next |
+| — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
+| later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
 
 **Waiting on the county** (needed before sub-projects 1–2 can be tested live;
 the steps are in Appendix A of the spec):
@@ -122,18 +129,107 @@ the steps are in Appendix A of the spec):
 
 ### 0.4 How work moves through this list
 
-1. **Design:** a spec in `docs/superpowers/specs/`, reviewed and approved by
+1. **Claim:** add your row to §0.1a and push that change straight to
+   `main`, then open a draft pull request, so the other person can see what
+   you have taken ([`CLAUDE.md`](../CLAUDE.md), "Working in turns").
+2. **Design:** a spec in `docs/superpowers/specs/`, reviewed and approved by
    the project owner.
-2. **Plan:** an implementation plan in `docs/superpowers/plans/`.
-3. **Build:** on a branch, with tests. Before handing over, run
+3. **Plan:** an implementation plan in `docs/superpowers/plans/`.
+4. **Build:** on a branch, with tests. Before handing over, run
    `cargo fmt`, `clippy -D warnings`, `cargo test`, and `cargo sqlx prepare`
    (see §6).
-4. **Record:** update the status column above, add any new decisions to
-   [DECISIONS.md](DECISIONS.md), and correct the README and ARCHITECTURE if
-   behaviour changed.
+5. **Record:** in the same pull request:
+   - update the status column above, and remove your row from §0.1a when
+     the whole item is done;
+   - update §0.5 and §0.6 if what can start next has changed;
+   - add any new decisions to [DECISIONS.md](DECISIONS.md);
+   - correct the README, ARCHITECTURE and ADMIN_GUIDE if behaviour changed.
+
+   The owner merges. Then delete the branch.
 
 Status values: Not started → Designing → Designed (spec approved) → Planned →
 In progress → Done.
+
+### 0.5 What can start next
+
+Whoever is free takes the first unclaimed item below whose prerequisites are
+met, unless the owner says otherwise. Claim it (§0.1a) before you start.
+
+1. **UI redesign R2.** Claimed (§0.1a).
+2. **Plan P3, SharePoint document storage.** It can start now, alongside R2.
+   Nearly all of it is in `pdms-core`, and it needs no SharePoint site,
+   because its tests use a mock Graph server. Only its final live test waits
+   on the county.
+   - **Pre-flight first.** The plan was written on 2026-10-15, before P2 and
+     R1 were built.
+     - Check every name it consumes against the code on `main`. The plan
+       index lists what P2 changed.
+     - Renumber the migrations. P2's is `0010` (the plan says `0009`). P3's
+       takes the next free number on `main` and in open PRs: `0011` on
+       2026-10-21 (the plan says `0010`).
+     - Correct the plan text in the same branch, before Task 1.
+3. **Plan P4, SharePoint access, change detection and operations.** It starts
+   once P3 **and R2's admin pages** are merged. An approved R2 spec is not
+   enough, because P4 and R2 both change the admin tab row in `base.html`,
+   `Layout` and `admin_home` in `src/views.rs`, and `admin/entra.html`.
+   - **Same pre-flight:** its migration takes the next free number after
+     P3's (`0012` if nothing else takes one; the plan says `0011`), and its
+     decisions take the next free numbers (the plan creates D-091 to D-097,
+     but D-091 to D-096 are already taken).
+4. **Sub-project 3, small changes** (D-087, D-088). It needs no spec; write a
+   short plan first.
+   - It changes two admin pages that R2 redesigns (`admin/tags.html` and
+     `admin/outlook.html`), and the document forms.
+   - Either do it before R2 reaches those pages, or have the person doing
+     R2 do it. The owner decides which (§0.7).
+5. **Security fixes.** The owner holds the findings and hands them out one
+   area at a time. High and Medium items must be fixed before go-live (§3).
+6. **Sub-project 4, bulk import.** It needs a spec first, and it needs P3
+   merged.
+
+### 0.6 Which work touches which files
+
+Two pieces of work that share a row can conflict. Check this table before
+you claim something. If your work and claimed work share a row, agree the
+order with the owner first. Paths are under `crates/pdms-web/` unless they
+start with `crates/` or name a top-level folder.
+
+| Files | R2 | P3 | P4 | Sub-project 3 |
+|---|---|---|---|---|
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | Redesigns them | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` | Changes `admin/tags.html`. Removes the Outlook part of `admin/outlook.html` (`collab.rs`) |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | Admin tabs (the current tab needs a `Layout` field), new components | No | One admin tab and its `Layout` flag | The "Outlook & OCR" tab changes |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | Only if a page moves | No | A new route and module | Removes the Outlook sync routes |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | Possibly: the R1 follow-ups on the document page (brief §6), the shared `rule_form.html`, and the forms and fragments in brief §3.3 if the owner adds them | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` | Tag entry on the forms. The ILA rename |
+| Web errors and API: `src/error.rs`, `src/routes/api.rs` | No | A new 503 "Temporarily unavailable" response | No | No |
+| Web tests: `crates/pdms-web/tests/` | `shell.rs`, and each page's tests | Possibly the 503 responses | `shell.rs`, and new SharePoint admin tests | `phase5.rs` (the Outlook & OCR page), and the tag tests |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity | No | Most of P3 | Most of P4 | Tags. Removing the Outlook sync |
+| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | No | `[sharepoint]` settings and the mirror jobs | Its jobs | Removes the Outlook settings and job |
+| `migrations/` | None expected | The next free number | The next free number after P3's | Possibly one |
+| `.sqlx/` | Likely (new queries for view data) | Yes | Yes | Likely |
+| `config/`, `install.sh`, `docker-compose.yml` | No | `[sharepoint]` in the example config | The installer, and the Compose secret for the certificate | Removes the Outlook settings and its installer step |
+
+- **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
+  and ADMIN_GUIDE. In this table, change only your own column. Take
+  migration and decision numbers as `CLAUDE.md` says.
+- **Security fixes** can touch any row. Before you refactor a route or
+  template, ask the owner whether a fix is planned there.
+
+### 0.7 Questions waiting for the owner
+
+When the owner answers one, record the answer where it belongs (in
+DECISIONS, or in the spec or plan) and remove the question from this table.
+A question that blocks you goes to the owner straight away ("Working in
+turns" in `CLAUDE.md`); this table is for the ones that can wait.
+
+| Question | Raised by | What it holds up |
+|---|---|---|
+| R2 scope, admin navigation, which screens come first, where the OCR settings go, the tags page, phone widths, R1 leftovers | R2 brief §9 | The R2 spec |
+| Who does sub-project 3, and does it come before or after R2's admin pages? | §0.5 | Sub-project 3, and R2's tags and Outlook & OCR pages |
+| The county overview's totals can differ. The status chart counts superseded documents under "Other", but the Documents tile leaves them out. The overdue tile counts appointments, but the chart's Overdue segment doesn't. Add a subtitle, or change what is counted? | The R1 build (R2 brief §6) | Nothing. R2 can fix it once it's decided |
+| Confirm: an Entra-linked account that also has a local password is departed like any other when Entra disables it (D-096) | The P2 build | Nothing; it is built that way |
+| Confirm: identity provider group mappings are not applied while the Entra sync is on (D-096) | The P2 build | Nothing; it is built that way |
+| Two timing cases in how Department mapping changes and the sync interact were left as they are in the P2 build; the owner has the details. Fix them now, or keep the admin guide's advice (press **Full resync** after changing mappings during a sync)? | The P2 build | Nothing |
+| How should the installer create the first administrator account? | The owner (2026-10-15) | That change |
 
 ---
 
@@ -145,7 +241,7 @@ In progress → Done.
 |---|---|
 | Server | A VM like production: Linux, 4 vCPU, 8 GB RAM (12 GB with OCR and ClamAV), 100 GB disk to start. |
 | Install | `./install.sh`: choose the bundled Caddy proxy with a test DNS name (or your reverse proxy), turn on SMTP, OCR, and ClamAV so they get tested too. |
-| Sign-in | Register a **test** Entra ID app (`./install.sh --configure sso`). Map a few test Entra groups to departments and roles (Administration → Identity provider mappings). |
+| Sign-in | Register a **test** Entra ID app (`./install.sh --configure sso`). Turn on the Entra ID user sync and map the Department values in use to PADM departments (Administration → Entra ID sync; see the admin guide). Assign roles in PADM. |
 | Data | Two options, ideally both: `docker compose run --rm app seed-demo` on a throwaway install (sample documents, boards, users), and a copy of real documents from one department on the real test install. |
 | Test accounts | One person per role: administrator, auditor, records officer, legal counsel, department head, appointments clerk, an ordinary staff member in each of two departments, and someone with no department. |
 | Backups | Run `deploy/backup/pdms-backup.sh` nightly on the test server from day one. |
@@ -158,7 +254,7 @@ should show "You do not have permission" and appear under **Reports →
 Denied access attempts**.
 
 **Sign-in and access**
-- [ ] Entra sign-in creates the user with the right departments and roles from group mappings; removing someone from a group changes their access at next sign-in.
+- [ ] With the Entra ID sync on, a new staff member is created with the department from their Entra **Department** field before their first sign-in; changing the field in Entra changes their department after the next sync; disabling the account marks them departed.
 - [ ] Break-glass administrator signs in with password + authenticator code; five wrong passwords lock it temporarily.
 - [ ] A new staff member sees only their department's documents plus County-wide ones (search, calendar, dashboard, ICS feed, API, direct links all agree).
 - [ ] A County-wide document is visible to every active account; changing it to Restricted hides it on the next click.
@@ -234,7 +330,7 @@ agreements and contracts plus one appointed board, for 4–6 weeks.
 - [ ] Time synchronization (NTP) on the host: reminders and audit timestamps depend on it.
 
 **Identity and email**
-- [ ] Production Entra app registration with the production redirect URI; group mappings for every department and role.
+- [ ] Production Entra app registration with the production redirect URI; the Entra ID user sync on, with every Department value in use mapped to a PADM department; roles assigned in PADM.
 - [ ] Break-glass administrator password and authenticator secret stored in the IT vault; test it quarterly.
 - [ ] SMTP through Exchange Online (a dedicated mailbox, or a connector) with SPF/DKIM so reminders are not marked as spam.
 
@@ -248,6 +344,7 @@ agreements and contracts plus one appointed board, for 4–6 weeks.
 - [ ] Monitoring: `GET /healthz` and `/readyz` checked by your monitoring system; `/metrics` scraped by Prometheus if you have one; disk space alerts.
 - [ ] Audit forwarding to your SIEM or log platform (`[audit_forward]`), if you have one.
 - [ ] Security review: an internal or third-party penetration test of the test server; run `cargo audit` and a container image scan; review the admin and API surfaces.
+- [ ] The findings of the private security review are fixed; the owner tracks them.
 
 **License**
 - [ ] Publish the source (your repository, including local changes) and set `[org] source_url` (`./install.sh --configure source`); check that the **Source code** link in the footer works for users (AGPL-3.0 section 13).

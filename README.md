@@ -25,7 +25,7 @@ packaged as a single Docker image.
 
 **What's next:** the PADM plan (SharePoint document storage, Entra user sync, a UI
 redesign, and more), with what is done and what remains, is in
-[docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand-updated-2026-10-21).
+[docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand).
 Start there if you are picking up the work, and read [CLAUDE.md](CLAUDE.md)
 for the rules and commands that apply to every change.
 
@@ -59,6 +59,10 @@ plan in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Develop
 
+You need Rust 1.90 or later, Docker, and `sqlx-cli` for migrations and the
+SQLx offline data (the install command is in [CLAUDE.md](CLAUDE.md),
+"Commands").
+
 ```sh
 # Postgres for development and SQLx compile-time query checks
 docker run -d --name pdms-dev-db -p 127.0.0.1:55432:5432 -e POSTGRES_PASSWORD=devsuper postgres:15-alpine
@@ -67,12 +71,14 @@ docker exec -i pdms-dev-db psql -U postgres -v owner_password=devowner -v app_pa
 export DATABASE_URL=postgres://pdms_owner:devowner@127.0.0.1:55432/pdms     # SQLx macros
 export PDMS_DATABASE__URL=postgres://pdms_app:devapp@127.0.0.1:55432/pdms   # the app
 export PDMS_DATABASE__OWNER_URL=$DATABASE_URL                                # migrations
+export SQLX_OFFLINE=true   # the database is still empty, so build from the committed .sqlx/ data
 export PDMS_SECRET_KEY=$(cargo run -q -p pdms -- gen-secret)
 export PDMS_SERVER__SECURE_COOKIES=false PDMS_LOG__FORMAT=pretty
 export PDMS_STORAGE__LOCAL_PATH=data/blobs PDMS_STORAGE__SPOOL_PATH=data/spool
 export PDMS_EMAIL__TRANSPORT=file PDMS_EMAIL__FILE_DIR=data/mail   # reminder emails as .eml files
 
 cargo run -p pdms -- migrate
+unset SQLX_OFFLINE         # from now on the SQLx macros check queries against the database
 cargo run -p pdms -- seed-demo                     # optional demo data
 PDMS_AUTH__LOCAL__REQUIRE_TOTP=false cargo run -p pdms -- serve --with-worker
 ```

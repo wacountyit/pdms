@@ -8,7 +8,7 @@ time (default: "Policy and Document Management System").
 Status: **Phases 0–5 complete.** This document describes the system as built. Planned
 changes (SharePoint file storage, Entra user sync, County-wide visibility; D-081 to D-089)
 are designed in [the spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md)
-and tracked in [ROADMAP §0](ROADMAP.md#0-where-things-stand-updated-2026-10-14). Decisions referenced as `D-nnn` are
+and tracked in [ROADMAP §0](ROADMAP.md#0-where-things-stand). Decisions referenced as `D-nnn` are
 in [DECISIONS.md](DECISIONS.md).
 
 ## 1. Principles
