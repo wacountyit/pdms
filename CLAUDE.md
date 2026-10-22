@@ -59,19 +59,31 @@ other's work. The owner (GitHub `@wc-sstevens`) follows them too.
   2. Add your row to §0.1a and push that one change straight to `main`
      (`docs: claim <item>`). If the push is rejected because `main` has
      moved, pull, read §0.1a again, and choose again if someone else took
-     your item. Claims, and questions added to §0.7, are the only changes
-     pushed to `main` without a PR.
+     your item. Status changes (claims and states in §0.1a, and moving a
+     finished item to §0.1) and questions added to §0.7 are the only
+     changes pushed to `main` without a PR, and a PR never edits §0.1a.
   3. Create your branch and open a **draft** PR straight away. Name the
      branch after the item (`r2-admin-pages`, `p3-sharepoint-storage`), and
      start the PR title with it (`R2:`, `P3:`, `SP3:`).
 
   Before starting work that shares a row in §0.6 with claimed work, agree
   the order with the owner.
+
+  **Work you did before claiming it**, or that is still only on your
+  machine: claim it now with its real state, move it onto a branch rebased
+  on `main`, push it, and open the draft PR.
 - **Never leave work only on your machine.** Push your branch at the end of
   every session, even when the work is unfinished or failing.
+- **Keep your status current.** Whenever a part of your work changes state,
+  and at the end of every session, update your row in ROADMAP §0.1a and
+  push it straight to `main` (`docs: status <item>`). Mark each part
+  **Not started**, **In progress**, **In review** or **Done**, with its PR
+  number and the date. This is how the other person sees what is being
+  done. If the push is rejected, pull and push again.
 - **When you stop partway,** fill in "Where I stopped" in the PR description
   (the PR template has the heading). Say what is done, what the next step
-  is, the open questions, and anything half-done or failing.
+  is, the open questions, and anything half-done or failing. Update your
+  §0.1a row too.
 - **Taking over paused work:** agree it with the owner first. Then work on
   the same branch, change "Who" in §0.1a, and add a line under "Where I
   stopped". Only one person works on a branch at a time.
@@ -83,10 +95,12 @@ other's work. The owner (GitHub `@wc-sstevens`) follows them too.
   2. Run the checks under "Commands".
   3. Update the docs in the same PR: the status in ROADMAP §0.3, §0.5 and
      §0.6 if they changed, and the other docs listed under "Good to know".
-     When the whole item is done, remove your row from §0.1a.
-  4. Mark the PR ready for review. The owner merges it.
+  4. Mark the PR ready for review, and mark that part **In review** in
+     §0.1a. The owner merges it.
   5. After the merge, delete the branch on GitHub and locally, so only
-     `main` and work in progress remain.
+     `main` and work in progress remain. Mark the part **Done** in §0.1a.
+     When the whole item is done, add it to ROADMAP §0.1 and remove its
+     row from §0.1a.
 - **Questions for the owner:**
   - If a question blocks you, ask the owner straight away: through the
     person you work for, or in a comment on your PR that mentions

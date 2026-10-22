@@ -18,8 +18,9 @@ plan plus this index.
 
 - `cargo fmt`, `clippy -D warnings`, and `cargo test --workspace` pass.
 - `.sqlx/` is refreshed.
-- `docs/ROADMAP.md` §0 is updated: the status in §0.3, §0.5 and §0.6, and
-  the claim in §0.1a removed.
+- `docs/ROADMAP.md` §0 is updated: the status in §0.3, §0.5 and §0.6 in
+  the plan's PR; once it merges, the plan moves from §0.1a to §0.1 (on
+  `main`).
 - The plan's tasks are ticked.
 
 ## Refinements to the spec (decided while planning)

@@ -367,9 +367,14 @@ This table was correct on 2026-10-21. For the current state, read ROADMAP
    - the README, if it describes old screens.
 7. **The owner deploys** to the test server: backup first, then
    `git pull && ./install.sh`.
-8. **When R2 is done:**
-   - mark row 5b **Done** in ROADMAP §0.3;
-   - remove the R2 row from §0.1a, and update §0.5 and §0.6;
+8. **Keep the R2 row in ROADMAP §0.1a current** as you go. List the spec,
+   the plan and each build part, marked Not started, In progress, In review
+   or Done with its PR number ("Working in turns" in `CLAUDE.md`).
+9. **When R2 is done:**
+   - in the last R2 PR, mark row 5b **Done** in ROADMAP §0.3, and update
+     §0.5 and §0.6;
+   - after it merges, add R2 to §0.1 and remove its row from §0.1a (on
+     `main`);
    - pick the next unclaimed item from §0.5.
 
 ## 9. Questions to settle with the owner before the spec

@@ -65,14 +65,25 @@ images are still named `pdms`.
 ### 0.1a Who is working on what
 
 Two people work on PADM, often in turns, each with their own Claude session.
-This table shows who has each piece of work, so nobody starts something the
-other person already has. Add your row here **before** you start, as
-"Working in turns" in [`CLAUDE.md`](../CLAUDE.md) describes. Open pull
-requests (`gh pr list`, drafts included) show the branches in flight.
+This table shows who has each piece of work and how far it has got, so
+either person can see what is being done before starting anything. Open
+pull requests (`gh pr list`, drafts included) show the branches in flight.
 
-| Work | Who | Branches and PRs | State |
-|---|---|---|---|
-| **UI redesign R2** (5b) | The second contributor. Put your GitHub name here when you start | Branches `r2-…`; PR titles start with `R2:` | Ready to start (2026-10-21). The [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md) is written. The questions for the owner in brief §9 come first |
+**Keep your row current.** This table changes only through small commits
+pushed straight to `main` ("Working in turns" in [`CLAUDE.md`](../CLAUDE.md)),
+never inside a pull request:
+
+- **Before you start:** add your row.
+- **Whenever a part changes state, and at the end of every session:**
+  update the State and Updated columns. Mark each part **Not started**,
+  **In progress**, **In review** (its PR is waiting for the owner) or
+  **Done** (merged), with its PR number.
+- **When the whole item is done:** add it to §0.1 with the date, and remove
+  its row here.
+
+| Work | Who | State | Branches and PRs | Updated |
+|---|---|---|---|---|
+| **UI redesign R2** (5b) | The second contributor. Put your GitHub name here | Started on the contributor's own machine; nothing is on GitHub yet. Their first push replaces this with the real state of the spec, the plan and each build part. The questions for the owner in the [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md) §9 come first | Branches `r2-…`; PR titles start with `R2:` | 2026-10-21 |
 
 Nothing else is claimed. §0.5 lists what can start next.
 
@@ -131,7 +142,8 @@ the steps are in Appendix A of the spec):
 
 1. **Claim:** add your row to §0.1a and push that change straight to
    `main`, then open a draft pull request, so the other person can see what
-   you have taken ([`CLAUDE.md`](../CLAUDE.md), "Working in turns").
+   you have taken ([`CLAUDE.md`](../CLAUDE.md), "Working in turns"). Keep
+   the row's State current on `main` as the work moves.
 2. **Design:** a spec in `docs/superpowers/specs/`, reviewed and approved by
    the project owner.
 3. **Plan:** an implementation plan in `docs/superpowers/plans/`.
@@ -139,13 +151,14 @@ the steps are in Appendix A of the spec):
    `cargo fmt`, `clippy -D warnings`, `cargo test`, and `cargo sqlx prepare`
    (see §6).
 5. **Record:** in the same pull request:
-   - update the status column above, and remove your row from §0.1a when
-     the whole item is done;
+   - update the status column above (§0.1a is kept current separately,
+     on `main`);
    - update §0.5 and §0.6 if what can start next has changed;
    - add any new decisions to [DECISIONS.md](DECISIONS.md);
    - correct the README, ARCHITECTURE and ADMIN_GUIDE if behaviour changed.
 
-   The owner merges. Then delete the branch.
+   The owner merges. Then delete the branch, and mark that part **Done**
+   in §0.1a. When the whole item is done, move it from §0.1a to §0.1.
 
 Status values: Not started → Designing → Designed (spec approved) → Planned →
 In progress → Done.
