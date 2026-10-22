@@ -30,11 +30,13 @@ The README ("Layout") describes each crate.
    Don't rely on a copy of these lists anywhere else; copies go stale.
    Two people work on PADM in turns, so read "Working in turns" below
    before you start.
-   - **Working on the UI redesign, round 2 (R2)?** Start with the
-     [R2 brief](docs/superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
-   - **Working on SharePoint storage (plans P3, P4)?** Start with the
+   - **Next up: SharePoint storage, plan P3, then P4.** Start with ROADMAP
+     §0.5 (its pre-flight steps), then the
      [plan index](docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md),
      which holds their shared contracts.
+   - **UI redesign R2 is done** (2026-10-22). Its
+     [spec](docs/superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §5.2
+     is the pattern every new admin page follows.
 
 ## Working in turns
 

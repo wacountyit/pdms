@@ -1,8 +1,9 @@
 # PADM UI redesign, round 2 (R2): design
 
 - **Date:** 2026-10-22
-- **Status:** Approved by the owner, 2026-10-22, and built on the `r2-build` branch
-  (decisions D-097 to D-101).
+- **Status:** Approved by the owner on 2026-10-22, built and merged
+  ([PR #4](https://github.com/wacountyit/pdms/pull/4); decisions D-097 to
+  D-101).
 - **Builds on:** the [R2 brief](2026-10-21-ui-redesign-r2-brief.md) and the
   [R1 spec](2026-10-15-ui-redesign-r1-design.md). R2 inherits R1's
   constraints (§3), visual system (§4), app shell (§5) and testing (§15).

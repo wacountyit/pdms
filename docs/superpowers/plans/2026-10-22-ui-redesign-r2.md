@@ -1,8 +1,10 @@
 # PADM UI redesign, round 2 (R2): implementation plan
 
 - **Date:** 2026-10-22
-- **Spec:** [R2 design](../specs/2026-10-22-ui-redesign-r2-design.md). It is
-  on `main` as a draft and **not yet approved by the owner**.
+- **Spec:** [R2 design](../specs/2026-10-22-ui-redesign-r2-design.md),
+  approved 2026-10-22.
+- **Status:** done; all nine parts merged in
+  [PR #4](https://github.com/wacountyit/pdms/pull/4).
 - **How it is built:** all nine parts on one branch, `r2-build`, as one pull
   request. The build started before the spec's formal approval; the owner
   approved it on 2026-10-22 (D-097).

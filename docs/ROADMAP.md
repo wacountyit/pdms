@@ -14,7 +14,7 @@ record**. Read it first if you are picking up the work.
 
 ## 0. Where things stand
 
-Last updated 2026-10-21.
+Last updated 2026-10-22.
 
 The product is now called **PADM**. The code, crates, binary, and Docker
 images are still named `pdms`.
@@ -28,6 +28,8 @@ images are still named `pdms`.
     2 ignored.
   - On `main` on 2026-10-21, after P1, UI redesign R1 and P2, it gives 391
     passed, 0 failed, and 2 ignored.
+  - On `main` on 2026-10-22, after UI redesign R2 (with sub-project 3), it
+    gives 408 passed, 0 failed, and 2 ignored.
   - The ignored ones are the opt-in real-OCR and real-ClamAV tests.
 - **Test deployment:** installed on the county's development server with
   `install.sh`.
@@ -61,6 +63,28 @@ images are still named `pdms`.
   It adds migration `0010` and decision D-096. It is installed on the test
   server with the sync off; the admin guide's "Entra ID user sync" section
   explains how to turn it on.
+- **UI redesign R2** (2026-10-22, by WACountyIT; [PR #2](https://github.com/wacountyit/pdms/pull/2)
+  spec, [PR #3](https://github.com/wacountyit/pdms/pull/3) R1 fixes,
+  [PR #4](https://github.com/wacountyit/pdms/pull/4) the build):
+  - every remaining screen redesigned, including the document forms;
+  - the grouped admin menu and one admin page pattern (P4 builds on both);
+  - dark mode as the default, with a per-person switch;
+  - the dashboard's activity feed;
+  - the browser-tab icon;
+  - the county overview's counts corrected.
+
+  It adds migrations `0011` and `0012` and decisions D-097 to D-101. The
+  [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md) and
+  [plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) describe it.
+- **Sub-project 3, small changes** (2026-10-22, built inside R2, D-087 and
+  D-088 done):
+  - "Partnership Agreement" renamed to Interlocal Agreement (ILA);
+  - admin-curated tags;
+  - the Outlook calendar sync removed;
+  - the OCR status on its own admin page.
+- **Before upgrading the test server to this `main`:** back it up, and read
+  the admin guide's note "The Outlook calendar sync was removed". Everyone
+  sees dark mode until they switch (Your account → Appearance).
 
 ### 0.1a Who is working on what
 
@@ -83,9 +107,9 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **UI redesign R2** (5b) | WACountyIT | Spec: on `main` ([PR #2](https://github.com/wacountyit/pdms/pull/2)); approved by the owner 2026-10-22, recorded on the branch. R1 fixes (spec §3, allowed ahead of the spec): **Done**, [PR #3](https://github.com/wacountyit/pdms/pull/3), merged 2026-10-22 before owner review; screenshot check passed 2026-10-22. Plan: **Done** (on the branch). Build: **Done** on one branch, `r2-build`, as one pull request (started before the spec's approval, which followed the same day). Parts 1 (appointments), 2 (calendar and feeds), 3 (report detail), 4 (admin pages, with sub-project 3 built inside it), 5 (records requests), 6 (notifications, audit and account), 7 (document forms and sections), 8 (activity feed and tab icon) and 9 (dark mode): **Done** on the branch, not yet pushed | `r2-build` (draft PR to come). PR titles start with `R2:` | 2026-10-22 |
+| **Plan P3, SharePoint document storage** (1) | WACountyIT | Pre-flight: **Done** (plan corrected; the owner's decisions recorded as D-102). Phase A (Tasks 1–3: QuickXorHash, naming and column rules, `[sharepoint]` settings, the 503 "unavailable" error): **Done** on the branch, not yet pushed. B (Tasks 4–5), C (Task 6), D (Tasks 7–8), E (Tasks 9–10), F (Task 11): **Not started** | Branch `p3-sharepoint-storage` (local; no draft PR yet, the owner's call). PR title starts with `P3:` | 2026-10-22 |
 
-Nothing else is claimed. §0.5 lists what can start next.
+§0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -120,12 +144,12 @@ taken up.
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
-| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility, done), P3 (storage) and P4 (access, change detection, operations). P3 and P4 were written before P2 and R1 were built, so each needs a pre-flight check against `main` first (§0.5). Not started | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility, done), P3 (storage) and P4 (access, change detection, operations). P3 and P4 were written before P2, R1 and R2 were built, so each needs a pre-flight check against `main` first (§0.5). **P3 is next**; not started | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
-| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Built** inside R2 part 4 (2026-10-22, the owner's call), with migration `0011`; done when the R2 branch merges. The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088 (no separate spec needed); [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
+| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Done** (2026-10-22, built inside R2, [PR #4](https://github.com/wacountyit/pdms/pull/4); migration `0011`). The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088; [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
-| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Built** (2026-10-22) on `r2-build`, all nine parts, with sub-project 3 inside part 4 (D-097 to D-101; migrations `0011` and `0012`). Done when that branch merges. On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md) (approved 2026-10-22), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
+| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
@@ -168,61 +192,58 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **UI redesign R2.** Built on `r2-build` (§0.1a); done when it merges.
-2. **Plan P3, SharePoint document storage.** It can start now, alongside R2.
-   Nearly all of it is in `pdms-core`, and it needs no SharePoint site,
-   because its tests use a mock Graph server. Only its final live test waits
-   on the county.
-   - **Pre-flight first.** The plan was written on 2026-10-15, before P2 and
-     R1 were built.
-     - Check every name it consumes against the code on `main`. The plan
-       index lists what P2 changed.
-     - Renumber the migrations. P2's is `0010` (the plan says `0009`). P3's
-       takes the next free number on `main` and in open PRs: `0013` on
-       2026-10-22, because R2 took `0011` and `0012` (the plan says
-       `0010`).
-     - Correct the plan text in the same branch, before Task 1.
-3. **Plan P4, SharePoint access, change detection and operations.** It starts
-   once P3 **and R2** are merged, because P4 adds a page to R2's admin menu
-   (`Layout::admin_groups()` in `src/views.rs`) and a section to
-   `admin/entra.html`.
+1. **Plan P3, SharePoint document storage. Start here.** Its prerequisites
+   (P1, P2) are merged.
+   - Nearly all of it is in `pdms-core`, and it needs no SharePoint site,
+     because its tests use a mock Graph server. Only its final live test
+     waits on the county.
+   - **Pre-flight first.** The plan was written on 2026-10-15, before P2, R1,
+     R2 and sub-project 3 were built. In the plan's branch, before Task 1:
+     - check every name it consumes against the code on `main` (the plan
+       index lists what P2 changed);
+     - renumber its migration to `0013` (the plan says `0010`): `main` ends
+       at `0012`;
+     - start any new decisions at D-102;
+     - remove anything that assumes the Outlook calendar sync
+       (`graph_calendar`), which sub-project 3 removed;
+     - use the `interlocal_agreement` type key (it was
+       `partnership_agreement`).
+   - Commit the corrected plan text, then build task by task.
+2. **Plan P4, SharePoint access, change detection and operations.** It starts
+   once P3 is merged. R2, which P4 also builds on, is merged.
    - **Same pre-flight:** its migration takes the next free number after
      P3's (`0014` if nothing else takes one; the plan says `0011`), and its
-     decisions take the next free numbers (the plan creates D-091 to D-097,
-     but D-091 to D-101 are already taken).
-   - **Admin page:** `/admin/sharepoint` follows R2's admin page pattern and
-     goes in the admin menu's *Integrations* group (plan index, "Changes
-     recorded when P4 was written").
-4. **Sub-project 3, small changes** (D-087, D-088). Built inside R2's part 4
-   on 2026-10-22 (the owner's call), on the `r2-build` branch: the ILA
-   rename, admin-curated tags, the Outlook sync removed, and the OCR status
-   on its own "Text extraction (OCR)" admin page. Done when that branch
-   merges.
-5. **Security fixes.** The owner holds the findings and hands them out one
+     decisions take the next free numbers after P3's (the plan creates
+     D-091 to D-097, but D-091 to D-101 are taken).
+   - **Admin page:** `/admin/sharepoint` follows R2's admin page pattern
+     and goes in the admin menu's *Integrations* group (plan index,
+     "Changes recorded when P4 was written").
+3. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-6. **Sub-project 4, bulk import.** It needs a spec first, and it needs P3
+4. **Sub-project 4, bulk import.** It needs a spec first, and it needs P3
    merged.
 
 ### 0.6 Which work touches which files
 
 Two pieces of work that share a row can conflict. Check this table before
-you claim something. If your work and claimed work share a row, agree the
+you claim something. (R2 and sub-project 3 are merged, so their columns were
+removed on 2026-10-22; P4 waits for P3, so the two don't overlap in time.) If your work and claimed work share a row, agree the
 order with the owner first. Paths are under `crates/pdms-web/` unless they
 start with `crates/` or name a top-level folder.
 
-| Files | R2 | P3 | P4 | Sub-project 3 |
-|---|---|---|---|---|
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | Redesigns them; Branding gains the dark-mode accent check | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` | Changes `admin/tags.html`. Removes the Outlook part of `admin/outlook.html` (`collab.rs`), and moves the OCR status to a new "Text extraction (OCR)" page |
-| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | The admin tab row becomes a grouped admin menu (`partials/admin_nav.html`, a `Layout.admin_page` field), new components, dark-mode tokens and the `data-theme` attribute, the dark-mode switch in the user block, the tab icon link | No | One admin tab and its `Layout` flag | The "Outlook & OCR" tab changes |
-| Route table: `src/lib.rs`, `src/routes/mod.rs` | `/static/icon.svg` (the tab icon) and `POST /account/appearance` (the dark-mode switch) | No | A new route and module | Removes the Outlook sync routes |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | The R1 follow-ups on the document page (brief §6), the shared `rule_form.html`'s wrapper, the new and edit forms, and the workflow, signature and comment sections (R2 spec §6.8) | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` | Tag entry on the forms. The ILA rename |
-| Web errors and API: `src/error.rs`, `src/routes/api.rs` | No | A new 503 "Temporarily unavailable" response | No | No |
-| Web tests: `crates/pdms-web/tests/` | `shell.rs`, and each page's tests | Possibly the 503 responses | `shell.rs`, and new SharePoint admin tests | `phase5.rs` (the Outlook & OCR page), and the tag tests |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity | The activity feed's event list and query (a new module); the dark-mode accent derivation in `branding/color.rs` | Most of P3 | Most of P4 | Tags. Removing the Outlook sync |
-| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | Sub-project 3's changes (part 4): Outlook settings and job removed, `free_form_tags` off by default | `[sharepoint]` settings and the mirror jobs | Its jobs | Removes the Outlook settings and job |
-| `migrations/` | `0011` (sub-project 3) and `0012` (the per-person color scheme) | The next free number | The next free number after P3's | Possibly one |
-| `.sqlx/` | Yes (the activity feed, the color scheme, view data) | Yes | Yes | Likely |
-| `config/`, `install.sh`, `docker-compose.yml` | Sub-project 3's changes (part 4) | `[sharepoint]` in the example config | The installer, and the Compose secret for the certificate | Removes the Outlook settings and its installer step |
+| Files | P3 | P4 |
+| --- | --- | --- |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | No | One item in the admin menu (`Layout::admin_groups()`) |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | No | A new route and module |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` |
+| Web errors and API: `src/error.rs`, `src/routes/api.rs` | A new 503 "Temporarily unavailable" response | No |
+| Web tests: `crates/pdms-web/tests/` | Possibly the 503 responses | `shell.rs`, and new SharePoint admin tests |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity | Most of P3 | Most of P4 |
+| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | `[sharepoint]` settings and the mirror jobs | Its jobs |
+| `migrations/` | The next free number | The next free number after P3's |
+| `.sqlx/` | Yes | Yes |
+| `config/`, `install.sh`, `docker-compose.yml` | `[sharepoint]` in the example config | The installer, and the Compose secret for the certificate |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
   and ADMIN_GUIDE. In this table, change only your own column. Take

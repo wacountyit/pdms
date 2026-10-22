@@ -1,8 +1,9 @@
 # PADM UI redesign, round 2 (R2): brief
 
 - **Date:** 2026-10-21
-- **Status:** brief, not a spec. This is the starting point for the R2 design
-  spec, which the project owner must approve before any build (ROADMAP §0.4).
+- **Status:** done. R2 was specified, approved and built on 2026-10-22
+  ([spec](2026-10-22-ui-redesign-r2-design.md), [PR #4](https://github.com/wacountyit/pdms/pull/4)).
+  This brief is kept as the record of where it started.
 - **For:** the contributor, and their Claude session, picking up R2. Read
   [`CLAUDE.md`](../../../CLAUDE.md) at the repository root first.
 - **Who has it:** [ROADMAP §0.1a](../../ROADMAP.md#01a-who-is-working-on-what).

@@ -147,22 +147,6 @@ sidecar_timeout_seconds = 300
 max_bytes = 52428800
 min_text_chars = 100           # PDFs with less embedded text are OCR'd
 
-[graph_calendar]
-# Optional: keep all-day Outlook events for document and appointment dates in
-# a shared calendar through Microsoft Graph. See docs/ADMIN_GUIDE.md.
-enabled = false
-tenant_id = ""
-client_id = ""
-# client_secret: put it in secrets/graph_client_secret
-mailbox = ""                   # e.g. "pdms-calendar@yourdomain.org"
-include_appointments = true
-past_days = 30
-future_days = 730
-sync_interval_minutes = 15
-# Per-department calendars (department code = mailbox):
-# [graph_calendar.department_mailboxes]
-# OPS = "ops-calendar@yourdomain.org"
-
 [graph]                         # Microsoft Graph as PADM itself (app registration "PADM Service")
 # tenant_id = ""                # Directory (tenant) ID
 # client_id = ""                # Application (client) ID
