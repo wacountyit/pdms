@@ -401,6 +401,52 @@ async fn dashboard_panels_respect_visibility() {
 }
 
 #[tokio::test]
+async fn coming_up_says_how_many_more_there_are() {
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "AAA", "Dept Alpha")
+        .await
+        .unwrap();
+    let (owner, secret) = user(&app.core, "alice@x.org", Some(dept), None).await;
+    for n in 1..=10 {
+        doc(
+            &app,
+            dept,
+            owner,
+            &format!("Policy {n}"),
+            "policy",
+            MetadataInput {
+                next_review_date: Some(today(&app) + chrono::Duration::days(n)),
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    plan(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let home = b.get("/").await;
+    let coming = panel(&home.body, "upcoming-h");
+    assert_eq!(
+        coming.matches("class=\"date-block\"").count(),
+        8,
+        "{coming}"
+    );
+    assert!(
+        coming.contains(
+            r#"<a href="/calendar?view=agenda&amp;days=30">2 more in the next 30 days</a>"#
+        ),
+        "{coming}"
+    );
+    // The link follows the chosen range.
+    let year = b.get("/?days=365").await;
+    assert!(
+        panel(&year.body, "upcoming-h").contains("2 more in the next 365 days"),
+        "{}",
+        year.body
+    );
+}
+
+#[tokio::test]
 async fn boards_panel_hidden_without_appointment_access() {
     let app = app().await;
     let (_, secret) = user(&app.core, "plain@x.org", None, None).await;

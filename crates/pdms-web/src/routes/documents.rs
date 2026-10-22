@@ -494,6 +494,16 @@ pub async fn list(
             current: current == Some(s),
         });
     }
+    // Archived and superseded have no tab of their own; when the status
+    // filter picks one, it gets a tab so the current view is still marked.
+    if let Some(s @ (DocumentStatus::Archived | DocumentStatus::Superseded)) = current {
+        tabs.push(TabView {
+            label: s.label(),
+            count: count_of(s),
+            href: tab_href(Some(s)),
+            current: true,
+        });
+    }
     let today = pdms_core::schedule::local_today(Utc::now(), state.core.config.timezone());
     let first = (results.page - 1) * results.per_page + 1;
     let showing = if results.total == 0 {
@@ -514,7 +524,17 @@ pub async fn list(
             .items
             .into_iter()
             .map(|d| {
-                let next = next_date(today, d.next_review_date, d.renewal_date, d.expiration_date);
+                let can_be_overdue = !matches!(
+                    d.status,
+                    DocumentStatus::Expired | DocumentStatus::Superseded | DocumentStatus::Archived
+                );
+                let next = next_date(
+                    today,
+                    can_be_overdue,
+                    d.next_review_date,
+                    d.renewal_date,
+                    d.expiration_date,
+                );
                 Row {
                     id: d.id,
                     external_id: d.external_id,
@@ -1238,10 +1258,16 @@ pub async fn show(
         state.tz,
         today,
     );
-    // The owner's review task is due within 30 days or overdue.
+    // The owner's review task is due within 30 days or overdue, and has not
+    // been started yet.
     let start_review = user.ctx.user_id() == Some(d.owner_id)
         && sched.open_tasks.iter().any(|t| {
             t.kind == pdms_core::notifications::rules::DueEvent::Review
+                && matches!(
+                    t.status,
+                    pdms_core::reviews::TaskStatus::Open | pdms_core::reviews::TaskStatus::Overdue
+                )
+                && t.initiated_at.is_none()
                 && (t.due_date - today).num_days() <= 30
         });
     let can_delete = perms.contains(Permission::Delete);
@@ -1251,7 +1277,7 @@ pub async fn show(
         section_links.push(("dates", "Key dates"));
     }
     section_links.extend([
-        ("reviews", "Review & approval"),
+        ("workflow", "Review & approval"),
         ("files", "Files"),
         ("comments", "Comments"),
     ]);

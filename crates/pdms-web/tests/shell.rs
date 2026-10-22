@@ -127,6 +127,27 @@ async fn admin_sees_manage_group_and_admin_tabs() {
         users.body
     );
     assert!(users.body.contains("href=\"/admin/departments\""));
+    // The current admin tab is marked, and only that one.
+    assert!(
+        users
+            .body
+            .contains("<a href=\"/admin/users\" aria-current=\"page\">Users</a>")
+    );
+    assert!(
+        users
+            .body
+            .contains("<a href=\"/admin/departments\" >Departments</a>")
+    );
+    let entra = b.get("/admin/entra").await;
+    assert_eq!(entra.status, StatusCode::OK, "{}", entra.location());
+    assert!(
+        entra
+            .body
+            .contains("<a href=\"/admin/entra\" aria-current=\"page\">")
+    );
+    let tabs = &entra.body[entra.body.find("admin-tabs").unwrap()..];
+    let tabs = &tabs[..tabs.find("</nav>").unwrap()];
+    assert_eq!(tabs.matches("aria-current").count(), 1, "{tabs}");
 }
 
 #[tokio::test]

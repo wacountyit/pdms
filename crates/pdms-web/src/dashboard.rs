@@ -13,11 +13,17 @@ pub fn greeting(local: NaiveTime) -> &'static str {
     }
 }
 
+/// "Good morning, Ada", or just "Good morning" when the name is empty.
+pub fn greeting_line(local: NaiveTime, display_name: &str) -> String {
+    let greeting = greeting(local);
+    match first_name(display_name) {
+        "" => greeting.to_owned(),
+        name => format!("{greeting}, {name}"),
+    }
+}
+
 pub fn first_name(display_name: &str) -> &str {
-    display_name
-        .split_whitespace()
-        .next()
-        .unwrap_or(display_name)
+    display_name.split_whitespace().next().unwrap_or("")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -91,6 +97,14 @@ mod tests {
             action_primary: false,
             href: String::new(),
         }
+    }
+
+    #[test]
+    fn greeting_line_drops_the_comma_without_a_name() {
+        let t = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        assert_eq!(greeting_line(t, "Ada Lovelace"), "Good morning, Ada");
+        assert_eq!(greeting_line(t, ""), "Good morning");
+        assert_eq!(greeting_line(t, "   "), "Good morning");
     }
 
     #[test]

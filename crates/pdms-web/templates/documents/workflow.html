@@ -60,7 +60,7 @@
   {% endfor %}
 
   {% if wf.can_submit %}
-  <details class="submit-review" {% if wf.rounds.is_empty() %}open{% endif %}>
+  <details class="submit-review disclosure" {% if wf.rounds.is_empty() %}open{% endif %}>
     <summary>Submit for review and approval</summary>
     <form method="post" action="/documents/{{ d.id }}/workflow" class="grid-form">
       <input type="hidden" name="_csrf" value="{{ l.csrf }}">

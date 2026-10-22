@@ -64,6 +64,9 @@ pub struct Layout {
     pub can_create: bool,
     /// Shows the administration tab row.
     pub admin_tabs: bool,
+    /// The current administration tab (its path under `/admin/`), marked
+    /// with `aria-current`; empty outside the admin pages.
+    pub admin_page: &'static str,
 }
 
 /// Up to two uppercase initials: the first letters of the first two words,
@@ -101,6 +104,12 @@ impl Layout {
 }
 
 impl Layout {
+    /// Marks `page` (its path under `/admin/`) as the current admin tab.
+    pub fn admin_tab(mut self, page: &'static str) -> Self {
+        self.admin_page = page;
+        self
+    }
+
     pub fn new(
         state: &AppState,
         user: &CurrentUser,
@@ -116,6 +125,7 @@ impl Layout {
             user_department: user.department_label.clone(),
             can_create: user.can_create,
             admin_tabs: section == "admin",
+            admin_page: "",
             title: title.to_owned(),
             user_name: user.session.display_name.clone(),
             csrf: user.csrf.clone(),

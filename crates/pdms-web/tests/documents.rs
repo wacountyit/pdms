@@ -636,6 +636,16 @@ async fn status_tabs_show_counts_and_keep_filters() {
     let page = b.get("/documents?status=archived").await;
     assert!(page.body.contains("Safety old") && !page.body.contains("Budget memo"));
     assert!(page.body.contains("<details class=\"disclosure\" open"));
+    // Archived has no tab of its own, so one is added and marked current.
+    let tabs = &page.body[page.body.find("aria-label=\"Status\"").unwrap()..];
+    let tabs = &tabs[..tabs.find("</nav>").unwrap()];
+    let (_, inner) = tab(tabs, "archived");
+    assert!(inner.contains("aria-current=\"page\""), "{inner}");
+    assert!(
+        inner.contains("Archived") && inner.contains(">1<"),
+        "{inner}"
+    );
+    assert_eq!(tabs.matches("aria-current").count(), 1, "{tabs}");
 }
 
 #[tokio::test]
@@ -671,6 +681,24 @@ async fn next_date_column_shows_overdue_and_labels() {
     assert!(body.contains("Next date") && !body.contains("<th scope=\"col\">Next review"));
     assert!(body.contains("Overdue · "), "{body}");
     assert!(body.contains("Renewal · "));
+    // An expired document's past review is not called overdue.
+    seed(
+        &app,
+        dept,
+        uid,
+        "Lapsed one",
+        S::Active,
+        Some(today - day),
+        None,
+    )
+    .await;
+    sqlx::query("UPDATE documents SET status = 'expired' WHERE title = 'Lapsed one'")
+        .execute(&app.core.db)
+        .await
+        .unwrap();
+    let body = b.get("/documents?status=expired").await.body;
+    assert!(body.contains("Lapsed one"), "{body}");
+    assert!(!body.contains("Overdue · "), "{body}");
     let empty = b.get("/documents?q=zzzznothing").await.body;
     assert!(empty.contains("Clear filters"));
 }
@@ -765,7 +793,7 @@ async fn document_page_keeps_every_action() {
     assert!(body.contains(&format!("href=\"/documents/{id}/history\"")));
 
     // "On this page" links only to sections that exist: no dates here.
-    for anchor in ["reviews", "files", "comments", "manage"] {
+    for anchor in ["workflow", "files", "comments", "manage"] {
         assert!(body.contains(&format!("href=\"#{anchor}\"")), "{anchor}");
         assert!(body.contains(&format!("id=\"{anchor}\"")), "{anchor}");
     }
@@ -825,6 +853,17 @@ async fn start_review_button_only_for_owner_with_due_review() {
         let page = a.get(&format!("/documents/{d}")).await;
         assert!(page.body.contains(start), "{}", page.body);
     }
+    // Once the review is started, the button goes.
+    let page = a.get(&format!("/documents/{soon}")).await;
+    let start_form = regex::Regex::new(&format!(
+        r#"action="(/documents/{soon}/tasks/[0-9a-f-]+/start)""#
+    ))
+    .unwrap();
+    let action = start_form.captures(&page.body).unwrap()[1].to_owned();
+    let r = a.post(&action, &[("_csrf", &page.csrf())]).await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    let page = a.get(&format!("/documents/{soon}")).await;
+    assert!(!page.body.contains(">Start review</a>"), "already started");
     let page = a.get(&format!("/documents/{later}")).await;
     // The open task's card, not the "Days until review" tile's "Review due …".
     let card = format!(

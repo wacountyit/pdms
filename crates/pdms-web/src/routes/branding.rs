@@ -48,7 +48,7 @@ async fn page(
         "Branding"
     };
     let page = BrandingPage {
-        l: Layout::new(state, user, flash, title, "admin"),
+        l: Layout::new(state, user, flash, title, "admin").admin_tab("branding"),
         org_name: b.org_name.clone().unwrap_or_default(),
         config_name: state.core.config.org.name.clone(),
         accent: b.accent_or_default().to_owned(),

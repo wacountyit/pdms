@@ -14,14 +14,20 @@ pub struct NextDate {
 
 /// Overdue review or renewal wins (earliest past one); otherwise the earliest
 /// future review, renewal, or expiration; otherwise nothing.
+///
+/// `can_be_overdue` is false for expired, superseded and archived documents,
+/// which the overdue report and the dashboard leave out too: their past dates
+/// are not shown as "Overdue".
 pub fn next_date(
     today: NaiveDate,
+    can_be_overdue: bool,
     review: Option<NaiveDate>,
     renewal: Option<NaiveDate>,
     expiration: Option<NaiveDate>,
 ) -> Option<NextDate> {
     let past = [(review, "Review"), (renewal, "Renewal")]
         .into_iter()
+        .filter(|_| can_be_overdue)
         .filter_map(|(d, l)| d.filter(|d| *d < today).map(|d| (d, l)))
         .min_by_key(|(d, _)| *d);
     if let Some((date, _)) = past {
@@ -58,6 +64,7 @@ mod tests {
     fn overdue_review_beats_future_dates() {
         let n = next_date(
             d("2026-10-15"),
+            true,
             Some(d("2023-05-01")),
             Some(d("2027-01-01")),
             None,
@@ -73,6 +80,7 @@ mod tests {
     fn earliest_future_date_with_label() {
         let n = next_date(
             d("2026-10-15"),
+            true,
             Some(d("2026-11-03")),
             Some(d("2026-11-07")),
             Some(d("2026-12-31")),
@@ -82,9 +90,9 @@ mod tests {
             (n.label, n.date, n.overdue),
             ("Review", d("2026-11-03"), false)
         );
-        let n = next_date(d("2026-10-15"), None, None, Some(d("2026-12-31"))).unwrap();
+        let n = next_date(d("2026-10-15"), true, None, None, Some(d("2026-12-31"))).unwrap();
         assert_eq!(n.label, "Expires");
-        let n = next_date(d("2026-10-15"), Some(d("2026-10-15")), None, None).unwrap();
+        let n = next_date(d("2026-10-15"), true, Some(d("2026-10-15")), None, None).unwrap();
         assert_eq!(
             (n.label, n.overdue),
             ("Review", false),
@@ -93,11 +101,28 @@ mod tests {
     }
 
     #[test]
-    fn past_expiration_alone_is_nothing() {
+    fn past_dates_are_not_overdue_when_the_document_cannot_be() {
         assert_eq!(
-            next_date(d("2026-10-15"), None, None, Some(d("2025-01-01"))),
+            next_date(d("2026-10-15"), false, Some(d("2023-05-01")), None, None),
             None
         );
-        assert_eq!(next_date(d("2026-10-15"), None, None, None), None);
+        let n = next_date(
+            d("2026-10-15"),
+            false,
+            Some(d("2023-05-01")),
+            Some(d("2027-01-01")),
+            None,
+        )
+        .unwrap();
+        assert_eq!((n.label, n.overdue), ("Renewal", false));
+    }
+
+    #[test]
+    fn past_expiration_alone_is_nothing() {
+        assert_eq!(
+            next_date(d("2026-10-15"), true, None, None, Some(d("2025-01-01"))),
+            None
+        );
+        assert_eq!(next_date(d("2026-10-15"), true, None, None, None), None);
     }
 }

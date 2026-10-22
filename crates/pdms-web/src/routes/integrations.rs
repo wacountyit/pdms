@@ -170,7 +170,8 @@ pub async fn admin_api(
     let tokens = api_tokens::list_all(&state.core, &user.ctx).await?;
     let requests = api_tokens::recent_requests(&state.core, &user.ctx, 200).await?;
     let page = ApiAdminPage {
-        l: Layout::new(&state, &user, flash, "API tokens and request log", "admin"),
+        l: Layout::new(&state, &user, flash, "API tokens and request log", "admin")
+            .admin_tab("api"),
         tokens: tokens.into_iter().map(|t| token_row(&state, t)).collect(),
         times: requests
             .iter()
@@ -244,7 +245,7 @@ pub async fn webhooks_page(
     user.require(&state, Capability::ManageIntegrations, "/admin/webhooks")
         .await?;
     let page = WebhooksPage {
-        l: Layout::new(&state, &user, flash, "Webhooks", "admin"),
+        l: Layout::new(&state, &user, flash, "Webhooks", "admin").admin_tab("webhooks"),
         hooks: webhooks::list(&state.core, &user.ctx).await?,
         deliveries: webhooks::deliveries(&state.core, &user.ctx, None, 100)
             .await?
@@ -286,7 +287,8 @@ pub async fn webhook_page(
             flash,
             &format!("Webhook: {}", w.name),
             "admin",
-        ),
+        )
+        .admin_tab("webhooks"),
         events: w.events.join("\n"),
         deliveries: webhooks::deliveries(&state.core, &user.ctx, Some(id), 200)
             .await?

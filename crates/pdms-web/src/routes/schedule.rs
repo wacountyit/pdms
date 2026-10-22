@@ -106,9 +106,17 @@ struct DashboardPage {
     tile_tasks: usize,
     attention: Vec<AttentionRow>,
     upcoming: Vec<UpcomingView>,
+    /// Upcoming items past the ones shown.
+    upcoming_more: usize,
     boards: Option<Vec<SeatView>>,
+    /// Seats needing attention past the ones shown.
+    boards_more: usize,
     recent: Vec<RecentView>,
 }
+
+/// How many items "Coming up" and "Boards and commissions" show.
+const UPCOMING_SHOWN: usize = 8;
+const BOARDS_SHOWN: usize = 6;
 
 #[derive(Deserialize, Default)]
 pub struct DashQuery {
@@ -233,17 +241,14 @@ pub async fn dashboard(
         ),
     );
 
-    let boards = if appointments::any_visible(core, &user.ctx).await? {
-        Some(
-            appointments::attention(core, &user.ctx, today, 90)
-                .await?
-                .iter()
-                .take(6)
-                .map(seat_view)
-                .collect(),
+    let (boards, boards_more) = if appointments::any_visible(core, &user.ctx).await? {
+        let seats = appointments::attention(core, &user.ctx, today, 90).await?;
+        (
+            Some(seats.iter().take(BOARDS_SHOWN).map(seat_view).collect()),
+            seats.len().saturating_sub(BOARDS_SHOWN),
         )
     } else {
-        None
+        (None, 0)
     };
 
     let found = search::search(
@@ -285,11 +290,7 @@ pub async fn dashboard(
 
     let page = DashboardPage {
         l: Layout::new(&state, &user, flash, "Dashboard", "home"),
-        greeting: format!(
-            "{}, {}",
-            dashboard::greeting(now_local.time()),
-            dashboard::first_name(&user.session.display_name)
-        ),
+        greeting: dashboard::greeting_line(now_local.time(), &user.session.display_name),
         date_line: now_local.format("%A, %B %-d, %Y").to_string(),
         days,
         tile_overdue,
@@ -300,7 +301,7 @@ pub async fn dashboard(
         upcoming: dash
             .upcoming
             .iter()
-            .take(8)
+            .take(UPCOMING_SHOWN)
             .map(|e| UpcomingView {
                 month: e.date.format("%b").to_string().to_uppercase(),
                 day: e.date.format("%-d").to_string(),
@@ -312,7 +313,9 @@ pub async fn dashboard(
                 department: e.department.clone(),
             })
             .collect(),
+        upcoming_more: dash.upcoming.len().saturating_sub(UPCOMING_SHOWN),
         boards,
+        boards_more,
         recent,
     };
     Ok(Html(page.render()?))
@@ -1084,7 +1087,8 @@ pub async fn admin_rules(
         })
         .collect();
     let page = AdminRulesPage {
-        l: Layout::new(&state, &user, flash, "Notification rules", "admin"),
+        l: Layout::new(&state, &user, flash, "Notification rules", "admin")
+            .admin_tab("notification-rules"),
         rules,
         types,
         opts: RecipientOptions::load(&state).await?,
@@ -1157,7 +1161,8 @@ pub async fn deliveries(
     .await
     .map_err(CoreError::from)?;
     let page = DeliveriesPage {
-        l: Layout::new(&state, &user, flash, "Notification delivery log", "admin"),
+        l: Layout::new(&state, &user, flash, "Notification delivery log", "admin")
+            .admin_tab("notifications"),
         rows: rows
             .into_iter()
             .map(|r| DeliveryRow {
