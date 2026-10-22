@@ -83,7 +83,7 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **UI redesign R2** (5b) | WACountyIT | Spec: **Not started**; the brief §9 questions go to the owner first. Plan: **Not started**. Build parts, all **Not started**: admin pages; calendar and feeds; appointments; records requests; notifications, audit and account; report detail | Branch `r2-spec` (spec); later parts on their own `r2-…` branches. PR titles start with `R2:` | 2026-10-22 |
+| **UI redesign R2** (5b) | WACountyIT | Spec: on `main` as a draft ([PR #2](https://github.com/wacountyit/pdms/pull/2), merged 2026-10-22 before owner review); waiting for the owner's approval. R1 fixes (spec §3, allowed ahead of the spec): **In progress**. Plan: **Not started**. Build parts, all **Not started**: appointments; calendar and feeds; report detail; admin pages; records requests; notifications, audit and account; document forms and sections; activity feed and tab icon; dark mode | `r2-r1-fixes`; later parts on their own `r2-…` branches. PR titles start with `R2:` | 2026-10-22 |
 
 Nothing else is claimed. §0.5 lists what can start next.
 
