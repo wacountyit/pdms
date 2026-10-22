@@ -122,10 +122,10 @@ taken up.
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
 | 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility, done), P3 (storage) and P4 (access, change detection, operations). P3 and P4 were written before P2 and R1 were built, so each needs a pre-flight check against `main` first (§0.5). Not started | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
-| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started. Needs a short plan. It shares screens with R2 (§0.6) | D-087, D-088 (no separate spec needed) |
+| 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | Not started. Needs a short plan. The owner does it, before R2 reaches the Tags and Outlook & OCR pages, and moves the OCR status to a new "Text extraction (OCR)" admin page (decided 2026-10-22) | D-087, D-088 (no separate spec needed) |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
-| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | **Not started**: the brief is ready, and the work is claimed by the second contributor (§0.1a). On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them, so R2 coordinates with them (§0.6, brief §7) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md); the R2 spec and plan come next |
+| 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail) | **Designing**: the spec is drafted (2026-10-22) and waits for the owner's approval; it adds dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon to the scope. On 2026-10-21 the owner started R2 in parallel with 1–3 instead of after them, so R2 coordinates with them (§0.6, brief §7) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md) (draft); the plan comes next |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
@@ -193,8 +193,9 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
    short plan first.
    - It changes two admin pages that R2 redesigns (`admin/tags.html` and
      `admin/outlook.html`), and the document forms.
-   - Either do it before R2 reaches those pages, or have the person doing
-     R2 do it. The owner decides which (§0.7).
+   - The owner does it, before R2 reaches those pages (decided
+     2026-10-22). It also moves the OCR status to its own "Text extraction
+     (OCR)" admin page, which R2 then styles.
 5. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
 6. **Sub-project 4, bulk import.** It needs a spec first, and it needs P3
@@ -209,16 +210,16 @@ start with `crates/` or name a top-level folder.
 
 | Files | R2 | P3 | P4 | Sub-project 3 |
 |---|---|---|---|---|
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | Redesigns them | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` | Changes `admin/tags.html`. Removes the Outlook part of `admin/outlook.html` (`collab.rs`) |
-| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | Admin tabs (the current tab needs a `Layout` field), new components | No | One admin tab and its `Layout` flag | The "Outlook & OCR" tab changes |
-| Route table: `src/lib.rs`, `src/routes/mod.rs` | Only if a page moves | No | A new route and module | Removes the Outlook sync routes |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | Possibly: the R1 follow-ups on the document page (brief §6), the shared `rule_form.html`, and the forms and fragments in brief §3.3 if the owner adds them | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` | Tag entry on the forms. The ILA rename |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | Redesigns them; Branding gains the dark-mode accent check | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` | Changes `admin/tags.html`. Removes the Outlook part of `admin/outlook.html` (`collab.rs`), and moves the OCR status to a new "Text extraction (OCR)" page |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | The admin tab row becomes a grouped admin menu (`partials/admin_nav.html`, a `Layout.admin_page` field), new components, dark-mode tokens and the `data-theme` attribute, the dark-mode switch in the user block, the tab icon link | No | One admin tab and its `Layout` flag | The "Outlook & OCR" tab changes |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | `/static/icon.svg` (the tab icon) and `POST /account/appearance` (the dark-mode switch) | No | A new route and module | Removes the Outlook sync routes |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | The R1 follow-ups on the document page (brief §6), the shared `rule_form.html`'s wrapper, the new and edit forms, and the workflow, signature and comment sections (R2 spec §6.8) | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` | Tag entry on the forms. The ILA rename |
 | Web errors and API: `src/error.rs`, `src/routes/api.rs` | No | A new 503 "Temporarily unavailable" response | No | No |
 | Web tests: `crates/pdms-web/tests/` | `shell.rs`, and each page's tests | Possibly the 503 responses | `shell.rs`, and new SharePoint admin tests | `phase5.rs` (the Outlook & OCR page), and the tag tests |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity | No | Most of P3 | Most of P4 | Tags. Removing the Outlook sync |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity | The activity feed's event list and query (a new module); the dark-mode accent derivation in `branding/color.rs` | Most of P3 | Most of P4 | Tags. Removing the Outlook sync |
 | `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | No | `[sharepoint]` settings and the mirror jobs | Its jobs | Removes the Outlook settings and job |
-| `migrations/` | None expected | The next free number | The next free number after P3's | Possibly one |
-| `.sqlx/` | Likely (new queries for view data) | Yes | Yes | Likely |
+| `migrations/` | One, in its last part: the per-person color scheme (the next free number when it is built) | The next free number | The next free number after P3's | Possibly one |
+| `.sqlx/` | Yes (the activity feed, the color scheme, view data) | Yes | Yes | Likely |
 | `config/`, `install.sh`, `docker-compose.yml` | No | `[sharepoint]` in the example config | The installer, and the Compose secret for the certificate | Removes the Outlook settings and its installer step |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
@@ -236,9 +237,6 @@ turns" in `CLAUDE.md`); this table is for the ones that can wait.
 
 | Question | Raised by | What it holds up |
 |---|---|---|
-| R2 scope, admin navigation, which screens come first, where the OCR settings go, the tags page, phone widths, R1 leftovers | R2 brief §9 | The R2 spec |
-| Who does sub-project 3, and does it come before or after R2's admin pages? | §0.5 | Sub-project 3, and R2's tags and Outlook & OCR pages |
-| The county overview's totals can differ. The status chart counts superseded documents under "Other", but the Documents tile leaves them out. The overdue tile counts appointments, but the chart's Overdue segment doesn't. Add a subtitle, or change what is counted? | The R1 build (R2 brief §6) | Nothing. R2 can fix it once it's decided |
 | Confirm: an Entra-linked account that also has a local password is departed like any other when Entra disables it (D-096) | The P2 build | Nothing; it is built that way |
 | Confirm: identity provider group mappings are not applied while the Entra sync is on (D-096) | The P2 build | Nothing; it is built that way |
 | Two timing cases in how Department mapping changes and the sync interact were left as they are in the P2 build; the owner has the details. Fix them now, or keep the admin guide's advice (press **Full resync** after changing mappings during a sync)? | The P2 build | Nothing |
