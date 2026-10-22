@@ -525,7 +525,7 @@ consistent for everyone who filters by it:
 
 | Setting (`config/pdms.toml`) | Default | Notes |
 |---|---|---|
-| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage |
+| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage, or `sharepoint` to keep document files in a SharePoint library (below) |
 | `[storage] max_upload_bytes` | 100 MB | |
 | `[storage.s3] endpoint, bucket, region, access_key_id, prefix` | | Any S3-compatible service: AWS, SeaweedFS, MinIO, and appliance S3 endpoints. Put the secret in a file and set `PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE`. Enable bucket versioning or object lock if available |
 | `[storage] clamav_addr` | empty (off) | e.g. `clamav:3310` with `docker compose --profile clamav up -d`. The bundled `deploy/clamav/clamd.conf` raises clamd's size limits to match uploads |
@@ -534,6 +534,71 @@ consistent for everyone who filters by it:
 Accepted file types are decided from the file's content: PDF, Word, Excel,
 PowerPoint (current and 97–2003), OpenDocument, RTF, images, text/CSV, and
 email. Other files are refused, and the refusal is logged.
+
+### SharePoint storage
+
+With `[storage] backend = "sharepoint"`, every document file uploaded through
+PADM is stored in one SharePoint document library, so people can also browse
+the files there, read-only. PADM stays the system people use: details,
+permissions, workflow, reminders, search and the audit log stay in PADM, and
+PADM wins when the two disagree (D-081). Export packages (records requests)
+stay in `local_path`.
+
+| Setting (`config/pdms.toml`) | Default | Notes |
+|---|---|---|
+| `[sharepoint] site_url` | empty | The site, for example `https://contoso.sharepoint.com/sites/PADMRecords` |
+| `[sharepoint] library` | `Documents` | The document library's name |
+| `[sharepoint] upload_chunk_bytes` | 10 MiB | Files are sent in pieces of this size: a multiple of 320 KiB, at most 60 MiB |
+| `[sharepoint] delta_interval_minutes` | 5 | For the change check that comes with plan P4 |
+
+**Before you turn it on:**
+1. Set up the site as the SharePoint setup steps describe (the design spec,
+   Appendix A): owners only, sharing restricted, versioning on, and
+   `County-wide` readable by **Everyone except external users**. If PADM has
+   to create `County-wide` itself, it logs a warning, because that read
+   permission is then missing.
+2. The `PADM Service` app registration needs the Graph application permission
+   `Sites.Selected`, with full control on this one site, and PADM needs the
+   `[graph]` settings and certificate described under "Entra ID user sync"
+   above. PADM refuses to start with `backend = "sharepoint"` and no `[graph]`
+   section. The exact commands for the site grant come with plan P4's setup
+   guide.
+3. **Start with an empty system.** Files already stored locally or in S3 are
+   not moved to SharePoint and can't be read once the backend changes. Turn
+   SharePoint on before real documents are added; on the test server, reset
+   it when you switch.
+
+**How it works:**
+- **Layout.** `Departments/`, `County-wide/` or `Restricted/` (from the
+  document's visibility), then the department's folder, then one folder per
+  document (`{ID} – {title}`) with one file per version. Files are never
+  overwritten. Deleted documents wait in `Restricted/`.
+- **Uploads.** A file is uploaded while the person waits, before anything is
+  saved. If SharePoint can't be reached, nothing is saved and the form comes
+  back with "File storage (SharePoint) is unavailable right now, so nothing
+  was saved". Empty files are refused, because SharePoint can't store them.
+- **Names and columns.** A new file first has a temporary name,
+  `{ID} (uploading …)`. A background job (`sharepoint.mirror_document`), which
+  runs after every change, then gives it its final name, such as
+  `CON-2026-000012 v2 – Amendment.pdf`, fills in the PADM columns (type,
+  tags, status, dates, owner, Current, "Open in PADM"), and moves or renames
+  folders. A nightly sweep queues it for every document, which picks up
+  renamed departments, types and people.
+- **Changes that narrow access move the folder first**: tightening
+  visibility, moving a document to another department, and deleting it. If
+  SharePoint can't be reached, the change is refused ("…so the change was not
+  made") and nothing changes. Every folder move is in the audit log as
+  `sharepoint.folder_moved`.
+- **Downloads** are streamed through PADM and checked against the SHA-256
+  recorded at upload. If someone changed the file in SharePoint, the download
+  stops with an error, the file is marked as changed, and
+  `sharepoint.changed_outside` is written to the audit log. Restoring an
+  earlier version copies its file into a new file.
+- **Integrity check.** `verify-integrity` does not re-read SharePoint files;
+  it reports how many it left to the SharePoint change check (plan P4).
+- **Known gap.** If a save fails after the upload, or after a folder has
+  already moved, the uploaded file or the moved folder stays in SharePoint
+  until the nightly sweep or P4's change check finds it.
 
 ## 5. Reminders, reviews, and the calendar
 
@@ -903,7 +968,8 @@ docker compose run --rm app verify-integrity
 ```
 
 It re-hashes every stored file, checks every export package and version, and
-verifies the audit chain; it exits with code 2 if anything is wrong.
+verifies the audit chain; it exits with code 2 if anything is wrong. Files
+stored in SharePoint are counted separately and not re-read.
 
 ## 13. Configuration reference
 

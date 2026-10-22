@@ -1067,3 +1067,73 @@ async fn deleted_documents_leave_the_department_folder() {
     sharepoint::mirror_document(&core, id).await.unwrap();
     assert_eq!(sp.names("Departments/Road and Bridge").len(), 1);
 }
+
+/// Round trip against a real SharePoint **test** site. Not run by default.
+///
+/// ```text
+/// PDMS_LIVE_TENANT_ID=… PDMS_LIVE_CLIENT_ID=… PDMS_LIVE_CERTIFICATE_FILE=/path/graph.pem \
+/// PDMS_LIVE_SITE_URL=https://<tenant>.sharepoint.com/sites/PADMRecordsTest \
+/// cargo test -p pdms-core --test sharepoint live_sharepoint_round_trip -- --ignored --nocapture
+/// ```
+///
+/// It leaves one document folder in the site's `Restricted` area; the
+/// printed path says where.
+#[tokio::test]
+#[ignore = "needs a real SharePoint test site and app registration"]
+async fn live_sharepoint_round_trip() {
+    let var = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("set {k}"));
+    let graph = pdms_core::config::GraphConfig {
+        tenant_id: var("PDMS_LIVE_TENANT_ID"),
+        client_id: var("PDMS_LIVE_CLIENT_ID"),
+        certificate: pdms_core::config::Secret::new(
+            std::fs::read_to_string(var("PDMS_LIVE_CERTIFICATE_FILE")).unwrap(),
+        ),
+        ..Default::default()
+    };
+    let site = var("PDMS_LIVE_SITE_URL");
+    let (core, _db) = core_with(|c| {
+        c.graph = graph;
+        c.storage.backend = StorageBackend::SharePoint;
+        c.sharepoint.site_url = site;
+    })
+    .await;
+    let code = format!(
+        "LIVE{}",
+        Uuid::new_v4()
+            .simple()
+            .to_string()
+            .chars()
+            .take(6)
+            .collect::<String>()
+            .to_uppercase()
+    );
+    let (dept, alice) = editing_department(
+        &core,
+        &code,
+        &format!("PADM live test {code}"),
+        "live@x.org",
+    )
+    .await;
+    let ctx = as_user(&core, alice).await;
+    let bytes = pdf("PADM live SharePoint test");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Live test",
+        Visibility::Department,
+        Some(("live.pdf", &bytes)),
+    )
+    .await;
+    sharepoint::mirror_document(&core, id).await.unwrap();
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert_eq!(read_all(dl.stream).await.unwrap(), bytes);
+    documents::set_visibility(&core, &ctx, id, Visibility::Restricted)
+        .await
+        .unwrap();
+    println!(
+        "left in SharePoint: Restricted/PADM live test {code}/{} – Live test",
+        external_id(&core, id).await
+    );
+}

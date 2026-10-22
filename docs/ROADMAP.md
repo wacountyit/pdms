@@ -144,7 +144,7 @@ taken up.
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
-| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Planned**: spec approved; plans P1 (visibility, done), P3 (storage) and P4 (access, change detection, operations). P3 and P4 were written before P2, R1 and R2 were built, so each needs a pre-flight check against `main` first (§0.5). **P3 is next**; not started | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **In progress**: spec approved. P1 (visibility) done. P3 (storage) done (2026-10-22: [PR #5](https://github.com/wacountyit/pdms/pull/5) plus a follow-up with the example config, the opt-in live test and the docs; migration `0013`; D-102, D-103). **P4** (access, change detection, operations) is next; it needs the same pre-flight check against `main` (§0.5) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Done** (2026-10-22, built inside R2, [PR #4](https://github.com/wacountyit/pdms/pull/4); migration `0011`). The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088; [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
@@ -192,36 +192,25 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **Plan P3, SharePoint document storage. Start here.** Its prerequisites
-   (P1, P2) are merged.
-   - Nearly all of it is in `pdms-core`, and it needs no SharePoint site,
-     because its tests use a mock Graph server. Only its final live test
-     waits on the county.
-   - **Pre-flight first.** The plan was written on 2026-10-15, before P2, R1,
-     R2 and sub-project 3 were built. In the plan's branch, before Task 1:
-     - check every name it consumes against the code on `main` (the plan
-       index lists what P2 changed);
-     - renumber its migration to `0013` (the plan says `0010`): `main` ends
-       at `0012`;
-     - start any new decisions at D-102;
-     - remove anything that assumes the Outlook calendar sync
-       (`graph_calendar`), which sub-project 3 removed;
-     - use the `interlocal_agreement` type key (it was
-       `partnership_agreement`).
-   - Commit the corrected plan text, then build task by task.
-2. **Plan P4, SharePoint access, change detection and operations.** It starts
-   once P3 is merged. R2, which P4 also builds on, is merged.
-   - **Same pre-flight:** its migration takes the next free number after
-     P3's (`0014` if nothing else takes one; the plan says `0011`), and its
-     decisions take the next free numbers after P3's (the plan creates
-     D-091 to D-097, but D-091 to D-101 are taken).
+1. **Plan P4, SharePoint access, change detection and operations. Start
+   here.** P3 ([PR #5](https://github.com/wacountyit/pdms/pull/5)) and R2,
+   which P4 builds on, are merged.
+   - **Pre-flight first**, as P3 had (its plan header shows how): check every
+     name it consumes against `main`, using the plan index's "Produced by P3"
+     table; its migration takes the next free number after P3's (`0014` if
+     nothing else takes one; the plan says `0011`), and its decisions take
+     the next free numbers (the plan creates D-091 to D-097, but D-091 to
+     D-103 are taken).
+   - **P3 left for P4:** re-export `sharepoint::files::flag_changed` for the
+     change check; `verify-integrity` already leaves SharePoint files to it;
+     the orphans listed in §4.
    - **Admin page:** `/admin/sharepoint` follows R2's admin page pattern
      and goes in the admin menu's *Integrations* group (plan index,
      "Changes recorded when P4 was written").
-3. **Security fixes.** The owner holds the findings and hands them out one
+2. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-4. **Sub-project 4, bulk import.** It needs a spec first, and it needs P3
-   merged.
+3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+   imports into, is merged.
 
 ### 0.6 Which work touches which files
 
@@ -238,7 +227,7 @@ start with `crates/` or name a top-level folder.
 | Route table: `src/lib.rs`, `src/routes/mod.rs` | No | A new route and module |
 | Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` |
 | Web errors and API: `src/error.rs`, `src/routes/api.rs` | A new 503 "Temporarily unavailable" response | No |
-| Web tests: `crates/pdms-web/tests/` | Possibly the 503 responses | `shell.rs`, and new SharePoint admin tests |
+| Web tests: `crates/pdms-web/tests/` | The 503 responses, and the new-document form during a SharePoint outage | `shell.rs`, and new SharePoint admin tests |
 | `crates/pdms-core`: documents, storage, OCR, exports, integrity | Most of P3 | Most of P4 |
 | `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | `[sharepoint]` settings and the mirror jobs | Its jobs |
 | `migrations/` | The next free number | The next free number after P3's |
@@ -405,6 +394,8 @@ Things that work but are limited, or were deliberately left for later:
 | Scaling | Login and API rate limits live in memory per app instance; one app instance is assumed. | Fine for a single organization; matters only for multiple app instances. | M |
 | OCR | English only; date suggestions are keyword-based and miss unusual wording. | Spanish documents, odd contract language. | S–M |
 | Settings | Most settings live in `config/pdms.toml` (installer or a text editor), not in an admin screen. | IT staff need shell access for some changes. | M |
+| SharePoint storage | **Orphans.** If a save fails after its file was uploaded, or after a narrowing change already moved the folder, the file or the moved folder stays in SharePoint until the nightly mirror sweep or P4's change check finds it (D-102). | SharePoint can briefly hold a file PADM has no record of, or a folder narrower than PADM says. Both are the safe direction. | S |
+| SharePoint storage | **No migration between storage backends.** Turning SharePoint on doesn't move files already stored locally or in S3, and they can't be read afterwards. | Turn it on before real documents are added; the test server is reset when it is switched (D-102). | M |
 | Audit | No archival of old audit entries (nothing is purged; forwarding gives an external copy). | Only matters after many years of heavy use. | S |
 
 ---

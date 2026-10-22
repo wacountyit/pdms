@@ -583,7 +583,7 @@ into the binary). Source files carry SPDX identifiers; migrations do not,
 because editing an applied migration changes its checksum and would stop
 existing installations from starting.
 
-### D-081 SharePoint holds the files; PADM keeps everything else — Accepted (design, not built)
+### D-081 SharePoint holds the files; PADM keeps everything else — Accepted (built in P3, 2026-10-22)
 The county wants documents to live in SharePoint and be browsable there,
 while PADM stays the application everyone uses. Three options were
 considered:
@@ -601,7 +601,7 @@ search index stay in PostgreSQL. SharePoint is the file store and a
 read-only browsing mirror, and PADM is authoritative when they disagree.
 Spec: `docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md`.
 
-### D-082 App-only Graph access to one site; downloads go through PADM — Accepted (design, not built)
+### D-082 App-only Graph access to one site; downloads go through PADM — Accepted (certificate sign-in built in P2; downloads through PADM built in P3, 2026-10-22; the site grant is in P4's setup guide)
 PADM authenticates to Microsoft Graph as itself, with a certificate rather
 than a client secret, using `Sites.Selected`. It is granted full control on
 one dedicated site only; full control is needed to manage folder
@@ -620,7 +620,7 @@ permissions. Microsoft Search would filter by SharePoint permissions, which
 under D-081 are locked to the PADM app, so its results could not match what
 each user may see in PADM.
 
-### D-084 SharePoint layout with folder-level permissions only — Accepted (design, not built)
+### D-084 SharePoint layout with folder-level permissions only — Accepted (layout and columns built in P3, 2026-10-22; folder permissions pending P4)
 **Layout.** One site and one library, with top-level `Departments/`,
 `County-wide/`, and `Restricted/`. Under each are department folders, then a
 folder per document (`{ID} – {title}`), then one file per version. Files
@@ -637,7 +637,7 @@ unique permissions poorly. PADM grants each department folder to that
 department's people individually, because Entra groups are not available
 (D-086).
 
-### D-085 Three visibility levels replace "confidential" and "inherit permissions" — Accepted (visibility built in P1; SharePoint folder moves pending P3)
+### D-085 Three visibility levels replace "confidential" and "inherit permissions" — Accepted (visibility built in P1; SharePoint folder moves built in P3, 2026-10-22)
 Each document has one of three visibility levels:
 
 - **Department** (default): its department, plus anyone it is explicitly

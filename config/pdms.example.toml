@@ -48,7 +48,7 @@ auto_provision = true
 display_name = "Microsoft"
 
 [storage]
-backend = "local"               # or "s3"
+backend = "local"               # "local", "s3", or "sharepoint" (document files in SharePoint; needs [graph] and [sharepoint])
 local_path = "data/blobs"       # container: /var/lib/pdms/blobs
 spool_path = "data/spool"       # uploads in progress (always local)
 max_upload_bytes = 104857600    # 100 MB
@@ -63,6 +63,12 @@ access_key_id = ""
 secret_access_key = ""          # prefer PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE
 prefix = ""
 allow_http = false
+
+[sharepoint]                    # used when [storage] backend = "sharepoint"; export packages stay in local_path
+site_url = ""                   # e.g. "https://contoso.sharepoint.com/sites/PADMRecords"
+library = "Documents"           # the document library (drive) name
+delta_interval_minutes = 5      # change check interval (P4)
+upload_chunk_bytes = 10485760   # 10 MiB; a multiple of 327680 (320 KiB), at most 62914560
 
 [documents]
 free_form_tags = false          # true lets editors add new, uncurated tags (D-088)
