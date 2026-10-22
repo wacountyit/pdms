@@ -1,28 +1,44 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Reminders for each document come from the most specific rules: rules set on the document itself, otherwise its document type’s rules, otherwise the organization defaults below. Rules apply per event (review, renewal, expiration).</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-rule">{% include "icons/plus.html" %}Add a rule</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Reminders for each document come from the most specific rules: rules set on the document itself, otherwise its document type’s rules, otherwise the organization defaults below. Rules apply per event (review, renewal, expiration).</p>
-{% for rv in rules %}
-<section class="card" aria-labelledby="h-{{ rv.form.form_id }}">
-  <h2 id="h-{{ rv.form.form_id }}">{{ rv.scope_label }}: {{ rv.rule.event.label() }}{% if !rv.rule.is_active %} <span class="badge">Inactive</span>{% endif %}</h2>
-  <p class="muted">{{ rv.rule.summary() }} · {{ rv.rule.channel_labels() }} · to {{ rv.rule.recipient_labels() }}</p>
-  <details>
-    <summary>Edit</summary>
-    <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}">
-      <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-      <input type="hidden" name="back" value="/admin/notification-rules">
-      {% let rf = rv.form %}
-      {% include "rule_form.html" %}
-      <label class="check"><input type="checkbox" name="is_active" value="false" {% if !rv.rule.is_active %}checked{% endif %}> Inactive</label>
-      <p><button type="submit">Save rule</button></p>
-    </form>
-    <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}/delete">
-      <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/admin/notification-rules">
-      <button type="submit" class="danger small">Remove rule</button>
-    </form>
-  </details>
+<section class="panel" aria-labelledby="rules-h">
+  <div class="panel-head"><h2 id="rules-h">{{ rules.len() }} rule{% if rules.len() != 1 %}s{% endif %}</h2></div>
+  {% if rules.is_empty() %}<p class="empty">No rules. Without one, nobody is reminded of review, renewal or expiration dates.</p>{% else %}
+  <ul class="tag-rows">
+    {% for rv in rules %}
+    <li class="tag-row">
+      <div class="tag-row-main">
+        <strong>{{ rv.scope_label }}: {{ rv.rule.event.label() }}</strong>{% if !rv.rule.is_active %} <span class="status status-neutral">Inactive</span>{% endif %}
+        <span class="muted small">{{ rv.rule.summary() }} · {{ rv.rule.channel_labels() }} · to {{ rv.rule.recipient_labels() }}</span>
+      </div>
+      <details><summary class="small">Edit<span class="visually-hidden"> {{ rv.scope_label }}: {{ rv.rule.event.label() }}</span></summary>
+        <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+          <input type="hidden" name="back" value="/admin/notification-rules">
+          {% let rf = rv.form %}
+          {% include "rule_form.html" %}
+          <label class="check"><input type="checkbox" name="is_active" value="false" {% if !rv.rule.is_active %}checked{% endif %}> Inactive</label>
+          <p><button type="submit">Save rule</button></p>
+        </form>
+        <form method="post" action="/admin/notification-rules/{{ rv.rule.id }}/delete">
+          <input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="/admin/notification-rules">
+          <button type="submit" class="danger small">Remove rule</button>
+        </form>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </section>
-{% endfor %}
-<section aria-labelledby="new-rule-h">
+<section class="panel" aria-labelledby="new-rule-h" id="add-rule">
   <h2 id="new-rule-h">Add a rule</h2>
   <form method="post" action="/admin/notification-rules">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">

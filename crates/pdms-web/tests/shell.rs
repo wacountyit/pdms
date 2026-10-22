@@ -116,27 +116,37 @@ async fn admin_sees_manage_group_and_admin_tabs() {
     assert!(home.body.contains(">Manage<"), "{}", home.body);
     assert!(home.body.contains(">Administration<"));
     assert!(home.body.contains(">Audit log<"));
-    // Not on an admin page: no admin tab row.
-    assert!(!home.body.contains("class=\"tabs admin-tabs\""));
+    // Not on an admin page: no admin menu.
+    assert!(!home.body.contains("class=\"admin-nav"));
 
     let users = b.get("/admin/users").await;
     assert_eq!(users.status, StatusCode::OK);
-    assert!(
-        users.body.contains("class=\"tabs admin-tabs\""),
-        "{}",
-        users.body
-    );
-    assert!(users.body.contains("href=\"/admin/departments\""));
-    // The current admin tab is marked, and only that one.
+    // The menu is grouped (R2 spec §5.1), and rendered twice: a column for
+    // wide screens and a disclosure for narrow ones.
+    let wide = &users.body[users
+        .body
+        .find("class=\"admin-nav admin-nav-wide\"")
+        .unwrap()..];
+    let wide = &wide[..wide.find("</nav>").unwrap()];
+    for group in [
+        "People and access",
+        "Documents and records",
+        "Notifications",
+        "Integrations",
+        "System",
+    ] {
+        assert!(wide.contains(&format!(">{group}</p>")), "{group}");
+    }
+    assert!(wide.contains("href=\"/admin/ocr\""));
+    assert!(!wide.contains("/admin/outlook"), "removed (D-087)");
+    // The current page is marked, and only that one.
+    assert!(wide.contains("<a href=\"/admin/users\" aria-current=\"page\">Users</a>"));
+    assert!(wide.contains("<a href=\"/admin/departments\" >Departments</a>"));
+    assert_eq!(wide.matches("aria-current").count(), 1, "{wide}");
     assert!(
         users
             .body
-            .contains("<a href=\"/admin/users\" aria-current=\"page\">Users</a>")
-    );
-    assert!(
-        users
-            .body
-            .contains("<a href=\"/admin/departments\" >Departments</a>")
+            .contains("<summary>Administration: Users</summary>")
     );
     let entra = b.get("/admin/entra").await;
     assert_eq!(entra.status, StatusCode::OK, "{}", entra.location());
@@ -145,9 +155,52 @@ async fn admin_sees_manage_group_and_admin_tabs() {
             .body
             .contains("<a href=\"/admin/entra\" aria-current=\"page\">")
     );
-    let tabs = &entra.body[entra.body.find("admin-tabs").unwrap()..];
-    let tabs = &tabs[..tabs.find("</nav>").unwrap()];
-    assert_eq!(tabs.matches("aria-current").count(), 1, "{tabs}");
+    assert!(
+        entra
+            .body
+            .contains("<summary>Administration: Entra ID sync</summary>")
+    );
+}
+
+#[tokio::test]
+async fn every_admin_page_uses_the_admin_pattern() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "root@example.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("root@example.org", &secret).await;
+    for (path, key) in [
+        ("/admin/users", "users"),
+        ("/admin/departments", "departments"),
+        ("/admin/groups", "groups"),
+        ("/admin/roles", "roles"),
+        ("/admin/grants", "grants"),
+        ("/admin/idp", "idp"),
+        ("/admin/entra", "entra"),
+        ("/admin/document-types", "document-types"),
+        ("/admin/fields", "fields"),
+        ("/admin/tags", "tags"),
+        ("/admin/retention", "retention"),
+        ("/admin/deleted", "deleted"),
+        ("/admin/notification-rules", "notification-rules"),
+        ("/admin/notifications", "notifications"),
+        ("/admin/branding", "branding"),
+        ("/admin/webhooks", "webhooks"),
+        ("/admin/api", "api"),
+        ("/admin/ocr", "ocr"),
+    ] {
+        let r = b.get(path).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        assert_eq!(r.body.matches("<h1").count(), 1, "{path}: one h1");
+        assert!(
+            r.body.contains(r#"<header class="page-head">"#),
+            "{path}: page header"
+        );
+        assert!(
+            r.body
+                .contains(&format!(r#"<a href="/admin/{key}" aria-current="page">"#)),
+            "{path}: current menu item"
+        );
+    }
 }
 
 #[tokio::test]

@@ -1,8 +1,16 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">People and their departments come from Microsoft Entra ID.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
 {% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
 {% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
-<p>People and their departments come from Microsoft Entra ID. Each night PADM picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
+<p>Each night PADM picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
 
 <section class="panel" aria-labelledby="sync-h">
   <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
@@ -30,7 +38,7 @@
 </section>
 
 <section class="panel" aria-labelledby="map-h">
-  <h2 id="map-h">Department mapping</h2>
+  <div class="panel-head"><h2 id="map-h">Department mapping</h2><span class="muted small">{{ values.len() }}</span></div>
   <div class="table-wrap">
   <table>
     <thead><tr><th scope="col">Entra {{ attribute }} value</th><th scope="col">PADM department</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>

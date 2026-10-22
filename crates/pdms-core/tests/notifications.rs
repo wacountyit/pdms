@@ -109,7 +109,7 @@ async fn ila_overdue_acceptance() {
     .await
     .unwrap();
     let (outsider, _) = user_in_new_department(&core, "HR", "hr@x.org").await;
-    let agreement = type_id(&core, "partnership_agreement").await;
+    let agreement = type_id(&core, "interlocal_agreement").await;
 
     // Created with the original 2013 file; "next review" left empty to be computed.
     let id = documents::create(

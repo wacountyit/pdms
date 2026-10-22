@@ -1,6 +1,16 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/documents">Documents</a></li><li><a href="/documents/{{ id }}">{{ external_id }}</a></li><li aria-current="page">Edit</li></ol>
+    </nav>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Saving records a new version of the details; the file is not changed. Fields marked <span class="req" aria-hidden="true">*</span><span class="visually-hidden">with an asterisk</span> are required.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/documents/{{ id }}">← Back to {{ external_id }}</a></p>
 {% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
 <form method="post" action="/documents/{{ id }}/edit" class="doc-form">
   <input type="hidden" name="_csrf" value="{{ l.csrf }}">
@@ -8,13 +18,16 @@
   {% let fields_doc_param = ", [name='document']" %}
   <input type="hidden" name="document" value="{{ id }}">
   {% include "documents/metadata_fields.html" %}
-  <div class="field">
-    <label for="department_id">Department</label>
-    <select id="department_id" name="department_id" required aria-describedby="dept-help">
-      {% for d in departments %}<option value="{{ d.id }}" {% if form.v("department_id") == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
-    </select>
-    <p id="dept-help" class="help">Moving a document to another department requires permission to create documents there.</p>
-  </div>
-  <p><button type="submit" class="primary">Save changes</button> <a href="/documents/{{ id }}">Cancel</a></p>
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">Ownership</legend>
+    <div class="field">
+      <label for="department_id">Department</label>
+      <select id="department_id" name="department_id" required aria-describedby="dept-help">
+        {% for d in departments %}<option value="{{ d.id }}" {% if form.v("department_id") == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select>
+      <p id="dept-help" class="help">Moving a document to another department requires permission to create documents there.</p>
+    </div>
+  </fieldset>
+  <div class="form-footer"><button type="submit" class="primary">Save changes</button> <a class="button" href="/documents/{{ id }}">Cancel</a></div>
 </form>
 {% endblock %}

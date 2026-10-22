@@ -25,6 +25,9 @@ pub struct CurrentUser {
     pub department_label: String,
     /// May create documents in at least one department (top bar button).
     pub can_create: bool,
+    /// This request's path and query, for "return here" links (the
+    /// color-scheme switch in the sidebar).
+    pub path: String,
 }
 
 impl CurrentUser {
@@ -119,6 +122,7 @@ impl FromRequestParts<AppState> for CurrentUser {
         };
         let can_create = pdms_core::documents::access::can_create_any(&state.core, &ctx).await?;
         Ok(CurrentUser {
+            path: return_to,
             unread,
             department_label,
             can_create,

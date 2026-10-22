@@ -1,7 +1,8 @@
 # PADM UI redesign, round 2 (R2): design
 
 - **Date:** 2026-10-22
-- **Status:** Draft for owner review.
+- **Status:** Approved by the owner, 2026-10-22, and built on the `r2-build` branch
+  (decisions D-097 to D-101).
 - **Builds on:** the [R2 brief](2026-10-21-ui-redesign-r2-brief.md) and the
   [R1 spec](2026-10-15-ui-redesign-r1-design.md). R2 inherits R1's
   constraints (§3), visual system (§4), app shell (§5) and testing (§15).
@@ -36,7 +37,7 @@ browser-tab icon.
 | 1 | Scope beyond the brief's §3.1 and §3.2 | **In:** the new-document and edit forms; the workflow, signature and comment sections of the document page. **Out:** version and comment history, the error page, `/source` and `/license` |
 | 2 | Admin navigation | Grouped sections: People and access; Documents and records; Notifications; Integrations; System (§5.1) |
 | 3 | Order | Appointments, calendar, report detail, then the admin pages, records requests, notifications, the audit log and the account page. No date yet for the leadership showing |
-| 4 | Sub-project 3 | The owner does it **before** R2 reaches the Tags and Outlook & OCR pages |
+| 4 | Sub-project 3 | The owner does it **before** R2 reaches the Tags and Outlook & OCR pages. **Changed the same day:** it is built inside part 4 (§5) |
 | 5 | OCR settings | Their own **"Text extraction (OCR)"** page under System. Sub-project 3 moves them there (it is one status paragraph, not a form); R2 styles it |
 | 6 | Tags page | Designed for admin-curated tags (D-088) |
 | 7 | Phone width (390 px) | Calendar, notifications, appointments and the account page. Admin pages get the desktop check only |
@@ -141,8 +142,6 @@ The single row of 18 tabs becomes a grouped **admin menu**.
 | Integrations | Webhooks, API (`can_integrations`); SharePoint (added by P4) |
 | System | Branding (`can_settings`); Text extraction (OCR) (`can_integrations`, once sub-project 3 adds it) |
 
-- Until sub-project 3 is merged, "Outlook & OCR" stays under Integrations as
-  it is today.
 - **Code:** the menu moves out of `base.html` into
   `templates/partials/admin_nav.html`, driven by `Layout.admin_page` (§3,
   item 1). `admin_home()` is unchanged. The page `<h1>` stays in the content

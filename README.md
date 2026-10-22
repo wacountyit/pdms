@@ -21,7 +21,7 @@ packaged as a single Docker image.
 | 2 | Review schedules and tasks, date-driven statuses, reminder rules, email and in-app notifications, calendar, ICS feeds, dashboards | **Done** |
 | 3 | Review/approval workflow (reviewers, legal counsel step, approvers, separation of duties), signature tracking, boards and appointments with requirement checklists and term reminders | **Done** |
 | 4 | Records request packages, reports (CSV), REST API with OpenAPI and scoped tokens, webhooks and integration providers, audit forwarding, access review reports, backup/restore with `verify-integrity` | **Done** |
-| 5 | Threaded comments with @mentions and preserved edits; text extraction (PDF, Word) and optional OCR sidecar with date suggestions; optional Outlook calendar sync through Microsoft Graph | **Done** |
+| 5 | Threaded comments with @mentions and preserved edits; text extraction (PDF, Word) and optional OCR sidecar with date suggestions. (The optional Outlook calendar sync built here was later removed, D-087.) | **Done** |
 
 **What's next:** the PADM plan (SharePoint document storage, Entra user sync, a UI
 redesign, and more), with what is done and what remains, is in
@@ -44,15 +44,14 @@ The installer asks everything first, then builds and starts unattended:
   next free one) and checks that 80/443 are free for Caddy.
 - **Name and time zone** (detected from the host).
 - **Optionally:** PostgreSQL on `127.0.0.1` for host tools (on a free port),
-  Microsoft Entra ID sign-in, SMTP email, Outlook calendar sync, OCR, and
-  virus scanning.
+  Microsoft Entra ID sign-in, SMTP email, OCR, and virus scanning.
 - **The first administrator.** The password is generated and shown once,
   along with an authenticator secret.
 
 Database passwords and the master key are strong random values in `secrets/`.
 Deployment settings go in `.env` and application settings in
 `config/pdms.toml`. Re-running is safe; `./install.sh --configure smtp` (or
-`sso`, `outlook`, `ocr`, `clamav`, `network`, `database-port`, `admin`)
+`sso`, `ocr`, `clamav`, `network`, `database-port`, `admin`)
 redoes one part later. `./install.sh --help` lists the variables for unattended
 installs. Then see [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) and the testing
 plan in [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -83,7 +82,7 @@ cargo run -p pdms -- seed-demo                     # optional demo data
 PDMS_AUTH__LOCAL__REQUIRE_TOTP=false cargo run -p pdms -- serve --with-worker
 ```
 
-The demo includes sample documents: an partnership agreement with its 2013 original
+The demo includes sample documents: an interlocal agreement with its 2013 original
 and 2014 amendment (signed by the presiding officer, waiting on the partner), a
 contract, policies (one Restricted, one County-wide), a grant agreement, and a equipment inspection
 contract in review waiting for legal counsel. Three boards show an overdue
@@ -137,7 +136,8 @@ crates/pdms-authz    authorization engine (pure) + SQL predicate
 crates/pdms-audit    audit events, canonical hashing, chain verification
 crates/pdms-core     config, auth, directory, grants, documents, notifications, calendar,
                      workflow, signatures, appointments, comments, ocr (text and date
-                     suggestions), graph_calendar, exports, reports, API tokens,
+                     suggestions), exports, reports, API tokens, activity (the
+                     dashboard feed),
                      integrations (webhooks, providers, audit forwarding), integrity, jobs
 crates/pdms-storage  blob storage (local, S3), upload spooling, type sniffing, ClamAV
 crates/pdms-web      HTTP routes (including the REST API and OpenAPI), middleware, templates

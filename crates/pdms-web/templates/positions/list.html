@@ -1,31 +1,56 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Seats on boards, committees and commissions, and other appointed roles. Term ends and reappointment decisions also appear on the calendar and the dashboard.</p>
+  </div>
+  {% if can_manage %}<div class="page-actions"><a class="button primary" href="#add-position">{% include "icons/plus.html" %}Add a position</a></div>{% endif %}
+</header>
+{% endblock %}
 {% block content %}
-<p class="muted">Seats on boards, committees, and commissions, and other appointed roles. Term ends and reappointment decisions appear on the calendar and dashboard, and reminders go to each position's manager and the appointments clerks.</p>
-{% if rows.is_empty() %}
-<p class="muted">{% if can_manage %}No positions yet. Add the first one below.{% else %}There are no positions you can see. Positions are visible to their department, their manager, and the appointments clerks.{% endif %}</p>
+{% if !tiles.is_empty() %}
+<section aria-label="Seats you can see">
+  <dl class="key-numbers board-tiles">
+    {% for t in tiles %}
+    <div class="tile{% if t.0 == "Decision due or overdue" && t.1 > 0 %} tile-critical{% else if t.0 == "Holdover" && t.1 > 0 %} tile-warning{% endif %}"><dt class="label">{{ t.0 }}</dt><dd class="value">{{ t.1 }}</dd></div>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+{% if groups.is_empty() %}
+<section class="panel" aria-labelledby="none-h">
+  <h2 id="none-h" class="visually-hidden">Positions</h2>
+  <p class="empty">{% if can_manage %}No positions yet. Add the first one below.{% else %}There are no positions you can see. Positions are visible to their department, their manager, and the appointments clerks.{% endif %}</p>
+</section>
 {% else %}
-<div class="table-wrap">
-<table>
-  <caption class="visually-hidden">Positions</caption>
-  <thead><tr><th scope="col">Board or body</th><th scope="col">Position</th><th scope="col">Held by</th><th scope="col">Seats filled</th><th scope="col">Term</th><th scope="col">Next term end</th><th scope="col">Needs attention</th><th scope="col">Department</th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-    <tr>
-      <td>{{ r.body_name }}</td>
-      <td><a href="/positions/{{ r.id }}">{{ r.name }}</a>{% if !r.is_active %} <span class="badge">Inactive</span>{% endif %}</td>
-      <td>{% if r.holders.is_empty() %}<span class="muted">Vacant</span>{% else %}{{ r.holders }}{% endif %}</td>
-      <td>{{ r.seats }}</td><td>{{ r.term }}</td><td>{{ r.next_date }}</td>
-      <td>{% if !r.attention.is_empty() %}<span class="badge ap-warn">{{ r.attention }}</span>{% endif %}</td>
-      <td>{{ r.department }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+{% for g in groups %}
+<section class="panel" aria-labelledby="body-{{ loop.index }}">
+  <div class="panel-head"><h2 id="body-{{ loop.index }}">{{ g.name }}</h2><span class="muted small">{{ g.rows.len() }} position{% if g.rows.len() != 1 %}s{% endif %}</span></div>
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Positions on {{ g.name }}</caption>
+    <thead><tr><th scope="col">Position</th><th scope="col">Status</th><th scope="col">Held by</th><th scope="col">Seats filled</th><th scope="col">Term</th><th scope="col">Next term end</th><th scope="col">Department</th></tr></thead>
+    <tbody>
+    {% for r in g.rows %}
+      <tr>
+        <td><a href="/positions/{{ r.id }}">{{ r.name }}</a></td>
+        <td><span class="status status-{{ r.status_class }}">{{ r.status_text }}</span></td>
+        <td>{% if r.holders.is_empty() %}<span class="muted">Nobody</span>{% else %}{{ r.holders }}{% endif %}</td>
+        <td class="num">{{ r.seats }}</td><td>{{ r.term }}</td><td class="nowrap">{% if r.next_date.is_empty() %}—{% else %}{{ r.next_date }}{% endif %}</td>
+        <td>{{ r.department }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
 {% endif %}
 
 {% if can_manage %}
-<details {% if rows.is_empty() %}open{% endif %}>
+<details class="disclosure" id="add-position" {% if groups.is_empty() %}open{% endif %}>
   <summary>Add a position</summary>
   <form method="post" action="/positions" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">

@@ -1,4 +1,12 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">The county name, accent color and seal shown on every page and on the sign-in page. Anyone who can reach PADM sees them, before signing in.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
 {% if confirm_reset %}
 <section class="panel" aria-labelledby="reset-h">

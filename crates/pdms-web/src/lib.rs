@@ -8,6 +8,7 @@ pub mod error;
 pub mod middleware;
 pub mod next_date;
 pub mod routes;
+pub mod seats;
 pub mod session;
 pub mod state;
 pub mod timeline;
@@ -18,7 +19,7 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::{Request, State};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use pdms_authz::Capability;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -208,8 +209,13 @@ pub fn router(state: AppState) -> Router {
             "/webhooks/{id}",
             get(integrations::webhook_page).post(integrations::update_webhook),
         )
-        .route("/outlook", get(collab::outlook_page))
-        .route("/outlook/sync", post(collab::outlook_sync))
+        .route("/ocr", get(collab::ocr_page))
+        // The Outlook calendar sync was removed (D-087); its page's OCR part
+        // moved to /admin/ocr.
+        .route(
+            "/outlook",
+            get(|| async { Redirect::permanent("/admin/ocr") }),
+        )
         .route("/webhooks/{id}/rotate", post(integrations::rotate_webhook))
         .route(
             "/webhooks/deliveries/{id}/redeliver",
@@ -343,6 +349,7 @@ pub fn router(state: AppState) -> Router {
             "/account/tokens/{id}/revoke",
             post(integrations::revoke_token),
         )
+        .route("/account/appearance", post(integrations::set_appearance))
         .route("/exports", get(exports::page).post(exports::build))
         .route("/exports/{id}/download", get(exports::download))
         .route("/reports", get(exports::reports_index))
@@ -373,6 +380,7 @@ pub fn router(state: AppState) -> Router {
         // Public: the sign-in page uses them too.
         .route("/theme.css", get(ops::theme_css))
         .route("/branding/seal", get(ops::seal))
+        .route("/favicon.ico", get(ops::favicon))
         .route(
             "/admin",
             get(|| async { axum::response::Redirect::to("/admin/users") }),

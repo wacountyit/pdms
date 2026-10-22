@@ -1,20 +1,33 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Custom fields appear on document forms. A field’s key and type never change; edits create a new version and never alter existing values. Deprecate a field to hide it from forms while keeping its values.</p>
+  </div>
+  <div class="page-actions"><a class="button primary" href="#add-field">{% include "icons/plus.html" %}Add a field</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p>Custom fields appear on document forms. A field’s key and type never change; edits create a new version and never alter existing values. Deprecate a field to hide it from forms while keeping its values.</p>
-<div class="table-wrap">
-<table>
-  <caption>Custom fields</caption>
-  <thead><tr><th scope="col">Label</th><th scope="col">Key</th><th scope="col">Type</th><th scope="col">Applies to</th><th scope="col">Required</th><th scope="col">Version</th><th scope="col">Status</th></tr></thead>
-  <tbody>
-  {% for f in fields %}
-    <tr><td><a href="/admin/fields/{{ f.id }}">{{ f.label }}</a></td><td><code>{{ f.key }}</code></td><td>{{ f.field_type.label() }}</td>
-    <td>{% if let Some(t) = f.document_type_name %}{{ t }}{% else %}All types{% endif %}</td>
-    <td>{% if f.required %}Yes{% endif %}</td><td>{{ f.version }}</td><td>{% if f.is_deprecated %}Deprecated{% else %}Active{% endif %}</td></tr>
-  {% else %}<tr><td colspan="7">No custom fields yet.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-<section aria-labelledby="new-field-h">
+<section class="panel" aria-labelledby="fields-h">
+  <div class="panel-head"><h2 id="fields-h">{{ fields.len() }} field{% if fields.len() != 1 %}s{% endif %}</h2></div>
+  {% if fields.is_empty() %}<p class="empty">No custom fields yet. Add one below to collect more details on documents.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Custom fields</caption>
+    <thead><tr><th scope="col">Label</th><th scope="col">Type</th><th scope="col">Applies to</th><th scope="col">Required</th><th scope="col">Version</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+    {% for f in fields %}
+      <tr><td><a href="/admin/fields/{{ f.id }}">{{ f.label }}</a><div class="muted small"><code>{{ f.key }}</code></div></td><td>{{ f.field_type.label() }}</td>
+      <td>{% if let Some(t) = f.document_type_name %}{{ t }}{% else %}All types{% endif %}</td>
+      <td>{% if f.required %}Yes{% else %}<span class="muted">No</span>{% endif %}</td><td class="num">{{ f.version }}</td><td>{% if f.is_deprecated %}<span class="status status-neutral">Deprecated</span>{% else %}<span class="status status-good">Active</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<section class="panel" aria-labelledby="new-field-h" id="add-field">
   <h2 id="new-field-h">Add a field</h2>
   <form method="post" action="/admin/fields" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">

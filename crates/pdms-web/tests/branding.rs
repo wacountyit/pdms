@@ -136,6 +136,34 @@ async fn saving_branding_changes_name_theme_and_audit() {
 async fn seal_upload_round_trip_and_headers() {
     let app = app().await;
     let mut b = admin(&app).await;
+    // Before a seal: the generic tab icon, on every kind of page (R2 spec §9).
+    assert!(
+        b.get("/")
+            .await
+            .body
+            .contains(r#"<link rel="icon" href="/static/icon.svg" type="image/svg+xml">"#)
+    );
+    let mut anon = Browser::new(&app);
+    assert!(
+        anon.get("/login")
+            .await
+            .body
+            .contains(r#"href="/static/icon.svg""#)
+    );
+    assert!(
+        anon.get("/source")
+            .await
+            .body
+            .contains(r#"<link rel="icon" href="/favicon.ico">"#)
+    );
+    let icon = anon.get("/static/icon.svg").await;
+    assert_eq!(icon.headers["content-type"], "image/svg+xml");
+    assert!(icon.body.contains("<svg"));
+    assert_eq!(
+        anon.get("/favicon.ico").await.headers["content-type"],
+        "image/svg+xml"
+    );
+
     let csrf = b.get("/admin/branding").await.csrf();
     let data = png(128, 128);
     let r = b
@@ -163,6 +191,22 @@ async fn seal_upload_round_trip_and_headers() {
     );
     assert!(page.body.contains("Remove seal"));
     assert!(b.get("/").await.body.contains("/branding/seal?v="));
+    // With a seal, the tab icon is the seal.
+    assert!(
+        b.get("/")
+            .await
+            .body
+            .contains(r#"<link rel="icon" href="/branding/seal?v="#)
+    );
+    assert!(
+        anon.get("/login")
+            .await
+            .body
+            .contains(r#"<link rel="icon" href="/branding/seal?v="#)
+    );
+    let fav = anon.get("/favicon.ico").await;
+    assert_eq!(fav.headers["content-type"], "image/png");
+    assert_eq!(fav.headers["x-content-type-options"], "nosniff");
 
     let csrf = page.csrf();
     let r = b

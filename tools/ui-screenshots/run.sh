@@ -17,7 +17,7 @@ image=mcr.microsoft.com/playwright/python:v1.49.0-jammy
 docker run --rm --network host \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$here:/w" -e PYTHONPATH=/w/.pylib \
-  -e PADM_SHOTS_BASE -e PADM_SHOTS_USER -e PADM_SHOTS_PASSWORD \
+  -e PADM_SHOTS_BASE -e PADM_SHOTS_USER -e PADM_SHOTS_PASSWORD -e PADM_SHOTS_THEME \
   "$image" sh -c '
     [ -d /w/.pylib/playwright ] || pip install --quiet --no-cache-dir --target /w/.pylib playwright==1.49.0
     exec python /w/shoot.py "$@"' sh "$@"

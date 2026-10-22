@@ -7,6 +7,14 @@
 pub const GROUND: Rgb = Rgb(0xF3, 0xF5, 0xF8);
 pub const WHITE: Rgb = Rgb(0xFF, 0xFF, 0xFF);
 pub const MIN_TEXT_CONTRAST: f64 = 4.5;
+/// WCAG 2.1 non-text contrast (marks such as underlines and chart bars).
+pub const MIN_MARK_CONTRAST: f64 = 3.0;
+
+/// The dark-mode page colors these derivations are checked against (the
+/// `--ground`, `--surface` and `--ink` dark tokens in `app.css`, R2 spec §7).
+pub const DARK_GROUND: Rgb = Rgb(0x0F, 0x17, 0x20);
+pub const DARK_SURFACE: Rgb = Rgb(0x17, 0x21, 0x2B);
+pub const DARK_INK: Rgb = Rgb(0xE6, 0xEB, 0xF0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
@@ -20,7 +28,11 @@ impl Rgb {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccentError {
     Invalid,
-    TooLight { ratio: f64 },
+    TooLight {
+        ratio: f64,
+    },
+    /// No readable dark-mode shades can be derived from it.
+    NoDarkShades,
 }
 
 impl AccentError {
@@ -29,6 +41,9 @@ impl AccentError {
             Self::Invalid => "Enter the accent as a hex color such as #1F3A5F.".into(),
             Self::TooLight { ratio } => format!(
                 "White text on {input} is hard to read ({ratio:.1}:1; at least 4.5:1 is needed). Choose a darker shade."
+            ),
+            Self::NoDarkShades => format!(
+                "{input} can't be made readable in dark mode. Choose a more saturated or lighter color."
             ),
         }
     }
@@ -106,6 +121,18 @@ pub fn darken(c: Rgb, factor: f64) -> Rgb {
 }
 
 /// `weight` of `c` over white, mixed in sRGB.
+/// Moves OKLab lightness `step` of the way towards white.
+pub fn lighten(c: Rgb, step: f64) -> Rgb {
+    let (l, a, b) = to_oklab(c);
+    from_oklab((l + (1.0 - l) * step, a, b))
+}
+
+/// `c` at `weight` over the background `bg`.
+pub fn mix_over(c: Rgb, bg: Rgb, weight: f64) -> Rgb {
+    let mix = |x: u8, y: u8| (f64::from(x) * weight + f64::from(y) * (1.0 - weight)).round() as u8;
+    Rgb(mix(c.0, bg.0), mix(c.1, bg.1), mix(c.2, bg.2))
+}
+
 pub fn tint(c: Rgb, weight: f64) -> Rgb {
     let mix = |x: u8| (f64::from(x) * weight + 255.0 * (1.0 - weight)).round() as u8;
     Rgb(mix(c.0), mix(c.1), mix(c.2))
@@ -118,7 +145,50 @@ pub fn validate_accent(input: &str) -> Result<Rgb, AccentError> {
     if ratio < MIN_TEXT_CONTRAST {
         return Err(AccentError::TooLight { ratio });
     }
+    // The accent must hold in both modes (R2 spec §7).
+    derive_dark(c).ok_or(AccentError::NoDarkShades)?;
     Ok(c)
+}
+
+/// The accent's dark-mode shades (R2 spec §7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DarkShades {
+    /// Links: at least 4.5:1 on the dark ground and the dark surface.
+    pub link: String,
+    /// Marks (tab underlines, current-item bars, chart bars): at least 3:1 on
+    /// the dark surface.
+    pub mark: String,
+    /// Highlight backgrounds, with `--ink` text at least 4.5:1.
+    pub tint: String,
+}
+
+/// Lightens the accent until it is readable on the dark page; `None` when that
+/// cannot be done.
+pub fn derive_dark(accent: Rgb) -> Option<DarkShades> {
+    let lighten_until = |ok: &dyn Fn(Rgb) -> bool| {
+        let mut c = accent;
+        for _ in 0..40 {
+            if ok(c) {
+                return Some(c);
+            }
+            c = lighten(c, 0.08);
+        }
+        ok(c).then_some(c)
+    };
+    let link = lighten_until(&|c| {
+        contrast(c, DARK_GROUND) >= MIN_TEXT_CONTRAST
+            && contrast(c, DARK_SURFACE) >= MIN_TEXT_CONTRAST
+    })?;
+    let mark = lighten_until(&|c| contrast(c, DARK_SURFACE) >= MIN_MARK_CONTRAST)?;
+    let tint = mix_over(accent, DARK_SURFACE, 0.18);
+    if contrast(DARK_INK, tint) < MIN_TEXT_CONTRAST {
+        return None;
+    }
+    Some(DarkShades {
+        link: link.hex(),
+        mark: mark.hex(),
+        tint: tint.hex(),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +197,8 @@ pub struct ThemeColors {
     pub hover: String,
     pub link: String,
     pub tint: String,
+    /// Dark-mode shades (R2 spec §7).
+    pub dark: DarkShades,
 }
 
 /// Hover is 12% darker; link is darkened in 4% steps (at least one) until it
@@ -144,6 +216,13 @@ pub fn derive_theme(accent: Rgb) -> ThemeColors {
         hover: darken(accent, 0.88).hex(),
         link: link.hex(),
         tint: tint(accent, 0.12).hex(),
+        // A saved accent always passed `validate_accent`; the fallback only
+        // covers a value that predates the dark check.
+        dark: derive_dark(accent).unwrap_or_else(|| DarkShades {
+            link: "#E6EBF0".into(),
+            mark: "#E6EBF0".into(),
+            tint: DARK_SURFACE.hex(),
+        }),
     }
 }
 
@@ -195,6 +274,24 @@ mod tests {
             assert_ne!(t.link, t.accent, "link must be at least one step darker");
             let hover = parse_hex(&t.hover).unwrap();
             assert!(contrast(hover, WHITE) >= contrast(accent, WHITE));
+        }
+    }
+
+    #[test]
+    fn dark_shades_hold_for_every_valid_accent() {
+        for hex in [
+            "#B45309", "#1F3A5F", "#0B6B5F", "#7A1F2B", "#3446C4", "#6D28D9", "#0F766E", "#767676",
+            "#000000", "#15202B",
+        ] {
+            let accent = validate_accent(hex).unwrap();
+            let d = derive_dark(accent).unwrap();
+            let link = parse_hex(&d.link).unwrap();
+            assert!(contrast(link, DARK_GROUND) >= 4.5, "{hex} link {}", d.link);
+            assert!(contrast(link, DARK_SURFACE) >= 4.5, "{hex} link {}", d.link);
+            let mark = parse_hex(&d.mark).unwrap();
+            assert!(contrast(mark, DARK_SURFACE) >= 3.0, "{hex} mark {}", d.mark);
+            let tint = parse_hex(&d.tint).unwrap();
+            assert!(contrast(DARK_INK, tint) >= 4.5, "{hex} tint {}", d.tint);
         }
     }
 

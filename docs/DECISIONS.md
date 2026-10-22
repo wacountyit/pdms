@@ -9,6 +9,7 @@ county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
 D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
 finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
 D-096 was decided while building plan P2 (Entra sync, 2026-10-21).
+D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -673,7 +674,7 @@ The account-creation procedure must therefore set the Department field.
   linking (D-022) is removed, because the sync already knows every object
   ID.
 
-### D-087 Calendar is internal; the Outlook calendar sync is removed — Accepted (not done)
+### D-087 Calendar is internal; the Outlook calendar sync is removed — Accepted (done 2026-10-22, with R2)
 The calendar was always meant to be PADM's own look-ahead at upcoming
 reviews, renewals, and expirations (month and agenda views, dashboards). The
 optional Outlook calendar sync built in Phase 5 (D-050, D-077) is not wanted.
@@ -681,7 +682,7 @@ It will be removed (code, configuration, installer step, docs), which also
 narrows the Graph permissions PADM needs. ICS feed subscriptions are not
 affected by this decision. Supersedes D-077 and the Graph part of D-078.
 
-### D-088 ILA document type; admin-curated tags — Accepted (not done)
+### D-088 ILA document type; admin-curated tags — Accepted (done 2026-10-22, with R2)
 The seeded "Partnership Agreement" type is renamed **Interlocal Agreement
 (ILA)**, with ID prefix `ILA`. Admins can still add their own types.
 
@@ -692,6 +693,15 @@ The seeded "Partnership Agreement" type is renamed **Interlocal Agreement
 
 Tags become admin-curated (`[documents] free_form_tags = false`), so the
 filter list stays short and consistent for a county-wide audience.
+
+**Done 2026-10-22** (with R2 part 4, migration `0011`): the type's key became
+`interlocal_agreement`; a name or prefix an administrator had already changed
+is kept, and existing documents keep their `PAG-` IDs. `free_form_tags` now
+defaults to `false`. Editors pick from curated tags, while tag managers can
+still create one. Tags typed earlier show under **Needs review** on the Tags
+page. The Outlook removal (D-087) went in the same migration: queued sync jobs
+are deleted and `graph_calendar_links` is dropped. Events already created in
+Outlook stay until someone deletes them.
 
 ### D-089 Changes made directly in SharePoint are detected, not prevented — Accepted (design, not built)
 One or two named site owners keep edit rights for emergencies, so PADM
@@ -773,6 +783,9 @@ approvals; "Coming up" and the tiles cover everything the viewer can see.
 There is no "Share" button: PADM has no sharing model apart from access
 grants. "Your access" moved to the account page.
 
+**Amended 2026-10-22 by D-099:** the dashboard now has an activity feed,
+built so that it cannot expose the audit log.
+
 ### D-096 Graph app-only authentication with a certificate (PS256) — Accepted (2026-10-21)
 PADM signs a client assertion with its own certificate (header `alg` PS256,
 `x5t#S256` SHA-256 thumbprint, ten-minute lifetime), as the Microsoft
@@ -798,6 +811,76 @@ is the larger risk; the break-glass account has no directory link and is
 never touched. While it is on, group mappings from the identity provider are
 not applied and the token never sets names or groups; configuration requires
 `auth.oidc.subject_claim = "oid"`, and runs are refused while it is off.
+
+### D-097 R2 scope, order and admin navigation — Accepted (2026-10-22)
+The owner's answers to the R2 brief's questions, recorded in the
+[R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §2:
+- **Scope:** every screen in brief §3.1 and §3.2, plus the new-document and
+  edit forms and the workflow, signature and comment sections. Version and
+  comment history, the error page, `/source` and `/license` stay as they are.
+  Dark mode, an activity feed and a browser-tab icon are in R2 (D-098 to
+  D-100).
+- **Admin navigation:** one grouped menu instead of the tab row: People and
+  access; Documents and records; Notifications; Integrations; System. Every
+  admin page follows one pattern (spec §5.2), which P4's SharePoint page
+  follows too.
+- **Sub-project 3** (D-087, D-088) was built inside R2's admin part, at the
+  owner's call, and the OCR status has its own *Text extraction (OCR)* page.
+- **Phone checks:** calendar, notifications, appointments and the account
+  page. Admin pages are checked at desktop width.
+- **Delivery:** built on one branch as one pull request, before the spec was
+  formally approved; the owner approved it on 2026-10-22.
+
+Updates D-092: R2 ran alongside sub-projects 1–3 rather than after them.
+
+### D-098 Dark mode is the default, with a per-person switch — Accepted (2026-10-22)
+Everyone sees dark mode until they choose otherwise, under **Your account →
+Appearance** (Dark, Light or Match my device) or with the one-click switch
+in the sidebar.
+- **Storage:** the choice is stored per user (`users.color_scheme`, migration
+  `0012`), written into the page as `<html data-theme>`. This needs no
+  JavaScript and avoids a flash of the wrong colors.
+- **Audit and control:** each change is audited (`user.color_scheme_set`).
+  Only the person changes their own setting. Pages with nobody signed in use
+  dark.
+- **Colors:** dark mode has its own palette (spec §7), and a test holds every
+  text pair at 4.5:1 and every mark at 3:1 in both modes.
+- **Accent:** Branding refuses an accent for which readable dark-mode shades
+  (link, mark, tint) cannot be derived, as it already refused accents too
+  light for white text.
+- **Print** is always light.
+
+### D-099 Dashboard activity feed, limited to what the page already shows — Accepted (2026-10-22)
+"Recent activity" replaces "Recently updated" on the dashboard (amends
+D-095). It reads the audit log, so it is narrow by construction
+(`pdms-core::activity`):
+- **Which events:** a fixed list of document actions with outcome `success`.
+  Views, downloads, exports, permission and admin changes, denied or failed
+  attempts, and comment edits and deletions are never shown.
+- **Which documents:** only those the viewer may view **now**, through the
+  same visibility predicate as search (D-085, D-090). A document narrowed
+  after the event drops out.
+- **Names:** the actor's name only for kinds whose actor the document page
+  already shows to anyone who can view it. The event's changes and context
+  are never read.
+- **Limits:** the last 90 days, ten items. Viewing the feed is not audited.
+
+It is on the dashboard only; there is no separate activity page.
+
+### D-100 Browser-tab icon from the seal — Accepted (2026-10-22)
+Every page links the county seal as its tab icon when one is set (the seal is
+already public, D-093), otherwise a generic PADM icon shipped in the binary
+(`/static/icon.svg`). `/favicon.ico` serves the same, for pages that don't
+know the branding and for browsers that ask on their own. PADM does not
+resize the seal.
+
+### D-101 County overview counts: "Other" excludes superseded; overdue tile says what it counts — Accepted (2026-10-22)
+The status chart's "Other" counts draft and expired documents only, so the
+chart's total equals the Documents tile, which already left superseded
+documents out. The overdue tile is labelled "Overdue dates", with the line
+"Documents and board terms", because it counts overdue dates of documents
+and board terms, while the chart's Overdue segment counts documents in
+Overdue status.
 
 ## Open questions (configurable defaults; not blocking)
 

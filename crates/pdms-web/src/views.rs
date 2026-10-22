@@ -64,6 +64,11 @@ pub struct Layout {
     pub can_create: bool,
     /// Shows the administration tab row.
     pub admin_tabs: bool,
+    /// `dark`, `light` or `system`: the person's color scheme (R2 spec §7),
+    /// written on `<html data-theme>`.
+    pub color_scheme: String,
+    /// This page's path, where the sidebar's color-scheme switch returns.
+    pub path: String,
     /// The current administration tab (its path under `/admin/`), marked
     /// with `aria-current`; empty outside the admin pages.
     pub admin_page: &'static str,
@@ -103,7 +108,85 @@ impl Layout {
     }
 }
 
+/// One page in the administration menu.
+pub struct AdminLink {
+    /// Its path under `/admin/`, also the `Layout::admin_page` key.
+    pub key: &'static str,
+    pub label: &'static str,
+}
+
 impl Layout {
+    /// The administration menu in its groups (R2 spec §5.1): only the pages
+    /// this person may open, and only groups with at least one page.
+    pub fn admin_groups(&self) -> Vec<(&'static str, Vec<AdminLink>)> {
+        let link = |key, label| AdminLink { key, label };
+        let mut people = Vec::new();
+        if self.can_directory {
+            people.extend([
+                link("users", "Users"),
+                link("departments", "Departments"),
+                link("groups", "Groups"),
+                link("roles", "Roles"),
+                link("grants", "Access grants"),
+                link("idp", "Identity provider mappings"),
+                link("entra", "Entra ID sync"),
+            ]);
+        }
+        let mut records = Vec::new();
+        if self.can_schema {
+            records.extend([
+                link("document-types", "Document types"),
+                link("fields", "Custom fields"),
+            ]);
+        }
+        if self.can_tags {
+            records.push(link("tags", "Tags"));
+        }
+        if self.can_retention {
+            records.push(link("retention", "Retention"));
+        }
+        if self.can_restore {
+            records.push(link("deleted", "Deleted documents"));
+        }
+        let mut notices = Vec::new();
+        if self.can_schema {
+            notices.push(link("notification-rules", "Notification rules"));
+        }
+        if self.can_settings {
+            notices.push(link("notifications", "Delivery log"));
+        }
+        let mut integrations = Vec::new();
+        if self.can_integrations {
+            integrations.extend([link("webhooks", "Webhooks"), link("api", "API")]);
+        }
+        let mut system = Vec::new();
+        if self.can_settings {
+            system.push(link("branding", "Branding"));
+        }
+        if self.can_integrations {
+            system.push(link("ocr", "Text extraction (OCR)"));
+        }
+        [
+            ("People and access", people),
+            ("Documents and records", records),
+            ("Notifications", notices),
+            ("Integrations", integrations),
+            ("System", system),
+        ]
+        .into_iter()
+        .filter(|g| !g.1.is_empty())
+        .collect()
+    }
+
+    /// The current admin page's menu label, for the narrow-screen menu.
+    pub fn admin_page_label(&self) -> &'static str {
+        self.admin_groups()
+            .into_iter()
+            .flat_map(|g| g.1)
+            .find(|l| l.key == self.admin_page)
+            .map_or("Menu", |l| l.label)
+    }
+
     /// Marks `page` (its path under `/admin/`) as the current admin tab.
     pub fn admin_tab(mut self, page: &'static str) -> Self {
         self.admin_page = page;
@@ -126,6 +209,8 @@ impl Layout {
             can_create: user.can_create,
             admin_tabs: section == "admin",
             admin_page: "",
+            color_scheme: user.session.color_scheme.clone(),
+            path: user.path.clone(),
             title: title.to_owned(),
             user_name: user.session.display_name.clone(),
             csrf: user.csrf.clone(),

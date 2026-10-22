@@ -248,7 +248,7 @@ pub struct TypeOut {
 #[derive(Serialize, ToSchema)]
 pub struct DocumentSummaryOut {
     pub id: Uuid,
-    /// Stable external ID, e.g. `PAG-2026-000001`.
+    /// Stable external ID, e.g. `ILA-2026-000001`.
     pub external_id: String,
     pub title: String,
     pub document_type: String,
@@ -648,7 +648,7 @@ pub async fn list_documents(
 
 /// One document, by ID or external ID. Scope `documents:read`. Audited as a view.
 #[utoipa::path(get, path = "/api/v1/documents/{id}", tag = "documents",
-    params(("id" = String, Path, description = "UUID or external ID, e.g. PAG-2026-000001")),
+    params(("id" = String, Path, description = "UUID or external ID, e.g. ILA-2026-000001")),
     responses((status = 200, body = DocumentOut), (status = 403, body = ErrorOut), (status = 404, body = ErrorOut)),
     security(("bearer" = [])))]
 pub async fn get_document(

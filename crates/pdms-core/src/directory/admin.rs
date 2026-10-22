@@ -274,6 +274,45 @@ pub async fn check_username(
 
 /// Set or clear the plain username a local (break-glass) account can sign in with.
 /// An empty value clears it. Unique ignoring case.
+/// The color schemes a person can choose (R2 spec §7).
+pub const COLOR_SCHEMES: [&str; 3] = ["dark", "light", "system"];
+
+/// Sets the caller's own color scheme. Only the person themselves can change
+/// it; administrators cannot set it for others. Audited
+/// (`user.color_scheme_set`) in the same transaction.
+pub async fn set_color_scheme(db: &PgPool, ctx: &Ctx, scheme: &str) -> CoreResult<()> {
+    let user_id = ctx.user_id().ok_or(CoreError::Unauthenticated)?;
+    if !COLOR_SCHEMES.contains(&scheme) {
+        return Err(CoreError::validation(
+            "Choose dark, light, or match my device.",
+        ));
+    }
+    let mut tx = db.begin().await?;
+    let before = sqlx::query!(
+        "SELECT color_scheme, display_name FROM users WHERE id = $1 FOR UPDATE",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(CoreError::NotFound)?;
+    if before.color_scheme == scheme {
+        return Ok(());
+    }
+    sqlx::query!(
+        "UPDATE users SET color_scheme = $2, updated_at = now() WHERE id = $1",
+        user_id,
+        scheme
+    )
+    .execute(&mut *tx)
+    .await?;
+    let e = event(ctx, Category::Admin, "user.color_scheme_set", "user")
+        .object(user_id, Some(&before.display_name))
+        .change("color_scheme", before.color_scheme.as_str(), scheme);
+    pdms_audit::append(&mut tx, vec![e]).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn set_username(
     db: &PgPool,
     ctx: &Ctx,

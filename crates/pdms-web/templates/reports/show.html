@@ -1,25 +1,55 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/reports">Reports</a></li><li aria-current="page">{{ info.title }}</li></ol>
+    </nav>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">{{ info.description }}</p>
+  </div>
+  <div class="page-actions"><a class="button" href="{{ csv_link }}">{% include "icons/download.html" %}Download CSV</a></div>
+</header>
+{% endblock %}
 {% block content %}
-<p><a href="/reports">← All reports</a></p>
-<p class="muted">{{ info.description }}</p>
-<form method="get" action="/reports/{{ info.key }}" class="filters" aria-label="Report options">
-  {% if info.uses_days %}<div><label for="r-days">{% if info.key == "upcoming" %}Days ahead{% else %}Flag older than (days){% endif %}</label><input id="r-days" name="days" type="number" min="1" max="3660" value="{{ q.days }}" placeholder="90"></div>{% endif %}
-  {% if info.uses_dates %}
-  <div><label for="r-from">From</label><input id="r-from" name="from" type="date" value="{{ q.from }}"></div>
-  <div><label for="r-to">To</label><input id="r-to" name="to" type="date" value="{{ q.to }}"></div>
-  {% endif %}
-  {% if !info.uses_dates && info.key != "orphaned_accounts" %}
-  <div><label for="r-dept">Department</label><select id="r-dept" name="department"><option value="">All</option>{% for d in departments %}<option value="{{ d.id }}" {% if q.department == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
-  {% endif %}
-  <div class="actions"><button type="submit">Run</button> <a class="button" href="{{ csv_link }}">Download CSV</a></div>
+{% if info.uses_days || info.uses_dates || info.key != "orphaned_accounts" %}
+<form method="get" action="/reports/{{ info.key }}" class="list-filters report-options" aria-label="Report options">
+  <div class="filter-row">
+    {% if info.uses_days %}<div><label for="r-days">{% if info.key == "upcoming" %}Days ahead{% else %}Flag older than (days){% endif %}</label><input id="r-days" name="days" type="number" min="1" max="3660" value="{{ q.days }}" placeholder="90"></div>{% endif %}
+    {% if info.uses_dates %}
+    <div><label for="r-from">From</label><input id="r-from" name="from" type="date" value="{{ q.from }}"></div>
+    <div><label for="r-to">To</label><input id="r-to" name="to" type="date" value="{{ q.to }}"></div>
+    {% endif %}
+    {% if !info.uses_dates && info.key != "orphaned_accounts" %}
+    <div><label for="r-dept">Department</label><select id="r-dept" name="department"><option value="">All</option>{% for d in departments %}<option value="{{ d.id }}" {% if q.department == d.id.to_string() %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div class="filter-apply"><button type="submit" class="primary">Run</button></div>
+  </div>
 </form>
-<p><strong>{{ r.rows.len() }}</strong> rows · {{ r.subtitle }}</p>
-<div class="table-wrap"><table class="report-table">
-  <caption class="visually-hidden">{{ r.title }}</caption>
-  <thead><tr>{% for c in r.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
-  <tbody>
-  {% for row in r.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-  {% else %}<tr><td colspan="{{ r.columns.len() }}">Nothing to report.</td></tr>{% endfor %}
-  </tbody>
-</table></div>
+{% endif %}
+
+<section class="panel" aria-labelledby="result-h">
+  <div class="panel-head">
+    <h2 id="result-h">{{ total }} row{% if total != 1 %}s{% endif %}</h2>
+    <span class="muted small">{{ r.subtitle }}</span>
+  </div>
+  {% if total == 0 %}
+  <p class="empty">Nothing to report{% if !q.days.is_empty() || !q.from.is_empty() || !q.to.is_empty() || !q.department.is_empty() %} with these options. Change them above and run the report again{% endif %}.</p>
+  {% else %}
+  <div class="table-wrap"><table class="report-table">
+    <caption class="visually-hidden">{{ r.title }}{% if pages > 1 %}, page {{ page }} of {{ pages }}{% endif %}</caption>
+    <thead><tr>{% for c in r.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for row in r.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pages">
+    {% if page > 1 %}<a href="/reports/{{ info.key }}?{{ query }}&amp;page={{ page - 1 }}">← Previous</a>{% endif %}
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a href="/reports/{{ info.key }}?{{ query }}&amp;page={{ page + 1 }}">Next →</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% endif %}
+</section>
 {% endblock %}

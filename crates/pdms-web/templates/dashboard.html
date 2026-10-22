@@ -72,8 +72,8 @@
 {% endif %}
 
 <section aria-labelledby="recent-h" class="panel dash-main">
-  <div class="panel-head"><h2 id="recent-h">Recently updated</h2></div>
-  {% if recent.is_empty() %}<p class="muted">No recent changes.</p>{% else %}
+  <div class="panel-head"><h2 id="recent-h">Recent activity</h2><span class="muted small">On documents you can see</span></div>
+  {% if recent.is_empty() %}<p class="empty">No recent activity on documents you can see.</p>{% else %}
   <ul class="dash-list">
     {% for r in recent %}
     <li class="split">

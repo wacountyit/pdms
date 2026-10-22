@@ -1,14 +1,17 @@
+{% if grants.is_empty() %}<p class="empty">No grants.</p>{% else %}
 <div class="table-wrap">
 <table>
+  <caption class="visually-hidden">Grants</caption>
   <thead><tr><th scope="col">Who</th><th scope="col">Applies to</th><th scope="col">Permission</th><th scope="col">Expires</th><th scope="col">Granted</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
   <tbody>
   {% for g in grants %}
     <tr>
-      <td>{{ g.subject }}</td><td>{{ g.scope }}</td><td><code>{{ g.permission }}</code></td><td>{{ g.expires }}</td>
-      <td>{{ g.granted }}</td><td>{{ g.reason }}</td>
-      <td><form method="post" action="/admin/grants/{{ g.id }}/revoke"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="{{ back }}"><button type="submit" class="danger small">Revoke</button></form></td>
+      <td>{{ g.subject }}</td><td>{{ g.scope }}</td><td><code>{{ g.permission }}</code></td><td class="small">{{ g.expires }}</td>
+      <td class="small">{{ g.granted }}</td><td>{{ g.reason }}</td>
+      <td><form method="post" action="/admin/grants/{{ g.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><input type="hidden" name="back" value="{{ back }}"><button type="submit" class="danger small">Revoke<span class="visually-hidden"> {{ g.permission }} for {{ g.subject }}</span></button></form></td>
     </tr>
-  {% else %}<tr><td colspan="7">No grants.</td></tr>{% endfor %}
+  {% endfor %}
   </tbody>
 </table>
 </div>
+{% endif %}

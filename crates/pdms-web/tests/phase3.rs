@@ -168,6 +168,9 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
     );
     let page = h.get(&format!("/documents/{doc}")).await;
     let step = re(r"/workflow/steps/([0-9a-f-]{36})", &page.body);
+    // The decision form is the row under the step it decides (R2 spec §6.8).
+    assert!(page.body.contains(r#"<tr class="step-decide">"#));
+    assert!(page.body.contains("Your decision on step "));
     let r = o
         .post(
             &format!("/documents/{doc}/workflow/steps/{step}"),
@@ -215,6 +218,11 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
         "name from the user"
     );
     let sig = re(r"/signatories/([0-9a-f-]{36})/request", &page.body);
+    // A signer's actions are in one "Manage" disclosure on their row.
+    assert!(
+        page.body
+            .contains(r#"<details class="row-manage"><summary class="small">Manage"#)
+    );
     o.post(
         &format!("/documents/{doc}/signatories/{sig}/request"),
         &[("_csrf", csrf.as_str())],
@@ -348,6 +356,64 @@ async fn positions_and_appointments_through_the_pages() {
         !page.body.contains("Appoint someone"),
         "the only seat is filled"
     );
+
+    // One wording everywhere (R2 spec §6.1): the term ends in about a month
+    // and the decision was due 60 days before, so it is overdue on the
+    // position page, the positions list and the dashboard alike.
+    let overdue = r#"<span class="status status-critical">Decision overdue</span>"#;
+    assert_eq!(
+        page.body.matches(overdue).count(),
+        2,
+        "header and appointee"
+    );
+    let list = c.get("/positions").await;
+    assert!(list.body.contains(overdue), "{}", list.body);
+    assert!(
+        list.body
+            .contains(r#"<dt class="label">Decision due or overdue</dt><dd class="value">1</dd>"#)
+    );
+    assert!(list.body.contains(r#"<h2 id="body-1">Program Board</h2>"#));
+    let home = c.get("/").await;
+    let boards = &home.body[home.body.find("id=\"boards-h\"").unwrap()..];
+    assert!(boards.contains("Trustee 2, Program Board"));
+    assert!(boards.contains(overdue), "{boards}");
+    // Every form keeps its action and fields.
+    for needle in [
+        r#"action="/positions" class="grid-form""#.to_owned(),
+        format!(r#"action="/positions/{pos}" class="grid-form""#),
+        format!(r#"action="/positions/{pos}/requirements" class="stack""#),
+    ] {
+        let body = if needle.contains("/positions\"") {
+            &list.body
+        } else {
+            &page.body
+        };
+        assert!(body.contains(&needle), "{needle}");
+    }
+    for name in [
+        "body_name",
+        "name",
+        "appointing_authority",
+        "term_months",
+        "seats",
+        "reappointment_lead_days",
+        "department_id",
+        "manager_user_id",
+        "description",
+    ] {
+        assert!(list.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
+    for action in ["reappoint", "replace", "edit", "end"] {
+        assert!(
+            regex::Regex::new(&format!(
+                r#"action="/positions/{pos}/appointments/[0-9a-f-]{{36}}/{action}""#
+            ))
+            .unwrap()
+            .is_match(&page.body),
+            "{action}"
+        );
+    }
+    assert_eq!(page.body.matches("<h1>").count(), 1);
 
     // The manager ticks the checklist; they cannot change the setup.
     let mut m = Browser::new(&app);

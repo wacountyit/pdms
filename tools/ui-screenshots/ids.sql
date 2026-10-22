@@ -16,5 +16,7 @@ SELECT json_build_object(
   'position', (SELECT id FROM positions WHERE name = 'Seat 1' AND body_name = 'Advisory Committee'),
   'doc',      (SELECT id FROM documents WHERE title = 'Asphalt Supply Contract FY2026'),
   -- The demo's agreement with history and missed review cycles (shown overdue).
-  'doc2',     (SELECT id FROM documents WHERE title LIKE '%Facilities Maintenance with Example Partner' ORDER BY created_at LIMIT 1)
+  'doc2',     (SELECT id FROM documents WHERE title LIKE '%Facilities Maintenance with Example Partner' ORDER BY created_at LIMIT 1),
+  -- The demo's document with a review round (the workflow section).
+  'doc3',     (SELECT id FROM documents WHERE title = 'Equipment Inspection Services Contract')
 );

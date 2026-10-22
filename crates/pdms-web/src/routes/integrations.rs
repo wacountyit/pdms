@@ -74,7 +74,7 @@ pub async fn my_tokens(
     let tokens = api_tokens::list_mine(&state.core, &user.ctx).await?;
     let me = directory::get_user(&state.core.db, user.session.user_id).await?;
     let page = TokensPage {
-        l: Layout::new(&state, &user, flash, "API tokens", "account"),
+        l: Layout::new(&state, &user, flash, "Your account", "account"),
         tokens: tokens.into_iter().map(|t| token_row(&state, t)).collect(),
         scopes: api_tokens::SCOPES.to_vec(),
         max_days: state.core.config.api.max_token_days,
@@ -404,4 +404,33 @@ pub async fn redeliver(
     };
     let r = webhooks::redeliver(&state.core, &user.ctx, id).await;
     done(&state, &back, r, "Queued for delivery.")
+}
+
+// ---------------------------------------------------------------------------
+// Appearance (R2 spec §7)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct AppearanceForm {
+    color_scheme: String,
+    /// Where to return: the account page, or the page the sidebar switch was
+    /// on. Only a local path is followed.
+    #[serde(default)]
+    back: String,
+}
+
+/// `POST /account/appearance`: the caller's own color scheme.
+pub async fn set_appearance(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<AppearanceForm>,
+) -> AppResult<Response> {
+    let back = if f.back.is_empty() {
+        "/account/tokens".to_owned()
+    } else {
+        pdms_core::auth::oidc::safe_return_to(&f.back)
+    };
+    let r =
+        pdms_core::directory::set_color_scheme(&state.core.db, &user.ctx, &f.color_scheme).await;
+    done(&state, &back, r, "Appearance saved.")
 }

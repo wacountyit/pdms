@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Comments, extracted text with date suggestions, and the Outlook calendar
-//! status page.
+//! Comments, extracted text with date suggestions, and the text extraction
+//! (OCR) status page.
 
 use askama::Template;
 use axum::extract::{Path, State};
@@ -297,72 +297,30 @@ pub async fn reprocess(
 }
 
 // ---------------------------------------------------------------------------
-// Outlook calendar (administration)
+// Text extraction (OCR) status (administration)
 // ---------------------------------------------------------------------------
 
 #[derive(Template)]
-#[template(path = "admin/outlook.html")]
-struct OutlookPage {
+#[template(path = "admin/ocr.html")]
+struct OcrPage {
     l: Layout,
     enabled: bool,
-    mailbox: String,
-    departments: Vec<(String, String)>,
-    events: i64,
-    failing: Vec<(String, String)>,
-    include_appointments: bool,
-    interval: u64,
-    ocr_enabled: bool,
-    ocr_url: String,
+    url: String,
+    suggest_dates: bool,
 }
 
-pub async fn outlook_page(
+pub async fn ocr_page(
     State(state): State<AppState>,
     user: CurrentUser,
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
-    user.require(&state, Capability::ManageIntegrations, "/admin/outlook")
+    user.require(&state, Capability::ManageIntegrations, "/admin/ocr")
         .await?;
-    let cfg = &state.core.config.graph_calendar;
-    let (events, failing) = pdms_core::graph_calendar::status(&state.core, &user.ctx).await?;
-    let page = OutlookPage {
-        l: Layout::new(&state, &user, flash, "Outlook calendar and OCR", "admin")
-            .admin_tab("outlook"),
-        enabled: cfg.enabled,
-        mailbox: cfg.mailbox.clone(),
-        departments: cfg
-            .department_mailboxes
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-        events,
-        failing,
-        include_appointments: cfg.include_appointments,
-        interval: cfg.sync_interval_minutes,
-        ocr_enabled: state.core.ocr.is_some(),
-        ocr_url: state.core.config.ocr.sidecar_url.clone(),
+    let page = OcrPage {
+        l: Layout::new(&state, &user, flash, "Text extraction (OCR)", "admin").admin_tab("ocr"),
+        enabled: state.core.ocr.is_some(),
+        url: state.core.config.ocr.sidecar_url.clone(),
+        suggest_dates: state.core.config.ocr.suggest_dates,
     };
     Ok(Html(page.render()?))
-}
-
-pub async fn outlook_sync(State(state): State<AppState>, user: CurrentUser) -> AppResult<Response> {
-    user.require(&state, Capability::ManageIntegrations, "/admin/outlook")
-        .await?;
-    match pdms_core::graph_calendar::sync(&state.core).await {
-        Ok(r) if r.errors.is_empty() => Ok(redirect_with(
-            &state,
-            "/admin/outlook",
-            true,
-            &format!(
-                "Synchronized: {} created, {} updated, {} removed, {} unchanged.",
-                r.created, r.updated, r.deleted, r.unchanged
-            ),
-        )),
-        Ok(r) => Ok(redirect_with(
-            &state,
-            "/admin/outlook",
-            false,
-            &format!("{} problem(s); first: {}", r.errors.len(), r.errors[0]),
-        )),
-        Err(e) => done::<()>(&state, "/admin/outlook", Err(e), ""),
-    }
 }

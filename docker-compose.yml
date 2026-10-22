@@ -32,11 +32,10 @@ x-pdms: &pdms
     PDMS_SECRET_KEY_FILE: /run/secrets/pdms_secret_key
     PDMS_AUTH__OIDC__CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
     PDMS_EMAIL__SMTP_PASSWORD_FILE: /run/secrets/smtp_password
-    PDMS_GRAPH_CALENDAR__CLIENT_SECRET_FILE: /run/secrets/graph_client_secret
   volumes:
     - ./config/pdms.toml:/etc/pdms/pdms.toml:ro
     - pdmsdata:/var/lib/pdms
-  secrets: [db_app_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_client_secret]
+  secrets: [db_app_url, pdms_secret_key, oidc_client_secret, smtp_password]
 
 services:
   postgres:
@@ -64,7 +63,7 @@ services:
     environment:
       <<: *pdms-env
       PDMS_DATABASE__OWNER_URL_FILE: /run/secrets/db_owner_url
-    secrets: [db_app_url, db_owner_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_client_secret]
+    secrets: [db_app_url, db_owner_url, pdms_secret_key, oidc_client_secret, smtp_password]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -130,7 +129,6 @@ secrets:
   pdms_secret_key: { file: ./secrets/pdms_secret_key }
   oidc_client_secret: { file: ./secrets/oidc_client_secret }
   smtp_password: { file: ./secrets/smtp_password }
-  graph_client_secret: { file: ./secrets/graph_client_secret }
 
 volumes:
   pgdata:

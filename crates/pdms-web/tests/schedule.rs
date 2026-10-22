@@ -98,7 +98,7 @@ async fn calendar_dashboard_and_ics_respect_permissions() {
         ops,
         alice,
         "Old agreement",
-        "partnership_agreement",
+        "interlocal_agreement",
         MetadataInput {
             last_review_date: Some("2014-06-01".parse().unwrap()),
             ..Default::default()
@@ -222,6 +222,19 @@ async fn inbox_tasks_and_rules_through_the_web() {
     );
     let inbox = b.get("/notifications").await;
     assert!(inbox.body.contains("Review due today"));
+    // Unread notices are marked with a word, not only a color.
+    assert!(inbox.body.contains(r#"<li class="notice unread">"#));
+    assert!(
+        inbox
+            .body
+            .contains(r#"<span class="visually-hidden">Unread: </span>"#)
+    );
+    assert!(inbox.body.contains(r#"action="/notifications/ack-all""#));
+    assert!(
+        inbox
+            .body
+            .contains(r#"<a href="/notifications" aria-current="page">Unread</a>"#)
+    );
     let csrf = inbox.csrf();
     let ack = regex::Regex::new(r"/notifications/([0-9a-f-]{36})/ack")
         .unwrap()
@@ -232,12 +245,13 @@ async fn inbox_tasks_and_rules_through_the_web() {
         b.post(&ack, &[("_csrf", csrf.as_str())]).await.status,
         StatusCode::SEE_OTHER
     );
+    let empty = b.get("/notifications").await;
     assert!(
-        b.get("/notifications")
-            .await
-            .body
-            .contains("No notifications.")
+        empty.body.contains("You’re all caught up."),
+        "{}",
+        empty.body
     );
+    assert!(!empty.body.contains(r#"action="/notifications/ack-all""#));
 
     // Document page shows the open task; complete it from the form.
     let page = b.get(&format!("/documents/{id}")).await;
@@ -328,7 +342,14 @@ async fn dashboard_greets_and_shows_tiles() {
         assert!(home.body.contains(tile), "tile {tile}");
     }
     assert!(home.body.contains("Nothing needs your attention."));
-    assert!(home.body.contains("No recent changes."));
+    assert!(
+        home.body
+            .contains("<h2 id=\"recent-h\">Recent activity</h2>")
+    );
+    assert!(
+        home.body
+            .contains("No recent activity on documents you can see.")
+    );
     // "Your access" now lives on the account page.
     assert!(!home.body.contains("Your access"));
     assert!(b.get("/account/tokens").await.body.contains("Your access"));
@@ -378,6 +399,12 @@ async fn dashboard_panels_respect_visibility() {
     assert!(home.body.contains("Bravo countywide doc"));
     assert!(!home.body.contains("Bravo dept doc"));
     assert!(!home.body.contains("Bravo restricted doc"));
+    // The activity feed shows the County-wide document's creation, by name
+    // (the document page shows who created it), and nothing of the others.
+    let feed = panel(&home.body, "recent-h");
+    assert!(feed.contains("Bravo countywide doc"), "{feed}");
+    assert!(feed.contains("Created"), "{feed}");
+    assert!(!feed.contains("Bravo dept doc") && !feed.contains("Bravo restricted doc"));
     // "Coming up": the visual date block is hidden from assistive technology,
     // and the full date is in the row's text for screen readers.
     let due = today(&app) + chrono::Duration::days(10);
@@ -447,6 +474,120 @@ async fn coming_up_says_how_many_more_there_are() {
 }
 
 #[tokio::test]
+async fn calendar_month_caps_days_and_lists_them_for_phones() {
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "AAA", "Dept Alpha")
+        .await
+        .unwrap();
+    let (owner, secret) = user(&app.core, "alice@x.org", Some(dept), None).await;
+    let busy = today(&app) + chrono::Duration::days(10);
+    for n in 1..=5 {
+        doc(
+            &app,
+            dept,
+            owner,
+            &format!("Busy day policy {n}"),
+            "policy",
+            MetadataInput {
+                next_review_date: Some(busy),
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    doc(
+        &app,
+        dept,
+        owner,
+        "Late policy",
+        "policy",
+        MetadataInput {
+            next_review_date: Some(today(&app) - chrono::Duration::days(3)),
+            ..Default::default()
+        },
+    )
+    .await;
+    plan(&app).await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+
+    let month = b
+        .get(&format!(
+            "/calendar?view=month&month={}",
+            busy.format("%Y-%m")
+        ))
+        .await;
+    assert_eq!(month.status, StatusCode::OK);
+    let grid = &month.body[month.body.find("class=\"month-grid\"").unwrap()..];
+    let grid = &grid[..grid.find("</table>").unwrap()];
+    assert_eq!(
+        grid.matches(">Review: Busy day policy").count(),
+        3,
+        "three per day"
+    );
+    assert!(
+        grid.contains(&format!(
+            r#"href="/calendar?view=agenda&amp;from={busy}&amp;days=7&amp;">+2 more"#
+        )),
+        "{grid}"
+    );
+    // The phone list has every event of the day.
+    let list = &month.body[month.body.find("class=\"month-list\"").unwrap()..];
+    assert_eq!(list.matches("Busy day policy").count(), 5);
+
+    // The day's agenda shows them all, starting that day.
+    let agenda = b
+        .get(&format!("/calendar?view=agenda&from={busy}&days=7"))
+        .await;
+    assert_eq!(agenda.body.matches("Busy day policy").count(), 5);
+    assert!(
+        agenda
+            .body
+            .contains(&format!("from {}", busy.format("%b %-d, %Y")))
+    );
+
+    // Overdue items are one link on today, in the month that holds today.
+    let now = b.get("/calendar").await;
+    assert!(
+        now.body
+            .contains(r#"<a class="cal-ev overdue" href="/reports/overdue">1 overdue</a>"#),
+        "{}",
+        now.body
+    );
+
+    // Range tabs mark the current range.
+    let agenda = b.get("/calendar?view=agenda&days=365").await;
+    assert!(
+        agenda
+            .body
+            .contains(r#"days=365&amp;" aria-current="page">365 days</a>"#)
+    );
+
+    // A filter with no results offers to clear it.
+    let other = directory::create_department(&app.core.db, &system(), "BBB", "Dept Bravo")
+        .await
+        .unwrap();
+    let empty = b
+        .get(&format!("/calendar?view=agenda&department={other}"))
+        .await;
+    assert!(empty.body.contains("Nothing scheduled in this period."));
+    assert!(empty.body.contains("Clear the filters"));
+
+    // The feeds page keeps its form.
+    let feeds = b.get("/calendar/feeds").await;
+    assert!(
+        feeds
+            .body
+            .contains(r#"action="/calendar/feeds" class="grid-form""#)
+    );
+    for name in ["name", "department_id", "only_owned"] {
+        assert!(feeds.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
+    assert!(feeds.body.contains("No subscriptions yet."));
+    assert_eq!(feeds.body.matches("<h1>").count(), 1);
+}
+
+#[tokio::test]
 async fn boards_panel_hidden_without_appointment_access() {
     let app = app().await;
     let (_, secret) = user(&app.core, "plain@x.org", None, None).await;
@@ -484,8 +625,7 @@ async fn spooled_pdf(app: &App) -> pdms_core::documents::files::Upload {
 }
 
 #[tokio::test]
-async fn recently_updated_labels_order_and_cap() {
-    use chrono::TimeZone;
+async fn activity_feed_order_names_and_cap() {
     let app = app().await;
     let dept = directory::create_department(&app.core.db, &system(), "OPS", "Operations")
         .await
@@ -501,92 +641,51 @@ async fn recently_updated_labels_order_and_cap() {
         &pdms_core::ClientInfo::default(),
     );
     let mut ids = Vec::new();
-    for n in 1..=6 {
+    for n in 1..=11 {
         ids.push(
             doc(
                 &app,
                 dept,
                 uploader,
-                &format!("Recent doc {n}"),
+                &format!("Recent doc {n:02}"),
                 "policy",
                 MetadataInput::default(),
             )
             .await,
         );
     }
-    // Doc 1: a file uploaded just now by a named person.
-    documents::add_version(
-        &app.core,
-        &ctx,
-        ids[0],
-        spooled_pdf(&app).await,
-        documents::VersionKind::Revision,
-        "",
-        None,
-    )
-    .await
-    .unwrap();
-    // Doc 2: has a file, but its details were edited well after the upload.
-    documents::add_version(
-        &app.core,
-        &ctx,
-        ids[1],
-        spooled_pdf(&app).await,
-        documents::VersionKind::Revision,
-        "",
-        None,
-    )
-    .await
-    .unwrap();
-    let tz = app.core.config.timezone();
-    let noon = |days_ago: i64| {
-        tz.from_local_datetime(
-            &(today(&app) - chrono::Duration::days(days_ago))
-                .and_hms_opt(12, 0, 0)
-                .unwrap(),
+    // Two new files, the newest events of all: doc 01, then doc 02.
+    for id in [ids[0], ids[1]] {
+        documents::add_version(
+            &app.core,
+            &ctx,
+            id,
+            spooled_pdf(&app).await,
+            documents::VersionKind::Revision,
+            "",
+            None,
         )
-        .unwrap()
-        .with_timezone(&Utc)
-    };
-    // Doc 2 two minutes ago, doc 3 yesterday, 4 to 6 progressively older.
-    let stamps = [
-        (ids[1], Utc::now() - chrono::Duration::minutes(2)),
-        (ids[2], noon(1)),
-        (ids[3], noon(3)),
-        (ids[4], noon(4)),
-        (ids[5], noon(5)),
-    ];
-    for (id, at) in stamps {
-        sqlx::query("UPDATE documents SET updated_at = $2 WHERE id = $1")
-            .bind(id)
-            .bind(at)
-            .execute(&app._db.superuser)
-            .await
-            .unwrap();
+        .await
+        .unwrap();
     }
 
     let mut b = Browser::new(&app);
     b.login("uploader@x.org", &secret).await;
     let home = b.get("/").await;
-    let recent = panel(&home.body, "recent-h");
-    let pos = |t: &str| recent.find(t).unwrap_or_else(|| panic!("{t} missing"));
-    assert!(recent.contains("New version by uploader@x.org"));
-    assert!(recent.contains("Details updated"));
-    assert!(recent.contains("Today"));
-    assert!(recent.contains("Yesterday"));
+    let feed = panel(&home.body, "recent-h");
+    // Newest first, ten at most (13 events happened).
+    assert_eq!(feed.matches("<li class=\"split\">").count(), 10, "{feed}");
+    let first = feed.find("<li class=\"split\">").unwrap();
+    let first = &feed[first..feed[first..].find("</li>").unwrap() + first];
     assert!(
-        pos("Recent doc 1") < pos("Recent doc 2")
-            && pos("Recent doc 2") < pos("Recent doc 3")
-            && pos("Recent doc 3") < pos("Recent doc 4")
-            && pos("Recent doc 4") < pos("Recent doc 5"),
-        "newest first"
+        first.contains("Recent doc 02") && first.contains("New version · uploader@x.org"),
+        "{first}"
     );
-    assert!(!recent.contains("Recent doc 6"), "only five are shown");
-    // Doc 1 is the new-version row, doc 2 (older than 60 s) is not.
-    let row2 = &recent[pos("Recent doc 2")..pos("Recent doc 3")];
-    assert!(row2.contains("Details updated") && !row2.contains("New version"));
-    let row1 = &recent[pos("Recent doc 1")..pos("Recent doc 2")];
-    assert!(row1.contains("New version by uploader@x.org"));
+    assert!(feed.contains("Today"));
+    assert!(feed.contains("Created"));
+    // Both uploads are named; the oldest creations fell off the end.
+    assert_eq!(feed.matches("New version · uploader@x.org").count(), 2);
+    assert!(!feed.contains("Recent doc 03"), "{feed}");
 }
 
 #[tokio::test]
@@ -678,6 +777,95 @@ async fn overview_counts_respect_visibility() {
     // Only visible departments are offered.
     assert!(r.body.contains("Dept Alpha") && r.body.contains("Dept Bravo"));
     assert!(!r.body.contains("Bravo dept doc"));
+}
+
+#[tokio::test]
+async fn overview_status_chart_total_matches_the_documents_tile() {
+    let app = app().await;
+    let (a, _, secret) = overview_fixture(&app).await;
+    let alice: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE email = 'alice@x.org'")
+        .fetch_one(&app.core.db)
+        .await
+        .unwrap();
+    for (title, status) in [
+        ("Old policy", "superseded"),
+        ("Shelved policy", "archived"),
+        ("Lapsed policy", "expired"),
+        ("Draft policy", "draft"),
+    ] {
+        doc(&app, a, alice, title, "policy", MetadataInput::default()).await;
+        sqlx::query("UPDATE documents SET status = $1::document_status WHERE title = $2")
+            .bind(status)
+            .bind(title)
+            .execute(&app.core.db)
+            .await
+            .unwrap();
+    }
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = b.get("/reports").await;
+    let tile: i64 = tile_value(&r.body, "Documents").parse().unwrap();
+    let aria = regex::Regex::new(r#"aria-label="Documents by status: ([^"]*)""#)
+        .unwrap()
+        .captures(&r.body)
+        .unwrap()[1]
+        .to_owned();
+    let chart: i64 = regex::Regex::new(r"(\d+)")
+        .unwrap()
+        .captures_iter(&aria)
+        .map(|c| c[1].parse::<i64>().unwrap())
+        .sum();
+    // Alpha doc, the County-wide doc, expired and draft; not superseded or
+    // archived.
+    assert_eq!(tile, 4, "{aria}");
+    assert_eq!(chart, tile, "{aria}");
+    assert!(aria.contains("Other 2"), "{aria}");
+    // The overdue tile says what it counts.
+    assert!(
+        r.body
+            .contains(r#"<span class="label">Overdue dates</span>"#)
+    );
+    assert!(r.body.contains("Documents and board terms · "));
+}
+
+#[tokio::test]
+async fn report_pages_long_results_but_the_csv_has_every_row() {
+    let app = app().await;
+    let dept = directory::create_department(&app.core.db, &system(), "AAA", "Dept Alpha")
+        .await
+        .unwrap();
+    let (owner, secret) = user(&app.core, "alice@x.org", Some(dept), None).await;
+    for n in 0..105 {
+        doc(
+            &app,
+            dept,
+            owner,
+            &format!("Paged policy {n:03}"),
+            "policy",
+            MetadataInput {
+                next_review_date: Some(today(&app) + chrono::Duration::days(5)),
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let first = b.get("/reports/upcoming?days=30").await;
+    assert_eq!(first.status, StatusCode::OK);
+    assert!(
+        first.body.contains(r#"<h2 id="result-h">105 rows</h2>"#),
+        "{}",
+        first.body
+    );
+    assert_eq!(first.body.matches("Paged policy").count(), 100);
+    assert!(first.body.contains("Page 1 of 2"));
+    let second = b.get("/reports/upcoming?days=30&page=2").await;
+    assert_eq!(second.body.matches("Paged policy").count(), 5);
+    assert!(second.body.contains("← Previous"));
+    let csv = b.get("/reports/upcoming.csv?days=30").await;
+    assert_eq!(csv.body.matches("Paged policy").count(), 105);
+    assert_eq!(first.body.matches("<h1>").count(), 1);
 }
 
 #[tokio::test]

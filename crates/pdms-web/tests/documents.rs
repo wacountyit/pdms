@@ -59,8 +59,19 @@ async fn create_via_form(
     title: &str,
     file: Option<(&str, &[u8])>,
 ) -> Resp {
+    // Tags are curated (D-088): the two the form ticks must exist.
+    for name in ["Ops", "Partnership"] {
+        let _ = pdms_core::documents::tags::create_curated(
+            &app.core.db,
+            &system(),
+            name,
+            "#1f6feb",
+            "",
+        )
+        .await;
+    }
     let csrf = b.get("/documents/new").await.csrf();
-    let t = type_id(app, "partnership_agreement").await;
+    let t = type_id(app, "interlocal_agreement").await;
     let dept = dept.to_string();
     let owner = owner.to_string();
     b.multipart(
@@ -78,6 +89,99 @@ async fn create_via_form(
         file,
     )
     .await
+}
+
+#[tokio::test]
+async fn editors_pick_curated_tags() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = create_via_form(&mut b, &app, dept, uid, "Tagged agreement", None).await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    // The new-document form offers the curated tags as boxes, not a text field.
+    let form = b.get("/documents/new").await;
+    assert!(
+        form.body
+            .contains(r#"<input type="checkbox" name="tags" value="Ops""#)
+    );
+    assert!(!form.body.contains(r#"id="tags" name="tags""#));
+    // The document page offers the curated tags it does not have yet: none.
+    let page = b.get(r.location()).await;
+    assert!(
+        !page.body.contains(r#"<select id="tag-name""#),
+        "both are on it"
+    );
+    pdms_core::documents::tags::create_curated(&app.core.db, &system(), "Grant", "#1f6feb", "")
+        .await
+        .unwrap();
+    let page = b.get(r.location()).await;
+    assert!(page.body.contains(r#"<select id="tag-name" name="name" required><option value="Grant">Grant</option></select>"#), "{}", page.body);
+    // A tag nobody curated is refused.
+    let doc = r.location().to_owned();
+    let refused = b
+        .post(
+            &format!("{doc}/tags"),
+            &[("_csrf", page.csrf().as_str()), ("name", "Invented")],
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::SEE_OTHER);
+    assert!(!b.get(&doc).await.body.contains(">Invented<"));
+}
+
+#[tokio::test]
+async fn document_forms_are_grouped_in_panels() {
+    let app = app().await;
+    let (_, _, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let new = b.get("/documents/new").await;
+    for section in [
+        "Details",
+        "Dates",
+        "Additional fields",
+        "Ownership",
+        "Who can see it",
+        "Tags",
+        "File",
+    ] {
+        assert!(
+            new.body.contains(&format!(
+                r#"<legend class="form-section-title">{section}</legend>"#
+            )),
+            "{section}"
+        );
+    }
+    // Every field the form posted before is still there.
+    for name in [
+        "title",
+        "description",
+        "document_type_id",
+        "execution_date",
+        "effective_date",
+        "last_review_date",
+        "next_review_date",
+        "renewal_date",
+        "expiration_date",
+        "review_interval_months",
+        "department_id",
+        "owner_id",
+        "status",
+        "visibility",
+        "file",
+        "note",
+    ] {
+        assert!(new.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
+    assert_eq!(
+        new.body.matches(r#"<label class="choice-card">"#).count(),
+        3
+    );
+    assert!(
+        new.body
+            .contains(r##"hx-get="/documents/fields" hx-target="#custom-fields""##)
+    );
+    assert_eq!(new.body.matches("<h1").count(), 1);
 }
 
 #[tokio::test]
@@ -103,7 +207,7 @@ async fn create_document_with_file_without_javascript() {
     assert_eq!(page.status, StatusCode::OK);
     assert!(page.body.contains("Equipment maintenance agreement"));
     assert!(page.body.contains("Document created."));
-    assert!(page.body.contains("PAG-"));
+    assert!(page.body.contains("ILA-"));
     assert!(page.body.contains("Download agreement 2013.pdf"));
     assert!(
         page.body.contains("Partnership") && page.body.contains("Ops"),
@@ -348,7 +452,7 @@ async fn upload_new_version_and_edit_details() {
         .captures(&edit.body)
         .unwrap()[1]
         .to_owned();
-    let t = type_id(&app, "partnership_agreement").await;
+    let t = type_id(&app, "interlocal_agreement").await;
     let dept_s = dept.to_string();
     let form = [
         ("_csrf", csrf.as_str()),

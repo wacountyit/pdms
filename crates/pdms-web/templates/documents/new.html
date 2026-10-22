@@ -1,52 +1,87 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol><li><a href="/documents">Documents</a></li><li aria-current="page">New</li></ol>
+    </nav>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Fields marked <span class="req" aria-hidden="true">*</span><span class="visually-hidden">with an asterisk</span> are required. You can upload the file now or later.</p>
+  </div>
+</header>
+{% endblock %}
 {% block content %}
 {% if let Some(e) = error %}<div class="flash flash-error" role="alert">{{ e }}</div>{% endif %}
 <form method="post" action="/documents" enctype="multipart/form-data" class="doc-form">
   <input type="hidden" name="_csrf" value="{{ l.csrf }}">
   {% let fields_doc_param = "" %}
   {% include "documents/metadata_fields.html" %}
-  <div class="field-row">
-    <div class="field">
-      <label for="department_id">Department <span class="req" aria-hidden="true">*</span></label>
-      <select id="department_id" name="department_id" required>
-        {% for d in departments %}<option value="{{ d.0 }}" {% if form.v("department_id") == d.0.to_string() %}selected{% endif %}>{{ d.1 }}</option>{% endfor %}
-      </select>
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">Ownership</legend>
+    <div class="field-row">
+      <div class="field">
+        <label for="department_id">Department <span class="req" aria-hidden="true">*</span></label>
+        <select id="department_id" name="department_id" required>
+          {% for d in departments %}<option value="{{ d.0 }}" {% if form.v("department_id") == d.0.to_string() %}selected{% endif %}>{{ d.1 }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="owner_id">Primary record owner <span class="req" aria-hidden="true">*</span></label>
+        <select id="owner_id" name="owner_id" required>
+          {% for u in users %}<option value="{{ u.id }}" {% if form.v("owner_id") == u.id.to_string() %}selected{% endif %}>{{ u.display_name }} ({{ u.email }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="status">Start as</label>
+        <select id="status" name="status">
+          <option value="active" {% if form.v("status") == "active" %}selected{% endif %}>Active</option>
+          <option value="draft" {% if form.v("status") == "draft" %}selected{% endif %}>Draft</option>
+        </select>
+      </div>
     </div>
-    <div class="field">
-      <label for="owner_id">Primary record owner <span class="req" aria-hidden="true">*</span></label>
-      <select id="owner_id" name="owner_id" required>
-        {% for u in users %}<option value="{{ u.id }}" {% if form.v("owner_id") == u.id.to_string() %}selected{% endif %}>{{ u.display_name }} ({{ u.email }})</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field">
-      <label for="status">Start as</label>
-      <select id="status" name="status">
-        <option value="active" {% if form.v("status") == "active" %}selected{% endif %}>Active</option>
-        <option value="draft" {% if form.v("status") == "draft" %}selected{% endif %}>Draft</option>
-      </select>
-    </div>
-  </div>
-  <fieldset>
-    <legend>Who can see it</legend>
+  </fieldset>
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">Who can see it</legend>
+    <div class="choice-cards">
     {% for v in visibility_options %}
-    <label class="check"><input type="radio" name="visibility" value="{{ v.0 }}"
+    <label class="choice-card"><input type="radio" name="visibility" value="{{ v.0 }}"
       {% if form.v("visibility") == v.0 || (form.v("visibility") == "" && v.0 == "department") %}checked{% endif %}>
-      <strong>{{ v.1 }}</strong>: {{ v.2 }}</label>
+      <span><strong>{{ v.1 }}</strong><span class="muted small">{{ v.2 }}</span></span></label>
     {% endfor %}
+    </div>
   </fieldset>
-  <div class="field">
-    <label for="tags">Tags</label>
-    <input id="tags" name="tags" value="{{ form.v("tags") }}" aria-describedby="tags-help">
-    <p id="tags-help" class="help">Separate tags with commas.</p>
-  </div>
-  <fieldset>
-    <legend>File</legend>
-    <label for="file">Document file (optional now; you can upload it later)</label>
-    <input id="file" name="file" type="file" aria-describedby="file-help">
-    <p id="file-help" class="help">PDF, Word, Excel, PowerPoint, OpenDocument, images, text, or email. Up to {{ max_upload_mb }} MB.</p>
-    <label for="note">Note for this version</label>
-    <input id="note" name="note" maxlength="1000">
+  {% if free_tags %}
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">Tags</legend>
+    <div class="field">
+      <label for="tags">Tags</label>
+      <input id="tags" name="tags" value="{{ form.v("tags") }}" aria-describedby="tags-help">
+      <p id="tags-help" class="help">Separate tags with commas. A tag that does not exist yet is created.</p>
+    </div>
   </fieldset>
-  <p><button type="submit" class="primary">Create document</button> <a href="/documents">Cancel</a></p>
+  {% else %}
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">Tags</legend>
+    {% if curated.is_empty() %}<p class="help">No tags have been set up yet. An administrator adds them under Administration → Tags.</p>{% else %}
+    <div class="tag-picks">
+      {% for t in curated %}<label class="check"><input type="checkbox" name="tags" value="{{ t.0 }}" {% if form.has("tags", t.0) %}checked{% endif %}> <span class="tag {{ t.1 }}">{{ t.0 }}</span></label>{% endfor %}
+    </div>
+    <p class="help">Tags are chosen from the list an administrator keeps.</p>
+    {% endif %}
+  </fieldset>
+  {% endif %}
+  <fieldset class="panel form-section">
+    <legend class="form-section-title">File</legend>
+    <div class="field">
+      <label for="file">Document file (optional now; you can upload it later)</label>
+      <input id="file" name="file" type="file" aria-describedby="file-help">
+      <p id="file-help" class="help">PDF, Word, Excel, PowerPoint, OpenDocument, images, text, or email. Up to {{ max_upload_mb }} MB.</p>
+    </div>
+    <div class="field">
+      <label for="note">Note for this version</label>
+      <input id="note" name="note" maxlength="1000">
+    </div>
+  </fieldset>
+  <div class="form-footer"><button type="submit" class="primary">Create document</button> <a class="button" href="/documents">Cancel</a></div>
 </form>
 {% endblock %}

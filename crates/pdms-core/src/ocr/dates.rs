@@ -442,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn an_partnership_agreement() {
+    fn an_interlocal_agreement() {
         let t = "This Partnership Agreement is made and entered into this 12th day of February, 2013, \
                  by and between the Organization and the Partner. This Agreement shall be effective March 1, 2013 \
                  and shall continue for a term of five (5) years. The parties shall review this Agreement \

@@ -112,7 +112,35 @@ async fn role_revocation_applies_to_the_next_request() {
     let (uid, secret) = user(&app.core, "aud@example.org", None, Some("auditor")).await;
     let mut b = Browser::new(&app);
     b.login("aud@example.org", &secret).await;
-    assert_eq!(b.get("/audit").await.status, StatusCode::OK);
+    let page = b.get("/audit").await;
+    assert_eq!(page.status, StatusCode::OK);
+    // R2 layout: header with the export menu, the common filters in one row and
+    // the rarer ones under "More filters", outcomes as words.
+    assert!(page.body.contains(r#"<header class="page-head">"#));
+    assert!(page.body.contains(r#"<a href="/audit/export.csv?"#));
+    assert!(page.body.contains(r#"<a href="/audit/export.json?"#));
+    assert!(page.body.contains("<summary>More filters</summary>"));
+    for name in [
+        "action",
+        "category",
+        "outcome",
+        "actor",
+        "object_id",
+        "from",
+        "to",
+    ] {
+        assert!(page.body.contains(&format!(r#"name="{name}""#)), "{name}");
+    }
+    let filtered = b
+        .get("/audit?actor=00000000-0000-0000-0000-000000000000")
+        .await;
+    assert!(
+        filtered
+            .body
+            .contains("<details class=\"disclosure\" open>"),
+        "a set rare filter opens More filters"
+    );
+    assert!(filtered.body.contains("No matching entries."));
     assert_eq!(b.get("/audit/export.csv").await.status, StatusCode::OK);
 
     let assignment = directory::get_user(&app.core.db, uid).await.unwrap().roles[0].id;

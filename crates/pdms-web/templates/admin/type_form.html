@@ -1,6 +1,6 @@
   <label for="t-name">Name</label><input id="t-name" name="name" value="{{ tf.name }}" required maxlength="200">
   <label for="t-prefix">ID prefix</label><input id="t-prefix" name="id_prefix" value="{{ tf.prefix }}" required pattern="[A-Za-z]{2,8}" aria-describedby="t-prefix-help">
-  <span></span><span id="t-prefix-help" class="help">2–8 letters used in document IDs, e.g. PAG → PAG-2026-000123.</span>
+  <span></span><span id="t-prefix-help" class="help">2–8 letters used in document IDs, e.g. ILA → ILA-2026-000123.</span>
   <label for="t-desc">Description</label><input id="t-desc" name="description" value="{{ tf.desc }}" maxlength="2000">
   <label for="t-interval">Default review every (months)</label><input id="t-interval" name="review_interval_months" inputmode="numeric" value="{{ tf.interval }}" aria-describedby="t-interval-help">
   <span></span><span id="t-interval-help" class="help">Empty means no recurring review (for example, contracts tracked by renewal date).</span>

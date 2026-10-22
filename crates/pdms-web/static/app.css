@@ -69,8 +69,75 @@
   --accent-hover: #93420A;
   --accent-link: #8A4B06;
   --accent-tint: #F6ECE3;
+  /* Marks drawn in the accent (tab underlines, current-item bars, chart
+     bars); lighter than the accent in dark mode. */
+  --accent-mark: #B45309;
 
   --font: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Dark mode (R2 spec §7). Each person chooses dark (the default), light or
+   their device's setting; the page carries it as <html data-theme>. The two
+   blocks below must stay identical (a test checks), and every text pair in
+   them meets 4.5:1 and every mark 3:1 (the same test). Screen only: print
+   stays light. The accent's dark shades come from /theme.css. */
+@media screen {
+  :root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0F1720;
+  --surface: #17212B;
+  --thead: #1C2733;
+  --ink: #E6EBF0;
+  --muted: #A7B3C0;
+  --border: #2A3644;
+  --row: #222D39;
+  --control-border: #748395;
+  --focus: #6CA6FF;
+  --crit-dot: #E5655A;
+  --crit-fg: #FF9B91;
+  --crit-tint: #3A1C1A;
+  --warn-dot: #D08A1F;
+  --warn-fg: #F2B866;
+  --warn-tint: #3A2A12;
+  --info-dot: #5B8FE0;
+  --info-fg: #8DB8FF;
+  --info-tint: #172A45;
+  --good-dot: #3FA56A;
+  --good-fg: #7FD1A0;
+  --good-tint: #15321F;
+  --neutral-dot: #7D8A9A;
+  --neutral-fg: #B4BFCB;
+  --neutral-tint: #26313D;
+  }
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+  color-scheme: dark;
+  --ground: #0F1720;
+  --surface: #17212B;
+  --thead: #1C2733;
+  --ink: #E6EBF0;
+  --muted: #A7B3C0;
+  --border: #2A3644;
+  --row: #222D39;
+  --control-border: #748395;
+  --focus: #6CA6FF;
+  --crit-dot: #E5655A;
+  --crit-fg: #FF9B91;
+  --crit-tint: #3A1C1A;
+  --warn-dot: #D08A1F;
+  --warn-fg: #F2B866;
+  --warn-tint: #3A2A12;
+  --info-dot: #5B8FE0;
+  --info-fg: #8DB8FF;
+  --info-tint: #172A45;
+  --good-dot: #3FA56A;
+  --good-fg: #7FD1A0;
+  --good-tint: #15321F;
+  --neutral-dot: #7D8A9A;
+  --neutral-fg: #B4BFCB;
+  --neutral-tint: #26313D;
+  }
 }
 
 /* ==========================================================================
@@ -256,6 +323,10 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
   font-weight: 400;
 }
 .signout:hover { background: none; text-decoration: underline; }
+/* The one-click dark/light switch: laid out like Sign out, in the sidebar's
+   own text color. */
+.scheme-switch .signout { color: var(--nav-fg); }
+.scheme-switch .signout:hover { color: #FFFFFF; }
 
 .menu-toggle > summary {
   position: absolute;
@@ -312,9 +383,41 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
 }
 .topbar .search input:focus-visible { outline: none; }
 
-/* Administration pages: the admin areas as a tab row under the top bar.
-   Two classes, so this wins over the later .tabs margin. */
-.tabs.admin-tabs { margin: 0; padding: 0; background: var(--surface); }
+/* Administration pages (R2 spec §5.1): the admin menu, grouped, beside the
+   page from 900px up and in a disclosure above it below that. The current
+   page has the accent tint and a 3px accent bar, so it is not marked by
+   color alone. */
+.admin-nav-groups, .admin-nav-groups ul { margin: 0; padding: 0; list-style: none; }
+.admin-nav-groups > li + li { margin-top: 16px; }
+.admin-nav-label {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.admin-nav a {
+  display: block;
+  padding: 7px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0 6px 6px 0;
+  color: var(--ink);
+  font-size: 14px;
+  text-decoration: none;
+}
+.admin-nav a:hover { background: var(--row); }
+.admin-nav a[aria-current="page"] {
+  border-left-color: var(--accent-mark);
+  background: var(--accent-tint);
+  font-weight: 700;
+}
+.admin-nav-wide { display: none; }
+.admin-nav-narrow { margin: 0 0 22px; padding: 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.admin-nav-narrow > summary { min-height: 44px; display: flex; align-items: center; margin: 0; font-weight: 600; }
+.admin-nav-narrow[open] { padding-bottom: 12px; }
+.admin-page { min-width: 0; }
 
 .page { flex: 1 0 auto; width: 100%; padding: 22px 16px 40px; }
 .page-footer { padding: 16px; color: var(--muted); font-size: 13px; }
@@ -335,8 +438,10 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
   .sidebar-nav { display: flex; flex: 1 0 auto; flex-direction: column; }
   .menu-toggle { display: none; }
   .topbar { padding: 14px 40px; }
-  .tabs.admin-tabs { padding: 0 24px; }
   .page { padding: 28px 40px 48px; }
+  .admin-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0 32px; align-items: start; }
+  .admin-nav-wide { display: block; position: sticky; top: 16px; }
+  .admin-nav-narrow { display: none; }
   .page-footer { padding: 16px 40px 28px; }
 }
 
@@ -438,7 +543,72 @@ legend { padding: 0 4px; font-weight: 600; }
 .tile-warning .label { color: var(--warn-fg); }
 .tile-info { border-top: 3px solid var(--info-dot); }
 .tile-info .label { color: var(--info-fg); }
-.tile-accent { border-top: 3px solid var(--accent); }
+.tile-accent { border-top: 3px solid var(--accent-mark); }
+
+/* Page header (R2): breadcrumb, badges, the h1 and a purpose line on the
+   left, page actions on the right. Every redesigned R2 page uses it. */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 0 0 22px;
+}
+.page-head > div:first-child { flex: 1 1 420px; min-width: 0; }
+.page-head h1 { margin: 4px 0 6px; }
+.page-head .breadcrumb { margin-bottom: 8px; }
+.page-lede { max-width: 72ch; margin: 0; color: var(--muted); }
+.page-actions { display: flex; flex-wrap: wrap; gap: 10px; max-width: 100%; }
+/* A heading for a run of panels, outside any panel. */
+.section-title { margin: 0 0 12px; }
+/* Empty state: says what would be here and what to do next. */
+.empty { margin: 0; color: var(--muted); }
+/* Numbered how-to steps in a panel. */
+.steps-list { margin: 0 0 12px; padding-left: 22px; }
+.steps-list li { margin: 0 0 6px; }
+/* Numbered steps inside one panel (records request builder). */
+.step-title { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; font-size: 16px; }
+.step-no {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 999px;
+  background: var(--accent); color: #FFFFFF; font-size: 14px; font-weight: 700;
+}
+/* A package checksum: short in the table, the full value on request. */
+details.sha > summary { margin: 0; }
+.sha-full { display: block; max-width: 22rem; margin-top: 4px; overflow-wrap: anywhere; }
+/* Notifications: one row per notice; unread ones carry an accent bar (and
+   the word "Unread" for screen readers). */
+.notice-list { margin: 0; padding: 0; list-style: none; }
+.notice {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 16px;
+  padding: 12px 0 12px 14px; border-top: 1px solid var(--row); border-left: 3px solid transparent;
+}
+.notice:first-child { border-top: 0; }
+.notice.unread { border-left-color: var(--accent-mark); }
+.notice.unread .notice-head { font-weight: 700; }
+.notice-main { flex: 1 1 320px; min-width: 0; }
+.notice-main p { margin: 0 0 2px; overflow-wrap: anywhere; }
+/* A page action that opens a short menu (audit export). */
+.export-menu { position: relative; }
+.export-menu > summary { margin: 0; list-style: none; }
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-menu-items {
+  position: absolute; right: 0; z-index: 2; display: flex; flex-direction: column; min-width: 8rem;
+  margin-top: 4px; padding: 6px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+}
+.export-menu-items a { padding: 6px 14px; }
+/* A plain list of links in a panel (members, groups). */
+.detail-links { margin: 0; padding: 0; list-style: none; }
+.detail-links li { padding: 6px 0; border-top: 1px solid var(--row); }
+.detail-links li:first-child { border-top: 0; padding-top: 0; }
+/* Rows with a summary and an Edit disclosure (tags, policies, rules). */
+.tag-rows { margin: 0; padding: 0; list-style: none; }
+.tag-row { padding: 12px 0; border-top: 1px solid var(--row); }
+.tag-row:first-child { border-top: 0; padding-top: 0; }
+.tag-row-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.tag-row details > summary { margin: 6px 0 0; }
+.tag-row details form { margin-top: 10px; }
 
 /* Tables */
 table {
@@ -545,7 +715,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   text-decoration: none;
 }
 .tabs a:hover { color: var(--ink); border-bottom-color: var(--border); }
-.tabs a[aria-current="page"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
+.tabs a[aria-current="page"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent-mark); }
 
 .breadcrumb { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
 .breadcrumb ol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -720,8 +890,10 @@ button.link:hover { background: none; text-decoration-thickness: 2px; }
 @media (max-width: 52rem) { .two-col { grid-template-columns: 1fr; } }
 .columns { columns: 3 14rem; }
 .description { white-space: pre-wrap; }
-.appointee { margin: 12px 0; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-.appointee h3 { margin-top: 0; }
+.appointee .facts { margin: 0 0 12px; }
+.appointee h3 { margin: 0; }
+.manage-appointment { margin: 16px 0 0; }
+.manage-appointment details { margin: 0 0 4px; }
 .candidates { position: relative; max-height: 28rem; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .candidates table { margin: 0; }
 .report-table { font-size: 14px; }
@@ -746,6 +918,14 @@ pre { padding: 8px; background: var(--thead); border-radius: 6px; font-size: 13p
 .checklist .done::before { content: "✓ "; color: var(--good-fg); font-weight: 700; }
 .checklist .todo::before { content: "○ "; color: var(--muted); }
 .scopes { padding: 0; list-style: none; }
+/* A fieldset that only groups (no box). */
+fieldset.plain { margin: 0; padding: 0; border: 0; }
+/* An API scope: its name, then what it allows, under the checkbox's label. */
+label.check.scope { align-items: flex-start; margin: 0 0 8px; }
+label.check.scope > input { margin-top: 3px; }
+label.check.scope > span { display: flex; flex-direction: column; min-width: 0; }
+/* Long checkbox lists (the details in a records package) in columns. */
+.scopes:has(> li:nth-child(8)) { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 4px 16px; }
 .task h3 { margin: 12px 0 4px; font-size: 16px; }
 span.label { font-weight: 600; }
 .help { color: var(--muted); }
@@ -784,6 +964,22 @@ span.label { font-weight: 600; }
 .toolbar form { margin: 0; }
 .toolbar .tabs { margin: 0; }
 .doc-form { max-width: 52rem; }
+/* Document forms (R2): each group of fields is a panel; the legend sits
+   inside it as the panel's heading. */
+fieldset.form-section { margin: 0 0 22px; padding: 18px 22px; }
+.form-section-title { float: left; width: 100%; margin: 0 0 10px; padding: 0; font-size: 19px; font-weight: 700; }
+.form-section-title + * { clear: both; }
+.form-section > .field:first-of-type { margin-top: 0; }
+.form-footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 22px; }
+/* Large radio choices with their explanation (who can see a document). */
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr)); gap: 10px; }
+.choice-card {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
+  border: 1px solid var(--control-border); border-radius: 8px; background: var(--surface); font-weight: 400; cursor: pointer;
+}
+.choice-card > input { margin-top: 4px; flex: none; }
+.choice-card > span { display: flex; flex-direction: column; gap: 2px; }
+.choice-card:has(input:checked) { border-color: var(--accent-mark); box-shadow: inset 0 0 0 1px var(--accent-mark); background: var(--accent-tint); }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; }
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr)); gap: 0 16px; }
 .date-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr)); gap: 0 16px; }
@@ -801,6 +997,13 @@ details.round > summary { margin: 0; }
 table.steps td:last-child { min-width: 16rem; }
 table.steps q { color: var(--muted); }
 .submit-review { margin-top: 16px; }
+details.round > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+/* The decision form spans the row under the step it decides. */
+table.steps tr.step-decide td { background: var(--accent-tint); border-top: 0; }
+.small-heading { margin: 16px 0 6px; font-size: 14px; color: var(--muted); }
+/* A round's activity: a quiet vertical timeline. */
+.timeline-activity { margin: 0; padding: 0 0 0 14px; list-style: none; border-left: 2px solid var(--row); }
+.timeline-activity li { margin: 0 0 8px; }
 .note { padding-left: 8px; border-left: 3px solid var(--border); }
 
 /* Tags: a neutral pill; /tag-colors.css sets each tag's own colors. */
@@ -819,6 +1022,7 @@ table.steps q { color: var(--muted); }
 .tags { margin-top: 4px; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; list-style: none; }
 .tag-list li { display: flex; align-items: center; gap: 2px; }
+.tag-picks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 4px 0 8px; }
 
 /* Comments */
 .comment { margin: 12px 0; padding: 4px 0 4px 12px; border-left: 3px solid var(--border); }
@@ -828,6 +1032,15 @@ table.steps q { color: var(--muted); }
 .comment-meta { margin: 0; }
 .comment-body { margin: 4px 0; overflow-wrap: anywhere; }
 .mention { color: var(--accent-link); font-weight: 600; }
+/* A comment's actions: small quiet links in one row. */
+.comment-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 13px; }
+.comment-actions details > summary { margin: 0; }
+.comment-actions details[open] { flex-basis: 100%; }
+.comment-actions form { margin: 0; }
+button.link.danger-link { color: var(--crit-fg); font-size: 13px; }
+/* Per-row actions in a table (signers). */
+.row-manage > summary { margin: 0; }
+.row-manage-body { display: flex; flex-direction: column; gap: 10px; min-width: 16rem; margin-top: 8px; }
 
 /* Audit changes */
 table.audit time, table.audit summary { white-space: nowrap; }
@@ -838,13 +1051,12 @@ table.diff .before { color: var(--crit-fg); text-decoration: line-through; }
 table.diff .after { color: var(--good-fg); }
 
 /* Calendar */
-.month-nav { display: flex; align-items: center; gap: 16px; }
-.month-nav h2 { margin: 0; }
-.month-nav a { font-size: 22px; text-decoration: none; }
+.month-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 0 0 16px; }
+.month-nav h2 { margin: 0; min-width: 10ch; text-align: center; }
 table.month { table-layout: fixed; }
 table.month td { height: 6.5rem; padding: 4px; border: 1px solid var(--border); }
 table.month td.other-month { background: var(--thead); color: var(--muted); }
-table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.month td.today { outline: 2px solid var(--accent-mark); outline-offset: -2px; }
 .daynum { display: block; font-size: 13px; font-weight: 600; }
 .cal-ev {
   display: block;
@@ -861,6 +1073,15 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
   white-space: nowrap;
 }
 .cal-ev.projected { border-style: dashed; }
+.cal-more { display: block; margin: 2px 0 0; font-size: 13px; font-weight: 600; }
+.cal-toolbar { justify-content: space-between; }
+.cal-toolbar .legend { margin: 0; }
+/* The month is a grid from 900px up, and a list of its busy days below. */
+.month-list { display: none; }
+@media (max-width: 899px) {
+  .month-grid { display: none; }
+  .month-list { display: block; }
+}
 /* Agenda view: one panel per day, its date heading, then its events. */
 .agenda-day {
   margin: 0 0 16px;
@@ -915,7 +1136,7 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
    ========================================================================== */
 
 .chart { display: block; width: 100%; height: auto; overflow: visible; }
-.chart-bar { fill: var(--accent); }
+.chart-bar { fill: var(--accent-mark); }
 .chart-seg-good { fill: var(--good-dot); }
 .chart-seg-info { fill: var(--info-dot); }
 .chart-seg-warning { fill: var(--warn-dot); }
@@ -973,7 +1194,7 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
    ========================================================================== */
 
 @media print {
-  .sidebar, .topbar, .menu-toggle, .admin-tabs, .button, button, .page-footer { display: none !important; }
+  .sidebar, .topbar, .menu-toggle, .admin-nav, .button, button, .page-footer { display: none !important; }
   body { background: #fff; }
 }
 
@@ -1042,6 +1263,8 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .list-filters .filter-row > div { display: flex; flex-direction: column; gap: 4px; flex: 1 1 150px; }
 .list-filters .filter-row > .grow { flex: 2 1 280px; }
 .list-filters .filter-row > .filter-apply { flex: 0 0 auto; }
+/* A report has one to three options: keep each a sensible width. */
+.report-options .filter-row > div:not(.filter-apply) { flex: 0 1 18rem; }
 .list-filters .disclosure { margin: 0; }
 .filters-more {
   display: grid;
@@ -1081,6 +1304,9 @@ td.next-overdue { color: var(--crit-fg); font-weight: 700; }
 .key-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 0 0 22px; }
 .key-numbers dd { margin: 0; }
 .key-numbers .tile-critical .value { color: var(--crit-fg); }
+/* Appointments: five board counts, two to a row on a phone. */
+.board-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+@media (max-width: 40rem) { .board-tiles .value { font-size: 28px; } }
 
 /* Main column and side panel. */
 .doc-layout { display: flex; flex-wrap: wrap; gap: 0 22px; align-items: flex-start; }

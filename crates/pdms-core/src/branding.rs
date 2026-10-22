@@ -28,7 +28,7 @@ const KEY_NAME: &str = "branding.org_name";
 const KEY_ACCENT: &str = "branding.accent";
 const MAX_NAME_CHARS: usize = 120;
 
-pub use color::ThemeColors;
+pub use color::{DarkShades, ThemeColors};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealInfo {

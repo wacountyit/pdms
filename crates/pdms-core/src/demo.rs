@@ -149,7 +149,7 @@ pub async fn seed(core: &Core) -> CoreResult<DemoSummary> {
         db,
         &ctx,
         "Contracts Review Committee",
-        "Reviews contracts and partnership agreements before approval.",
+        "Reviews contracts and interlocal agreements before approval.",
     )
     .await?;
     for email in ["alice@example.org", "carol@example.org"] {
@@ -275,7 +275,7 @@ async fn seed_documents(
     let ty = |key: &'static str| async move { types::type_by_key(db, key).await.map(|t| t.id) };
     let (contract, agreement, policy, other) = (
         ty("contract").await?,
-        ty("partnership_agreement").await?,
+        ty("interlocal_agreement").await?,
         ty("policy").await?,
         ty("other").await?,
     );
@@ -361,7 +361,7 @@ async fn seed_documents(
     let specs = [
         Spec {
             meta: MetadataInput {
-                title: "Partnership Agreement – Facilities Maintenance with Example Partner".into(),
+                title: "Interlocal Agreement – Facilities Maintenance with Example Partner".into(),
                 description: "Shared maintenance of shared facilities. Original agreement 2013; amended 2014. Reviewed every five years, but not reviewed since 2014.".into(),
                 document_type_id: agreement,
                 department_id: dept("OPS")?,
@@ -374,7 +374,7 @@ async fn seed_documents(
             },
             owner: "alice@example.org",
             tags: &["Operations", "Partnership"],
-            file: Some(("agreement-facilities-maintenance-2013.pdf", vec!["Partnership Agreement: Facilities Maintenance", "Executed February 12, 2013", "Effective March 1, 2013"])),
+            file: Some(("agreement-facilities-maintenance-2013.pdf", vec!["Interlocal Agreement: Facilities Maintenance", "Executed February 12, 2013", "Effective March 1, 2013"])),
         },
         Spec {
             meta: MetadataInput {
@@ -634,7 +634,7 @@ async fn seed_workflow(
         core,
         "agreement-facilities-maintenance-signed.pdf",
         &demo_pdf(&[
-            "Partnership Agreement: Facilities Maintenance",
+            "Interlocal Agreement: Facilities Maintenance",
             "Signed copy",
         ]),
     )

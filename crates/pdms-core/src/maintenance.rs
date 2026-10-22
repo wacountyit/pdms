@@ -182,25 +182,6 @@ pub fn worker(core: &Core) -> Worker {
                 }
             }
         })
-        .handle(crate::graph_calendar::SYNC_JOB, {
-            let core = core.clone();
-            move |_| {
-                let core = core.clone();
-                async move {
-                    let r = crate::graph_calendar::sync(&core)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    if r.created + r.updated + r.deleted > 0 || !r.errors.is_empty() {
-                        tracing::info!(?r, "Outlook calendar synchronized");
-                    }
-                    Ok(())
-                }
-            }
-        })
-        .every(
-            crate::graph_calendar::SYNC_JOB,
-            Duration::from_secs(core.config.graph_calendar.sync_interval_minutes.max(1) * 60),
-        )
         .every(crate::integrations::DISPATCH_JOB, Duration::from_secs(30))
         .every(
             crate::integrations::forward::FORWARD_JOB,

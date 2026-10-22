@@ -1,55 +1,76 @@
 {% extends "base.html" %}
-{% block content %}
-<p>Export documents for a records request as a ZIP package: the files, the metadata you choose, optionally each document's audit history, a manifest, and a SHA-256 checksum for every file. Only documents you may <em>export</em> can be included (Restricted documents need an explicit grant). Building and downloading packages are recorded in the audit log and on each document's history.</p>
-
-{% if can_build %}
-<section aria-labelledby="new-h">
-<h2 id="new-h">New package</h2>
-<form method="get" action="/exports" class="filters" role="search">
-  <input type="hidden" name="search" value="1">
-  <div><label for="x-q">Find documents</label><input id="x-q" name="q" value="{{ q }}" placeholder="Title, ID, text…"></div>
-  <div class="actions"><button type="submit">Search</button></div>
-</form>
-{% if searched %}
-<form method="post" action="/exports" class="stack">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  <fieldset><legend>Documents ({{ candidates.len() }} you may export)</legend>
-  <div class="candidates"><table>
-    <thead><tr><th scope="col"><span class="visually-hidden">Include</span></th><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Status</th></tr></thead>
-    <tbody>
-    {% for c in candidates %}
-      <tr><td><input type="checkbox" name="document" value="{{ c.id }}" id="d-{{ c.id }}"></td><td><code>{{ c.external_id }}</code></td><td><label for="d-{{ c.id }}">{{ c.title }}</label>{% if c.visibility != "Department" %} <span class="badge{% if c.visibility == "Restricted" %} confidential{% endif %}">{{ c.visibility }}</span>{% endif %}</td><td>{{ c.department }}</td><td>{{ c.status }}</td></tr>
-    {% else %}<tr><td colspan="5">No documents match.</td></tr>{% endfor %}
-    </tbody>
-  </table></div>
-  </fieldset>
-  <div class="grid-form">
-    <label for="x-ref">Request reference</label><input id="x-ref" name="request_reference" maxlength="100" required placeholder="e.g. REQ-2026-014">
-    <label for="x-ver">Files</label>
-    <select id="x-ver" name="versions"><option value="current">Current file of each document</option><option value="all">Every file version</option><option value="none">No files (metadata only)</option></select>
-    <span>Audit history</span><label class="check"><input type="checkbox" name="include_audit" value="1"> Include each document's audit history (JSON and CSV)</label>
-    <label for="x-note">Note</label><input id="x-note" name="note" maxlength="2000" placeholder="Optional, stored with the package">
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Export documents for a records request as a ZIP package: the files, the details you choose, optionally each document’s audit history, a manifest, and a SHA-256 checksum for every file.</p>
   </div>
-  <fieldset><legend>Metadata to include</legend>
-    <ul class="scopes">{% for f in fields %}<li><label class="check"><input type="checkbox" name="field" value="{{ f.0 }}" {% if f.2 %}checked{% endif %}> {{ f.1 }}</label></li>{% endfor %}</ul>
-    <p class="help">The document ID and title are always included.</p>
-  </fieldset>
-  <div><button type="submit" class="primary">Build package</button></div>
-</form>
-{% endif %}
+  {% if can_build && !searched %}<div class="page-actions"><a class="button primary" href="#new-package">{% include "icons/plus.html" %}New package</a></div>{% endif %}
+</header>
+{% endblock %}
+{% block content %}
+{% if can_build %}
+<section class="panel" aria-labelledby="new-h" id="new-package">
+  <h2 id="new-h">New package</h2>
+  <p class="help">Only documents you may <em>export</em> can be included; Restricted documents need an explicit grant. Building and downloading a package are recorded in the audit log and on each document’s history.</p>
+
+  <h3 class="step-title"><span class="step-no" aria-hidden="true">1</span> Find documents</h3>
+  <form method="get" action="/exports" class="inline-form" role="search">
+    <input type="hidden" name="search" value="1">
+    <label for="x-q" class="visually-hidden">Search for documents</label><input id="x-q" name="q" value="{{ q }}" placeholder="Title, ID, text…">
+    <button type="submit">Search</button>
+  </form>
+
+  {% if searched %}
+  <form method="post" action="/exports" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <h3 class="step-title"><span class="step-no" aria-hidden="true">2</span> Choose documents</h3>
+    <fieldset><legend>{{ candidates.len() }} document{% if candidates.len() != 1 %}s{% endif %} you may export{% if !q.is_empty() %}, matching “{{ q }}”{% endif %}</legend>
+    {% if candidates.is_empty() %}<p class="empty">No documents match. Try other words, or an ID.</p>{% else %}
+    <div class="table-wrap candidates"><table>
+      <caption class="visually-hidden">Documents you may export</caption>
+      <thead><tr><th scope="col"><span class="visually-hidden">Include</span></th><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Department</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+      {% for c in candidates %}
+        <tr><td><input type="checkbox" name="document" value="{{ c.id }}" id="d-{{ c.id }}"></td><td><code>{{ c.external_id }}</code></td><td><label for="d-{{ c.id }}">{{ c.title }}</label>{% if c.visibility != "Department" %} <span class="badge{% if c.visibility == "Restricted" %} confidential{% endif %}">{{ c.visibility }}</span>{% endif %}</td><td>{{ c.department }}</td><td>{{ c.status }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% endif %}
+    </fieldset>
+
+    <h3 class="step-title"><span class="step-no" aria-hidden="true">3</span> Package options</h3>
+    <div class="grid-form">
+      <label for="x-ref">Request reference</label><input id="x-ref" name="request_reference" maxlength="100" required placeholder="e.g. REQ-2026-014">
+      <label for="x-ver">Files</label>
+      <select id="x-ver" name="versions"><option value="current">Current file of each document</option><option value="all">Every file version</option><option value="none">No files (details only)</option></select>
+      <span>Audit history</span><label class="check"><input type="checkbox" name="include_audit" value="1"> Include each document’s audit history (JSON and CSV)</label>
+      <label for="x-note">Note</label><input id="x-note" name="note" maxlength="2000" placeholder="Optional, stored with the package">
+    </div>
+    <fieldset><legend>Details to include</legend>
+      <ul class="scopes">{% for f in fields %}<li><label class="check"><input type="checkbox" name="field" value="{{ f.0 }}" {% if f.2 %}checked{% endif %}> {{ f.1 }}</label></li>{% endfor %}</ul>
+      <p class="help">The document ID and title are always included.</p>
+    </fieldset>
+    <div><button type="submit" class="primary">Build package</button></div>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 
-<section aria-labelledby="pk-h">
-<h2 id="pk-h">{% if can_build %}Your packages{% else %}All packages{% endif %}</h2>
-<div class="table-wrap"><table>
-  <thead><tr><th scope="col">Request</th><th scope="col">Built</th><th scope="col">By</th><th scope="col">Documents</th><th scope="col">Files</th><th scope="col">Size</th><th scope="col">Package SHA-256</th><th scope="col"><span class="visually-hidden">Download</span></th></tr></thead>
-  <tbody>
-  {% for r in packages %}
-    <tr><td><strong>{{ r.p.request_reference }}</strong>{% if !r.p.note.is_empty() %}<br><span class="muted small">{{ r.p.note }}</span>{% endif %}</td><td class="small">{{ r.when }}</td><td>{{ r.p.requested_by_name }}</td><td>{{ r.p.document_count }}</td><td>{{ r.p.file_count }}</td><td>{{ r.size }}</td><td><code class="small">{{ r.p.package_sha256 }}</code></td>
-    <td><a class="button small" href="/exports/{{ r.p.id }}/download">Download</a></td></tr>
-  {% else %}<tr><td colspan="8">No packages yet.</td></tr>{% endfor %}
-  </tbody>
-</table></div>
+<section class="panel" aria-labelledby="pk-h">
+  <div class="panel-head"><h2 id="pk-h">{% if can_build %}Your packages{% else %}All packages{% endif %}</h2><span class="muted small">{{ packages.len() }}</span></div>
+  {% if packages.is_empty() %}<p class="empty">No packages yet.{% if can_build %} Build one above.{% endif %}</p>{% else %}
+  <div class="table-wrap"><table>
+    <caption class="visually-hidden">Packages</caption>
+    <thead><tr><th scope="col">Request</th><th scope="col">Built</th><th scope="col">By</th><th scope="col">Documents</th><th scope="col">Files</th><th scope="col">Size</th><th scope="col">Package SHA-256</th><th scope="col"><span class="visually-hidden">Download</span></th></tr></thead>
+    <tbody>
+    {% for r in packages %}
+      <tr><td><strong>{{ r.p.request_reference }}</strong>{% if !r.p.note.is_empty() %}<br><span class="muted small">{{ r.p.note }}</span>{% endif %}</td><td class="small">{{ r.when }}</td><td>{{ r.p.requested_by_name }}</td><td class="num">{{ r.p.document_count }}</td><td class="num">{{ r.p.file_count }}</td><td class="nowrap">{{ r.size }}</td>
+      <td><details class="sha"><summary><code>{{ r.sha_short }}…</code><span class="visually-hidden"> show the full checksum</span></summary><code class="small sha-full">{{ r.p.package_sha256 }}</code></details></td>
+      <td><a class="button small" href="/exports/{{ r.p.id }}/download">{% include "icons/download.html" %}Download<span class="visually-hidden"> {{ r.p.request_reference }}</span></a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
 </section>
 {% endblock %}

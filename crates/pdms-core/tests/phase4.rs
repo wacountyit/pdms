@@ -107,7 +107,7 @@ async fn audit_scenario_from_upload_to_records_requests_export() {
 
     // User A uploads an agreement.
     let a = as_user(&core, user_a).await;
-    let agreement = types::type_by_key(&core.db, "partnership_agreement")
+    let agreement = types::type_by_key(&core.db, "interlocal_agreement")
         .await
         .unwrap()
         .id;

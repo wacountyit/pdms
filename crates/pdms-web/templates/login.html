@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in – {{ org_name }}</title>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="stylesheet" href="/theme.css?v={{ theme_version }}">
+  {% if let Some(v) = seal_version %}<link rel="icon" href="/branding/seal?v={{ v }}">{% else %}<link rel="icon" href="/static/icon.svg" type="image/svg+xml">{% endif %}
 </head>
 <body class="signin-body">
   <div class="signin">

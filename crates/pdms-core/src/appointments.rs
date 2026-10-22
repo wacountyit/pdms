@@ -490,8 +490,18 @@ fn classify(a: &Appointment, today: NaiveDate, horizon: Option<NaiveDate>) -> Op
     }
 }
 
+/// What an active appointment needs as of `today`, if anything; the same rule
+/// as [`attention`]. Pages use it to word a seat the same way everywhere.
+pub fn seat_state(
+    a: &Appointment,
+    today: NaiveDate,
+    horizon: Option<NaiveDate>,
+) -> Option<SeatState> {
+    classify(a, today, horizon)
+}
+
 /// Unfilled seats of an active position; the one vacancy rule.
-fn vacant_seats(p: &Position) -> i64 {
+pub fn vacant_seats(p: &Position) -> i64 {
     if p.is_active { p.vacancies() } else { 0 }
 }
 

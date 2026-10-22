@@ -1,37 +1,76 @@
 {% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">What you can see in PADM, and the API tokens that let another system act as you.</p>
+  </div>
+  {% if enabled %}<div class="page-actions"><a class="button primary" href="#new-token">{% include "icons/plus.html" %}New token</a></div>{% endif %}
+</header>
+{% endblock %}
 {% block content %}
+<div class="doc-layout">
+<div class="doc-main">
+<section aria-labelledby="tokens-h" class="panel">
+  <div class="panel-head"><h2 id="tokens-h">API tokens</h2><span class="muted small">{{ tokens.len() }}</span></div>
+  <p class="help">API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PADM API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
+  {% if !enabled %}<p class="flash flash-info" role="status">The API is turned off for this installation, so tokens cannot be created or used.</p>{% endif %}
+  {% if tokens.is_empty() %}<p class="empty">You have no tokens.{% if enabled %} Create one below when another system needs to act as you.{% endif %}</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Your API tokens</caption>
+    <thead><tr><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for t in tokens %}
+      <tr><td>{{ t.name }}</td><td><code>{{ t.prefix }}</code></td><td class="small">{{ t.scopes }}</td><td class="small">{{ t.created }}</td><td class="small">{{ t.expires }}</td><td class="small">{{ t.last_used }}</td>
+      <td>{% if t.live %}<span class="status status-good">{{ t.state }}</span>{% else %}<span class="status status-neutral">{{ t.state }}</span>{% endif %}</td>
+      <td>{% if t.live %}<form method="post" action="/account/tokens/{{ t.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small danger">Revoke<span class="visually-hidden"> {{ t.name }}</span></button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+{% if enabled %}
+<section aria-labelledby="new-token-h" class="panel" id="new-token">
+  <h2 id="new-token-h">New token</h2>
+  <form method="post" action="/account/tokens" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="t-name">Name</label><input id="t-name" name="name" maxlength="200" required placeholder="e.g. Records platform sync">
+    <span>Scopes</span>
+    <fieldset><legend class="visually-hidden">Scopes</legend><ul class="scopes">
+      {% for s in scopes %}<li><label class="check scope"><input type="checkbox" name="scope" value="{{ s.0 }}"> <span><code>{{ s.0 }}</code><span class="muted small">{{ s.1 }}</span></span></label></li>{% endfor %}
+    </ul></fieldset>
+    <label for="t-days">Expires after (days)</label><input id="t-days" name="days" type="number" min="1" max="{{ max_days }}" value="90">
+    <span></span><button type="submit" class="primary">Create token</button>
+  </form>
+</section>
+{% endif %}
+</div>
+
+<aside class="doc-side" aria-label="Your settings">
+<section aria-labelledby="appearance-h" class="panel">
+  <h2 id="appearance-h">Appearance</h2>
+  <form method="post" action="/account/appearance" class="stack">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <input type="hidden" name="back" value="/account/tokens">
+    <fieldset class="plain"><legend class="visually-hidden">Color scheme</legend>
+      {% for s in [("dark", "Dark", "The default."), ("light", "Light", "Dark text on a light background."), ("system", "Match my device", "Follows your computer's or phone's setting.")] %}
+      <label class="check scope"><input type="radio" name="color_scheme" value="{{ s.0 }}" {% if l.color_scheme == s.0 %}checked{% endif %}> <span><strong>{{ s.1 }}</strong><span class="muted small">{{ s.2 }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <button type="submit">Save</button>
+  </form>
+</section>
 <section aria-labelledby="access-h" class="panel">
   <h2 id="access-h">Your access</h2>
-  <dl class="facts">
-    <dt>Departments</dt><dd>{% if departments.is_empty() %}None yet. An administrator assigns departments.{% else %}{{ departments.join(", ") }}{% endif %}</dd>
-    <dt>Roles</dt><dd>{% if roles.is_empty() %}None{% else %}{{ roles.join(", ") }}{% endif %}</dd>
+  <dl class="detail-list">
+    <div><dt>Departments</dt><dd>{% if departments.is_empty() %}None yet{% else %}{{ departments.join(", ") }}{% endif %}</dd></div>
+    <div><dt>Roles</dt><dd>{% if roles.is_empty() %}None{% else %}{{ roles.join(", ") }}{% endif %}</dd></div>
   </dl>
+  {% if departments.is_empty() %}<p class="help">An administrator assigns departments. Until then you see only what is shared with you.</p>{% endif %}
 </section>
-<p>API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PDMS API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
-{% if !enabled %}<p class="flash flash-error" role="alert">The API is turned off for this installation.</p>{% endif %}
-<div class="table-wrap">
-<table>
-  <caption class="visually-hidden">Your API tokens</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>
-  {% for t in tokens %}
-    <tr><td>{{ t.name }}</td><td><code>{{ t.prefix }}</code></td><td class="small">{{ t.scopes }}</td><td class="small">{{ t.created }}</td><td class="small">{{ t.expires }}</td><td class="small">{{ t.last_used }}</td><td>{{ t.state }}</td>
-    <td>{% if t.live %}<form method="post" action="/account/tokens/{{ t.id }}/revoke" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small danger">Revoke</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="8">No tokens.</td></tr>{% endfor %}
-  </tbody>
-</table>
+</aside>
 </div>
-{% if enabled %}
-<h2>New token</h2>
-<form method="post" action="/account/tokens" class="grid-form">
-  <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-  <label for="t-name">Name</label><input id="t-name" name="name" maxlength="200" required placeholder="e.g. Records platform sync">
-  <span>Scopes</span>
-  <fieldset><legend class="visually-hidden">Scopes</legend><ul class="scopes">
-    {% for s in scopes %}<li><label class="check"><input type="checkbox" name="scope" value="{{ s.0 }}"> <code>{{ s.0 }}</code> — {{ s.1 }}</label></li>{% endfor %}
-  </ul></fieldset>
-  <label for="t-days">Expires after (days)</label><input id="t-days" name="days" type="number" min="1" max="{{ max_days }}" value="90">
-  <span></span><button type="submit" class="primary">Create token</button>
-</form>
-{% endif %}
 {% endblock %}

@@ -250,6 +250,16 @@ Schema: `migrations/0001_foundation.sql` (`audit_log`, `audit_chain_head`).
   exporting needs `auditor`.
 - **Version history is separate** (`document_versions`, Phase 1): it keeps
   restorable content and metadata snapshots. The audit log records actions.
+- **The dashboard's activity feed** (`pdms-core::activity`, R2) reads the log
+  for everyone, so it is narrow by construction:
+  - a fixed list of document actions with outcome `success`;
+  - joined to `documents` through the same visibility predicate as search, so
+    only documents the viewer may see now;
+  - only the time, the action, the actor's display name and the document are
+    read, never `changes` or `context`, and the name is dropped for kinds whose
+    actor the document page does not show (details and status changes,
+    review outcomes, declined signatures);
+  - the last 90 days, ten items, not audited (like the rest of the dashboard).
 
 ## 8. Jobs and scheduling
 
@@ -348,6 +358,8 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
 | 4 (`0006_integrations`, done) | api_tokens, api_request_log, webhooks, webhook_deliveries, webhook_delivery_attempts, outbound_cursors, export_packages; seeded grant: records officer `export` (global). Integration providers are enabled in configuration, not a table; audit checkpoints were not needed (see D-068) |
 | 5 (`0007_comments_ocr_graph`, done) | comments, comment_revisions (immutable), document_texts (extracted text per version; part of full-text search), date_suggestions, graph_calendar_links |
 | 6 (`0008_document_visibility`, `0009_ui_redesign`, `0010_entra_sync`, done) | 0008: `documents.visibility` (department / county_wide / restricted) replaces `inherit_acl` and `is_confidential`. 0009: branding_assets (the seal); `users.username`. 0010: department_entra_values (Entra Department value to PADM department), sync_cursors (delta link, last run, last error, last summary, delta select), `users.entra_department`, `users.entra_synced_at`, `users.source` |
+| 7 (`0012_color_scheme`, R2) | `users.color_scheme` (`dark` default, `light`, `system`; D-098), loaded with the session and written as `<html data-theme>`. |
+| 7 (`0011_small_changes`, R2 with sub-project 3) | Renames the seeded `partnership_agreement` type to `interlocal_agreement` ("Interlocal Agreement (ILA)", prefix `ILA`), keeping a name or prefix an administrator changed (D-088); deletes queued Outlook sync jobs and drops `graph_calendar_links` (D-087). |
 
 ## 13. Phase 0 deliverables and tests (done)
 
@@ -587,15 +599,10 @@ suggestions for that field are set aside) or dismiss. Nothing is applied
 automatically. OCR unavailability retries the job; unreadable files are
 recorded as failed.
 
-**Outlook calendar (`graph_calendar`).** Off by default. `CalendarProvider`
-trait; `GraphProvider` uses client credentials (token cached) and
-`/users/{mailbox}/calendar/events`. A periodic job (one run at a time via an
-advisory lock) computes the desired all-day events (document review, renewal,
-expiration dates of non-Restricted, non-archived documents; appointment term
-ends and reappointment decisions; within a configurable window), compares
-them with `graph_calendar_links` by content hash, and creates, updates
-(recreating events deleted in Outlook), moves between department mailboxes,
-or deletes. Runs with changes or errors are audited.
+**Outlook calendar (removed).** Phase 5 also built an optional Outlook
+calendar sync through Microsoft Graph. D-087 removed it, with its
+configuration, job, admin page and installer step; migration `0011` drops its
+`graph_calendar_links` table. ICS feed subscriptions are unchanged.
 
 **Tests.** Core: comments (threads, mentions with visibility filtering and
 ambiguity, edits with revisions, authors-only delete, County-wide documents limited
@@ -603,11 +610,9 @@ to owner and admin comments, history access, immutable
 revisions at the database, edit-required mode); extraction of digital PDF,
 copier-OCR'd PDF, Word, and image files; suggestions never applied until
 accepted; accept/dismiss authorization and audit; OCR retry when unavailable;
-extraction disabled; Graph sync against a mock Graph (create, idempotent
-re-run with one token, update on date change, delete on archive, recreate
-after an event was deleted in Outlook, department mailboxes, Restricted and
-out-of-window dates excluded). Opt-in: the real OCR sidecar reads a scanned
+extraction disabled. Opt-in: the real OCR sidecar reads a scanned
 PDF and the dates in it become suggestions. Web: comments and suggestions
 through the document page (escaping of file and comment text), history and
-delete permissions, the API's comments and text endpoints, the admin page.
+delete permissions, the API's comments and text endpoints, the text
+extraction (OCR) admin page.
 
