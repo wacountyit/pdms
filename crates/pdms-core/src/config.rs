@@ -62,6 +62,7 @@ pub struct Config {
     pub log: LogConfig,
     pub worker: WorkerConfig,
     pub storage: StorageConfig,
+    pub sharepoint: SharePointConfig,
     pub documents: DocumentsConfig,
     pub notifications: NotificationsConfig,
     pub email: EmailConfig,
@@ -260,6 +261,9 @@ impl Default for LogConfig {
 pub enum StorageBackend {
     Local,
     S3,
+    /// Document files in a SharePoint library through Microsoft Graph
+    /// (`[sharepoint]` and `[graph]`). Export packages stay in `local_path`.
+    SharePoint,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -316,6 +320,31 @@ impl Default for S3StorageConfig {
             secret_access_key: Secret::default(),
             prefix: String::new(),
             allow_http: false,
+        }
+    }
+}
+
+/// Where document files live when `[storage] backend = "sharepoint"` (spec §9).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SharePointConfig {
+    /// e.g. `https://contoso.sharepoint.com/sites/PADMRecords`.
+    pub site_url: String,
+    /// The document library (drive) name.
+    pub library: String,
+    /// How often the change check runs (P4).
+    pub delta_interval_minutes: u64,
+    /// Upload chunk size: a multiple of 327,680 bytes (320 KiB), at most 60 MiB.
+    pub upload_chunk_bytes: u64,
+}
+
+impl Default for SharePointConfig {
+    fn default() -> Self {
+        SharePointConfig {
+            site_url: String::new(),
+            library: "Documents".to_owned(),
+            delta_interval_minutes: 5,
+            upload_chunk_bytes: 10_485_760,
         }
     }
 }
@@ -769,6 +798,21 @@ impl Config {
         if self.storage.backend == StorageBackend::S3 && self.storage.s3.bucket.is_empty() {
             return bad("storage.s3.bucket is required for the s3 backend".into());
         }
+        if self.storage.backend == StorageBackend::SharePoint {
+            if let Err(e) = crate::sharepoint::layout::parse_site_url(&self.sharepoint.site_url) {
+                return bad(format!("sharepoint.site_url: {e}"));
+            }
+            if self.sharepoint.library.trim().is_empty() {
+                return bad("sharepoint.library must not be empty".into());
+            }
+            let c = self.sharepoint.upload_chunk_bytes;
+            if c == 0 || !c.is_multiple_of(327_680) || c > 62_914_560 {
+                return bad(
+                    "sharepoint.upload_chunk_bytes must be a multiple of 327680 (320 KiB), at most 62914560 (60 MiB)"
+                        .into(),
+                );
+            }
+        }
         if self.notifications.send_hour > 23 {
             return bad("notifications.send_hour must be 0–23".into());
         }
@@ -984,5 +1028,52 @@ mod tests {
         );
         assert_eq!(format!("{:?}", c.graph.certificate), "\"[redacted]\"");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod sharepoint_config_tests {
+    use super::*;
+
+    fn sharepoint_config() -> Config {
+        let mut c = Config::default();
+        c.storage.backend = StorageBackend::SharePoint;
+        c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PADMRecords".into();
+        c
+    }
+
+    #[test]
+    fn defaults_are_valid_and_chunks_follow_graph_rules() {
+        let c = sharepoint_config();
+        assert_eq!(c.sharepoint.library, "Documents");
+        assert_eq!(c.sharepoint.upload_chunk_bytes, 10_485_760);
+        assert_eq!(c.sharepoint.upload_chunk_bytes % 327_680, 0);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn bad_sharepoint_settings_are_rejected() {
+        let mut c = sharepoint_config();
+        c.sharepoint.upload_chunk_bytes = 1_000_000;
+        assert!(c.validate().is_err(), "not a multiple of 320 KiB");
+        let mut c = sharepoint_config();
+        c.sharepoint.upload_chunk_bytes = 327_680 * 193;
+        assert!(c.validate().is_err(), "over 60 MiB");
+        let mut c = sharepoint_config();
+        c.sharepoint.site_url = "http://contoso.sharepoint.com/sites/PADM".into();
+        assert!(c.validate().is_err());
+        let mut c = sharepoint_config();
+        c.sharepoint.library = " ".into();
+        assert!(c.validate().is_err());
+        // Ignored unless SharePoint is the backend.
+        let mut c = Config::default();
+        c.sharepoint.site_url = "nonsense".into();
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn backend_name_in_toml_is_sharepoint() {
+        let b: StorageBackend = serde_json::from_str("\"sharepoint\"").unwrap();
+        assert_eq!(b, StorageBackend::SharePoint);
     }
 }

@@ -70,6 +70,9 @@ impl From<CoreError> for ApiError {
             ),
             CoreError::Validation(m) => ApiError(StatusCode::UNPROCESSABLE_ENTITY, "invalid", m),
             CoreError::Conflict(m) => ApiError(StatusCode::CONFLICT, "conflict", m),
+            CoreError::Unavailable(m) => {
+                ApiError(StatusCode::SERVICE_UNAVAILABLE, "unavailable", m)
+            }
             other => {
                 tracing::error!(error = %other, "API request failed");
                 ApiError(
@@ -1280,4 +1283,19 @@ pub async fn docs_page(State(state): State<AppState>) -> Html<String> {
             .trim_end_matches('/')),
         rpm = state.core.config.api.requests_per_minute,
     ))
+}
+
+#[cfg(test)]
+mod unavailable_tests {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    use super::*;
+
+    #[test]
+    fn unavailable_is_a_503_json_error() {
+        let r =
+            ApiError::from(CoreError::Unavailable("File storage is down".into())).into_response();
+        assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
 }

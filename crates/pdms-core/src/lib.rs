@@ -35,6 +35,7 @@ pub mod ocr;
 pub mod reports;
 pub mod reviews;
 pub mod schedule;
+pub mod sharepoint;
 pub mod signatures;
 pub mod workflow;
 
@@ -125,7 +126,7 @@ impl Core {
 fn open_storage(config: &Config) -> CoreResult<Arc<dyn BlobStore>> {
     let c = &config.storage;
     Ok(match c.backend {
-        StorageBackend::Local => Arc::new(
+        StorageBackend::Local | StorageBackend::SharePoint => Arc::new(
             pdms_storage::LocalStore::open(&c.local_path)
                 .map_err(|e| CoreError::validation(format!("storage.local_path: {e}")))?,
         ),

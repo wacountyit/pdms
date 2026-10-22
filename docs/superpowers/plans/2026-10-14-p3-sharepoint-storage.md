@@ -2,10 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Before you start (added 2026-10-21):** this plan was written on 2026-10-15, before P2 and UI redesign R1 were built. Run a pre-flight check against `main`, and correct this plan in your branch before Task 1:
-> - **Migrations:** P2's is `0010`, not `0009`. This plan's migration takes the next free number on `main` and in open PRs (`0011` on 2026-10-21), not `0010`. Change every mention: the "Depends on" line, the Global Constraints ("Never edit 0001–0009", "through 0010"), and Task 5's file name and commit message.
-> - **Names:** P2 changed some names and behaviour; the [plan index](2026-10-14-padm-sharepoint-entra-index.md) lists them under "Changes recorded when P2 was written". Check every name this plan consumes against the code.
-> - **Claim P3 first**, and check for work in flight on the same files (ROADMAP §0.1a and §0.6, and `gh pr list`).
+> **Pre-flight done (2026-10-22, WACountyIT).** This plan was written on 2026-10-15, before P2, R1, R2 and sub-project 3 were built. It was checked against `main` at `0ade802`. Most of it matches: P2's Graph client, `GraphError`, the mock Graph, the documents service and the jobs API are as described. These corrections apply; the text below already carries the numeric ones.
+> - **Migration `0013`** (`0013_sharepoint_files.sql`). `main` ends at `0012`, and P2's is `0010`, not `0009`.
+> - **New decisions start at D-102.** `main` ends at D-101.
+> - **Task 4 (`tests/sharepoint.rs`):** put the two SPDX lines **first**, then the `#![allow(` block, as CLAUDE.md requires and as `tests/graph.rs` does. Reuse `mock_graph::certificate()` instead of defining another `certificate()`.
+> - **Task 7 (`flag_changed`):** update `sharepoint_files.state` and write the `sharepoint.changed_outside` event **in one transaction** (`begin`, `UPDATE`, `pdms_audit::append`, `commit`), not with a separate `pdms_audit::record`. CLAUDE.md: "every change of state writes its audit event in the same database transaction".
+> - **Task 7 Step 5(d) (integrity):** `files_checked` must not count the SharePoint files it skips. Subtract them, or report them separately as the step's output line already does.
+> - **Task 9 Step 4 (`maintenance::worker()`):** since P2, the function no longer ends in one builder chain. It ends with `let worker = worker.handle(entra_sync…)…;` and then the expression `if core.config.entra_sync.enabled { worker.every(TICK_JOB…) } else { worker }`. Bind that `if` as `let worker = if … { … } else { worker };`, then end with `crate::sharepoint::register_jobs(worker, core)`.
+> - **Task 6 / spec §7.1:** files are uploaded under a staging name and renamed by the mirror job. The spec says "upload to the final name". Add this to the deviations at the end, and record it as a decision.
+> - **Task 11 (records):** also update the DECISIONS status lines for D-081, D-082, D-084 and D-085; ARCHITECTURE (migration table, the `sharepoint` and `filestore` modules); ADMIN_GUIDE (`[sharepoint]`, the 503 message, empty files); README; and ROADMAP §0.5 and §0.6.
+> - **Test binaries:** `pub use sp::{…}` in `mock_graph/mod.rs` is compiled into the `graph.rs` and `entra_sync.rs` test binaries too. If `-D warnings` flags unused imports there, add `#[allow(unused_imports)]` to that line.
+>
+> **The owner's decisions (2026-10-22), recorded as D-102:**
+> 1. **Long text is truncated in SharePoint.** Titles can be 500 characters, but single-line columns (and `Title`) hold 255, so `layout::columns()` caps every single-line text value at `TEXT_MAX` (255). PADM keeps the full value. *Built in Task 2.*
+> 2. **A SharePoint outage keeps the person's form.** `CoreError::Unavailable` is handled like a validation error on the new-document and edit forms, and in `views::done` (a message on the page instead of a 503). *Built in Task 3*; Task 6's upload-failure test asserts the form comes back.
+> 3. **Folder moves are audited**, with one action, `sharepoint.folder_moved` (category `system`, context: from and to path, and the reason: visibility, department, deleted or restored, or the mirror), written in the same transaction as the `sharepoint_document_folders` update. Applies in Tasks 9 and 10.
+> 4. **No real data is stored yet.** Switching the backend makes files stored locally unreadable (routing follows `core.sharepoint`, not each blob's backend), so the test server is reset when SharePoint is turned on, as the spec's rollout says.
+> 5. **Orphans are accepted for now, and noted.** These are staged uploads whose database transaction then fails, and a narrowing move made before an `update` that fails. They are left for the nightly mirror sweep and P4's change check. Listed under "Known gaps" in ROADMAP §4 in Task 11.
+> 6. **Graph calls during `set_visibility`'s row lock are accepted**: they are rare and short.
 
 **Goal:** Store every document file uploaded through PADM in one SharePoint library. Files are organised as `Departments/` / `County-wide/` / `Restricted/` → department → document folder, with one file per version. Downloads are streamed back through PADM and checked against the recorded SHA-256. PADM's metadata is mirrored into SharePoint columns, and folders move whenever a document's visibility, department, or deletion state changes.
 
@@ -23,7 +37,7 @@
 
 **Tech Stack:** Rust 2024, SQLx 0.9 (`query!` macros, `.sqlx/` offline data), Tokio, Microsoft Graph v1.0 through P2's `GraphClient`, PostgreSQL 15/16.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §2 (D1–D9), §5, §6 `sharepoint_files`, §7.1–7.3, §7.7 (only what keeps `verify-integrity` working; P4 does the real SharePoint check), §8, §10, §12. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P3"; this plan's deviations are listed at the end and Task 11 records them in the index). **Depends on:** P1 (`Visibility`, `set_visibility`, `NewDocument.visibility`, migration 0008) and P2 (`GraphClient`, `GraphError`, `Core.graph`, `[graph]` config, migration 0009) merged.
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §2 (D1–D9), §5, §6 `sharepoint_files`, §7.1–7.3, §7.7 (only what keeps `verify-integrity` working; P4 does the real SharePoint check), §8, §10, §12. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P3"; this plan's deviations are listed at the end and Task 11 records them in the index). **Depends on:** P1 (`Visibility`, `set_visibility`, `NewDocument.visibility`, migration 0008) and P2 (`GraphClient`, `GraphError`, `Core.graph`, `[graph]` config, migration 0010) merged.
 
 ## Global Constraints
 
@@ -52,10 +66,10 @@
   - The web maps this variant to 503 "Temporarily unavailable", and the API to 503 `unavailable`.
 - **Audit order (D-004):** `pdms_audit::append` stays the **last** statement before `tx.commit()`. Enqueue mirror jobs *before* it.
 - **Empty files** cannot be stored in SharePoint mode. Reject them with "This file is empty. Empty files can't be stored.".
-- **Migration:** `migrations/0010_sharepoint_files.sql`. Never edit 0001–0009. Migrations carry no SPDX header (D-080).
-- **New Rust files** start with `// SPDX-License-Identifier: AGPL-3.0-or-later` and `// Copyright (C) 2026 PDMS contributors`. Integration-test files follow the existing `#![allow(` header pattern of `crates/pdms-core/tests/common.rs`.
+- **Migration:** `migrations/0013_sharepoint_files.sql`. Never edit 0001–0012. Migrations carry no SPDX header (D-080).
+- **New Rust files** start with `// SPDX-License-Identifier: AGPL-3.0-or-later` and `// Copyright (C) 2026 PDMS contributors`. Integration-test files start with those two lines, then the `#![allow(` block (as `crates/pdms-core/tests/graph.rs` does).
 - **Lints:** `unwrap`, `expect`, `panic`, and `dbg` are denied outside tests; `unsafe` is forbidden. Every task must pass `cargo clippy --workspace --all-targets --all-features -- -D warnings`, so introduce `pub(crate)` items in the task that first uses them.
-- **Dev environment:** follow "Shared development setup" in the index. `DATABASE_URL` must point at the dev database with migrations through 0010 applied before building.
+- **Dev environment:** follow "Shared development setup" in the index. `DATABASE_URL` must point at the dev database with migrations through 0013 applied before building.
 - **P2 names used here** (from `2026-10-14-p2-graph-client-entra-sync.md`):
   - **Types:** `pdms_core::graph::{GraphClient, GraphError, cert}`.
   - **`GraphError` variants** include unit `NotFound` and `Conflict`. `From<GraphError> for CoreError` maps `Conflict` → `CoreError::Conflict` and **everything else → `CoreError::Internal`**; a Graph `NotFound` is never a 404. User-facing SharePoint failures are therefore converted explicitly to `CoreError::Unavailable` in this plan.
@@ -92,7 +106,7 @@ SharePoint reports `file.hashes.quickXorHash` for every file. PADM computes the 
 - Consumes: nothing.
 - Produces: `pdms_core::sharepoint::quickxor::QuickXorHash` with `new()`, `update(&mut self, &[u8])`, `finish(&self) -> [u8; 20]`, and `finish_base64(&self) -> String` (standard base64, as Graph reports it).
 
-- [ ] **Step 1: Create the module skeleton.** `crates/pdms-core/src/sharepoint/mod.rs`:
+- [x] **Step 1: Create the module skeleton.** `crates/pdms-core/src/sharepoint/mod.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -104,7 +118,7 @@ pub mod quickxor;
 
 In `crates/pdms-core/src/lib.rs`, add `pub mod sharepoint;` between `pub mod schedule;` and `pub mod signatures;`.
 
-- [ ] **Step 2: Write the failing tests.** Create `crates/pdms-core/src/sharepoint/quickxor.rs` with only the tests for now. The vectors come from rclone's QuickXorHash test suite (`backend/onedrive/quickxorhash/quickxorhash_test.go`). They were cross-checked against Microsoft's reference algorithm, including inputs longer than 160 bytes and every chunking used below.
+- [x] **Step 2: Write the failing tests.** Create `crates/pdms-core/src/sharepoint/quickxor.rs` with only the tests for now. The vectors come from rclone's QuickXorHash test suite (`backend/onedrive/quickxorhash/quickxorhash_test.go`). They were cross-checked against Microsoft's reference algorithm, including inputs longer than 160 bytes and every chunking used below.
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -180,12 +194,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run the tests and confirm they fail.**
+- [x] **Step 3: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --lib sharepoint::quickxor`
 Expected: compile error `cannot find type QuickXorHash in this scope` (or `unresolved import super::QuickXorHash`).
 
-- [ ] **Step 4: Implement.** Insert above the `#[cfg(test)]` module:
+- [x] **Step 4: Implement.** Insert above the `#[cfg(test)]` module:
 
 ```rust
 use base64::Engine as _;
@@ -248,12 +262,12 @@ impl QuickXorHash {
 }
 ```
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --lib sharepoint::quickxor`
 Expected: `test result: ok. 3 passed`.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -292,7 +306,7 @@ These are pure functions with no input or output, so every naming rule is unit-t
   - `encode_segment(&str) -> String`;
   - the constants `DEPARTMENT_MAX`, `FOLDER_MAX`, `FILE_MAX`, `ID_MAX`, `LABEL_MAX`, `PATH_LIMIT`.
 
-- [ ] **Step 1: Write the failing tests.** Add `pub mod layout;` to `sharepoint/mod.rs` (above `pub mod quickxor;`). Create `crates/pdms-core/src/sharepoint/layout.rs` with the header, a doc comment, and this test module:
+- [x] **Step 1: Write the failing tests.** Add `pub mod layout;` to `sharepoint/mod.rs` (above `pub mod quickxor;`). Create `crates/pdms-core/src/sharepoint/layout.rs` with the header, a doc comment, and this test module:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -474,12 +488,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --lib sharepoint::layout`
 Expected: compile errors such as `cannot find function area_for in this scope`.
 
-- [ ] **Step 3: Implement.** Insert above the test module in `layout.rs`:
+- [x] **Step 3: Implement.** Insert above the test module in `layout.rs`:
 
 ```rust
 use chrono::NaiveDate;
@@ -807,12 +821,12 @@ pub fn encode_segment(s: &str) -> String {
 
 > Note on `sanitize_segment`: the replacement keeps the original letter case of `_vti` (`_VTI_x` becomes `_VTI-x`). `to_ascii_lowercase` changes no byte offsets, so `i..i + 5` is always on character boundaries.
 
-- [ ] **Step 4: Run the tests and confirm they pass.**
+- [x] **Step 4: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --lib sharepoint::layout`
-Expected: `test result: ok. 10 passed`.
+Expected: `test result: ok. 11 passed` (10, plus `long_text_is_cut_to_sharepoints_limit` for the owner's decision 1).
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -838,7 +852,7 @@ git commit -m "sharepoint: layout, naming, and column rules"
   - `Config.sharepoint`;
   - `CoreError::Unavailable(String)`.
 
-- [ ] **Step 1: Write the failing tests.** Append to `crates/pdms-core/src/config.rs`:
+- [x] **Step 1: Write the failing tests.** Append to `crates/pdms-core/src/config.rs`:
 
 ```rust
 #[cfg(test)]
@@ -925,12 +939,12 @@ mod unavailable_tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --lib sharepoint_config_tests; cargo test -p pdms-web --lib unavailable_tests`
 Expected: compile errors `no variant named SharePoint`, `no field sharepoint`, and `no variant named Unavailable`.
 
-- [ ] **Step 3: Implement the configuration.** In `crates/pdms-core/src/config.rs`:
+- [x] **Step 3: Implement the configuration.** In `crates/pdms-core/src/config.rs`:
 
 (a) Add the variant to `StorageBackend`. The `rename_all = "lowercase"` already maps it to `sharepoint`.
 
@@ -997,7 +1011,7 @@ impl Default for SharePointConfig {
 
 (e) In `crates/pdms-core/src/lib.rs` `open_storage`, change the `StorageBackend::Local => …` arm's pattern to `StorageBackend::Local | StorageBackend::SharePoint => …`. Export packages always need a local store.
 
-- [ ] **Step 4: Implement the error variant and its mappings.**
+- [x] **Step 4: Implement the error variant and its mappings.**
 
 `crates/pdms-core/src/error.rs`, after `Conflict(String)`:
 
@@ -1023,12 +1037,12 @@ impl Default for SharePointConfig {
 
 Then search for other exhaustive matches: `grep -rn "CoreError::Conflict(" crates --include=*.rs`. Every match that lists `Conflict` without a catch-all needs an `Unavailable` arm that behaves the same way.
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --lib sharepoint_config_tests && cargo test -p pdms-web --lib unavailable_tests`
 Expected: `test result: ok. 3 passed` and `test result: ok. 2 passed`.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -1807,10 +1821,10 @@ git commit -m "sharepoint: resolve site, library, columns, and area folders on f
 
 ---
 
-### Task 5: Migration 0010 and department folders
+### Task 5: Migration 0013 and department folders
 
 **Files:**
-- Create: `migrations/0010_sharepoint_files.sql`
+- Create: `migrations/0013_sharepoint_files.sql`
 - Modify: `crates/pdms-core/src/sharepoint/folders.rs`
 - Modify: `crates/pdms-core/src/sharepoint/mod.rs` (export)
 - Test: `crates/pdms-core/tests/sharepoint.rs`
@@ -1823,7 +1837,7 @@ git commit -m "sharepoint: resolve site, library, columns, and area folders on f
   - `pub(super) async fn create_folder(db, g, drive, parent, name, fallback) -> CoreResult<(String, String)>`;
   - `pub(super) async fn move_item(g, drive, item, parent: Option<&str>, name, fallback) -> CoreResult<String>`.
 
-- [ ] **Step 1: Write the migration.** Create `migrations/0010_sharepoint_files.sql`:
+- [ ] **Step 1: Write the migration.** Create `migrations/0013_sharepoint_files.sql`:
 
 ```sql
 -- SharePoint document storage (spec §5–§7, plan P3). Files live in one
@@ -1873,7 +1887,7 @@ GRANT SELECT, INSERT, UPDATE ON sharepoint_department_folders, sharepoint_docume
 ```
 
 Apply it to the dev database: `sqlx migrate run --source migrations`
-Expected: `Applied 10/migrate sharepoint files`.
+Expected: `Applied 13/migrate sharepoint files`.
 
 - [ ] **Step 2: Write the failing tests.** Add these imports to `tests/sharepoint.rs`: `use pdms_core::directory;`, `use pdms_core::sharepoint::Area;` and `use uuid::Uuid;`. Then add:
 
@@ -2103,8 +2117,8 @@ Expected: `test result: ok. 6 passed`.
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
 cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings
-git add migrations/0010_sharepoint_files.sql crates/pdms-core .sqlx
-git commit -m "sharepoint: migration 0010 and department folders tracked by item ID"
+git add migrations/0013_sharepoint_files.sql crates/pdms-core .sqlx
+git commit -m "sharepoint: migration 0013 and department folders tracked by item ID"
 ```
 
 ---

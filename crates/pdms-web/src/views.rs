@@ -273,7 +273,9 @@ pub fn done<T>(
 ) -> AppResult<Response> {
     match result {
         Ok(_) => Ok(redirect_with(state, to, true, ok_message)),
-        Err(CoreError::Validation(m) | CoreError::Conflict(m)) => {
+        // Unavailable (SharePoint down): nothing changed; say so on the page
+        // instead of an error page.
+        Err(CoreError::Validation(m) | CoreError::Conflict(m) | CoreError::Unavailable(m)) => {
             Ok(redirect_with(state, to, false, &m))
         }
         Err(CoreError::NotFound) => Ok(redirect_with(
