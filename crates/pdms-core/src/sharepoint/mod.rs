@@ -24,12 +24,16 @@ use crate::error::{CoreError, CoreResult};
 use crate::graph::GraphClient;
 
 pub use files::{UploadTarget, UploadedFile};
-pub(crate) use files::{record_upload, upload_staged};
+pub(crate) use files::{open, record_upload, spool_copy, upload_staged};
 pub use folders::{DocumentFolder, department_folder_id};
 pub use layout::{Area, Spot};
 
 /// Shown when an upload cannot reach SharePoint.
 pub const UPLOAD_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable right now, so nothing was saved. Try again in a few minutes.";
+
+/// Shown when a download cannot reach SharePoint.
+pub const READ_UNAVAILABLE: &str =
+    "File storage (SharePoint) is unavailable right now. Try again in a few minutes.";
 
 /// Log the underlying failure and return the user-facing "unavailable" error.
 pub(crate) fn unavailable(message: &'static str, e: impl std::fmt::Display) -> CoreError {

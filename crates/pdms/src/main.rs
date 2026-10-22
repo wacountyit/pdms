@@ -268,6 +268,12 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
                     r.audit_entries_checked,
                     r.audit_last_seq
                 );
+                if r.sharepoint_files_skipped > 0 {
+                    println!(
+                        "SharePoint files: {} (checked by the SharePoint change check, not re-read here).",
+                        r.sharepoint_files_skipped
+                    );
+                }
                 if r.is_ok() {
                     println!("Integrity verified: no problems found.");
                 } else {

@@ -5,16 +5,21 @@
 use std::path::Path;
 
 use bytes::Bytes;
+use futures_util::StreamExt;
+use pdms_audit::{Actor, AuditEvent, Category, Outcome};
+use pdms_storage::spool::{SpoolWriter, SpooledFile};
+use pdms_storage::{BlobHash, ByteStream};
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::PgConnection;
+use sha2::{Digest, Sha256};
+use sqlx::{PgConnection, PgPool};
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 use super::folders::{self, DocumentFolder, Item};
 use super::layout::{self, Spot};
 use super::quickxor::QuickXorHash;
-use super::{UPLOAD_UNAVAILABLE, unavailable};
+use super::{READ_UNAVAILABLE, UPLOAD_UNAVAILABLE, unavailable};
 use crate::Core;
 use crate::error::{CoreError, CoreResult};
 
@@ -232,4 +237,196 @@ pub(crate) async fn record_upload(
         ));
     }
     Ok(())
+}
+
+/// Stream a version's file from SharePoint, checked against the SHA-256 and
+/// size PADM recorded. For a version that carried an earlier file forward,
+/// the newest file at or before `version_no` is the one read. A mismatch ends
+/// the stream with an error (the client sees a failed download), marks the
+/// file `changed_outside`, and is audited.
+pub(crate) async fn open(
+    core: &Core,
+    document_id: Uuid,
+    version_no: i32,
+    expected: BlobHash,
+    size: u64,
+) -> CoreResult<ByteStream> {
+    let sp = core
+        .sharepoint
+        .as_ref()
+        .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
+    let f = sqlx::query!(
+        "SELECT sf.drive_id, sf.item_id FROM sharepoint_files sf
+           JOIN document_versions v ON v.id = sf.document_version_id
+          WHERE v.document_id = $1 AND v.version_no <= $2
+          ORDER BY v.version_no DESC LIMIT 1",
+        document_id,
+        version_no
+    )
+    .fetch_optional(&core.db)
+    .await?
+    .ok_or_else(|| {
+        CoreError::internal(format!(
+            "document {document_id} v{version_no} has no file in SharePoint"
+        ))
+    })?;
+    let stream = sp
+        .graph()
+        .download(&format!(
+            "/drives/{}/items/{}/content",
+            f.drive_id, f.item_id
+        ))
+        .await
+        .map_err(|e| unavailable(READ_UNAVAILABLE, e))?;
+    Ok(verified(
+        stream,
+        core.db.clone(),
+        document_id,
+        f.item_id,
+        expected,
+        size,
+    ))
+}
+
+struct Check {
+    inner: ByteStream,
+    hasher: Sha256,
+    seen: u64,
+    expected: BlobHash,
+    size: u64,
+    db: PgPool,
+    document_id: Uuid,
+    item_id: String,
+    done: bool,
+}
+
+fn verified(
+    inner: ByteStream,
+    db: PgPool,
+    document_id: Uuid,
+    item_id: String,
+    expected: BlobHash,
+    size: u64,
+) -> ByteStream {
+    let state = Check {
+        inner,
+        hasher: Sha256::new(),
+        seen: 0,
+        expected,
+        size,
+        db,
+        document_id,
+        item_id,
+        done: false,
+    };
+    Box::pin(futures_util::stream::unfold(state, |mut s| async move {
+        if s.done {
+            return None;
+        }
+        match s.inner.next().await {
+            Some(Ok(chunk)) => {
+                s.hasher.update(&chunk);
+                s.seen += chunk.len() as u64;
+                Some((Ok(chunk), s))
+            }
+            Some(Err(e)) => {
+                s.done = true;
+                Some((Err(e), s))
+            }
+            None => {
+                s.done = true;
+                let got: [u8; 32] = s.hasher.clone().finalize().into();
+                if s.seen == s.size && got == s.expected.0 {
+                    return None;
+                }
+                let detail = format!(
+                    "read {} bytes with SHA-256 {}; PADM recorded {} bytes with {}",
+                    s.seen,
+                    hex::encode(got),
+                    s.size,
+                    s.expected.hex()
+                );
+                flag_changed(&s.db, s.document_id, &s.item_id, "download_check", &detail).await;
+                Some((
+                    Err(std::io::Error::other(
+                        "the file in SharePoint was changed outside PADM; the download was stopped and an administrator was alerted",
+                    )),
+                    s,
+                ))
+            }
+        }
+    }))
+}
+
+/// Mark a SharePoint file as changed outside PADM and audit it, in one
+/// transaction. Failures to record are logged; the caller has already refused
+/// the content.
+pub(crate) async fn flag_changed(
+    db: &PgPool,
+    document_id: Uuid,
+    item_id: &str,
+    source: &str,
+    detail: &str,
+) {
+    tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PADM's record");
+    let r = async {
+        let mut tx = db.begin().await?;
+        sqlx::query!(
+            "UPDATE sharepoint_files SET state = 'changed_outside', checked_at = now() WHERE item_id = $1",
+            item_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        pdms_audit::append(
+            &mut tx,
+            vec![
+                AuditEvent::new(
+                    Category::System,
+                    "sharepoint.changed_outside",
+                    Actor::system("sharepoint"),
+                    "document",
+                )
+                .object(document_id, None)
+                .document(document_id)
+                .outcome(Outcome::Failure)
+                .context("source", source)
+                .context("item_id", item_id)
+                .context("detail", detail),
+            ],
+        )
+        .await?;
+        tx.commit().await?;
+        Ok::<(), CoreError>(())
+    }
+    .await;
+    if let Err(e) = r {
+        tracing::error!(error = %e, "could not record a SharePoint mismatch");
+    }
+}
+
+/// Copy a version's file out of SharePoint into the spool directory,
+/// verified, so it can be uploaded again as a new version.
+pub(crate) async fn spool_copy(
+    core: &Core,
+    document_id: Uuid,
+    version_no: i32,
+    expected: BlobHash,
+    size: u64,
+) -> CoreResult<SpooledFile> {
+    let mut stream = open(core, document_id, version_no, expected, size).await?;
+    let mut w = SpoolWriter::create(&core.config.storage.spool_path, size.max(1))
+        .await
+        .map_err(CoreError::internal)?;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(|e| CoreError::Conflict(format!("The earlier file could not be read: {e}")))?;
+        w.write(&chunk).await.map_err(CoreError::internal)?;
+    }
+    let f = w.finish().await.map_err(CoreError::internal)?;
+    if f.sha256 != expected {
+        return Err(CoreError::internal(
+            "the copied file does not match its recorded SHA-256",
+        ));
+    }
+    Ok(f)
 }

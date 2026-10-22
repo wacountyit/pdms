@@ -310,7 +310,14 @@ pub async fn extract(
                 let mut f = tokio::fs::File::create(&path)
                     .await
                     .map_err(CoreError::internal)?;
-                let mut s = core.storage.get(hash).await.map_err(CoreError::internal)?;
+                let mut s = crate::documents::filestore::open(
+                    core,
+                    document_id,
+                    version_no,
+                    hash,
+                    u64::try_from(v.size_bytes).unwrap_or(0),
+                )
+                .await?;
                 while let Some(chunk) = s.next().await {
                     f.write_all(&chunk.map_err(CoreError::internal)?)
                         .await

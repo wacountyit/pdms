@@ -1559,6 +1559,45 @@ pub async fn restore_version(
     .await?
     .ok_or(CoreError::NotFound)?;
     let defs = fields::list(&core.db).await?;
+    // With SharePoint, the restored file becomes a new file in the document's
+    // folder: copy the earlier one out (verified) and upload it again.
+    let restored = match (
+        part,
+        core.sharepoint.is_some(),
+        old.blob_sha256.as_deref(),
+        old.file_name.as_deref(),
+    ) {
+        (RestorePart::File, true, Some(sha), Some(name)) => {
+            let hash =
+                BlobHash::from_slice(sha).ok_or_else(|| CoreError::internal("bad blob hash"))?;
+            let size = u64::try_from(old.size_bytes.unwrap_or(0)).unwrap_or(0);
+            let copy = filestore::copy_for_restore(core, id, version_no, hash, size).await?;
+            Some(
+                filestore::put_version_file(
+                    core,
+                    &filestore::PutTarget {
+                        document_id: Some(id),
+                        external_id: &doc_ref.external_id,
+                        title: &doc_ref.title,
+                        visibility: doc_ref.attrs.visibility,
+                        department_id: doc_ref.attrs.department_id,
+                    },
+                    &StoredFile {
+                        sha256: hash,
+                        size,
+                        media_type: filestore::known_media_type(
+                            old.media_type.as_deref().unwrap_or(""),
+                        ),
+                        file_name: name.to_owned(),
+                        scan: "previously_accepted",
+                    },
+                    &copy.path,
+                )
+                .await?,
+            )
+        }
+        _ => None,
+    };
     let mut tx = core.db.begin().await?;
     let before_doc = fetch_live(&mut tx, id).await?;
     let note = format!(
@@ -1597,6 +1636,9 @@ pub async fn restore_version(
                 &defs,
             )
             .await?;
+            if let Some(loc) = &restored {
+                filestore::record_location(&mut tx, id, v, loc).await?;
+            }
             events.push(
                 doc_ref
                     .event(ctx, Category::Content, "document.version_restored")
@@ -1766,11 +1808,14 @@ pub async fn open_file(
     .ok_or(CoreError::NotFound)?;
     let hash =
         BlobHash::from_slice(&v.blob_sha256).ok_or_else(|| CoreError::internal("bad blob hash"))?;
-    let stream = core
-        .storage
-        .get(hash)
-        .await
-        .map_err(|e| CoreError::internal(format!("reading blob: {e}")))?;
+    let stream = filestore::open(
+        core,
+        id,
+        v.version_no,
+        hash,
+        u64::try_from(v.size_bytes).unwrap_or(0),
+    )
+    .await?;
     pdms_audit::record(
         &core.db,
         vec![

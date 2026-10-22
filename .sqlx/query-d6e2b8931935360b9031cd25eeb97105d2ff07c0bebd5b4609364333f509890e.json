@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_files SET state = 'changed_outside', checked_at = now() WHERE item_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6e2b8931935360b9031cd25eeb97105d2ff07c0bebd5b4609364333f509890e"
+}

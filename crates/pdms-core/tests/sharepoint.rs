@@ -12,11 +12,13 @@ mod common;
 mod mock_graph;
 
 use common::*;
+use futures_util::StreamExt;
 use mock_graph::{MockGraph, certificate};
 use pdms_authz::{Permission, Scope, Subject, Visibility};
 use pdms_core::config::StorageBackend;
 use pdms_core::directory;
 use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
+use pdms_core::exports;
 use pdms_core::sharepoint::Area;
 use pdms_core::{Config, Core, CoreError, Ctx, acl, sharepoint};
 use uuid::Uuid;
@@ -447,4 +449,221 @@ async fn empty_files_are_refused() {
         matches!(&err, CoreError::Validation(m) if m.contains("empty")),
         "{err:?}"
     );
+}
+
+async fn read_all(mut s: pdms_storage::ByteStream) -> Result<Vec<u8>, std::io::Error> {
+    let mut out = Vec::new();
+    while let Some(c) = s.next().await {
+        out.extend_from_slice(&c?);
+    }
+    Ok(out)
+}
+
+#[tokio::test]
+async fn downloads_stream_from_sharepoint_and_are_audited() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let bytes = pdf("Fuel supply agreement");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &bytes)),
+    )
+    .await;
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert_eq!(read_all(dl.stream).await.unwrap(), bytes);
+    assert!(
+        sp.requests()
+            .iter()
+            .any(|r| r.starts_with("GET /v1.0/drives/drive-1/items/") && r.ends_with("/content"))
+    );
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"document.downloaded".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn changed_files_stop_the_download_and_are_flagged() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("original"))),
+    )
+    .await;
+    let ext = external_id(&core, id).await;
+    let folder = format!("Departments/Road and Bridge/{ext} – Fuel");
+    let name = sp.names(&folder).pop().unwrap();
+    sp.tamper(
+        &format!("{folder}/{name}"),
+        b"%PDF-1.4 edited directly in SharePoint",
+    );
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert!(
+        read_all(dl.stream).await.is_err(),
+        "the download must not complete"
+    );
+    let state: String =
+        sqlx::query_scalar("SELECT state FROM sharepoint_files WHERE document_id = $1")
+            .bind(id)
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert_eq!(state, "changed_outside");
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"sharepoint.changed_outside".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn text_extraction_reads_the_file_from_sharepoint() {
+    // Plain text: the test PDFs are not real enough for the PDF text reader.
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.txt", b"Fuel supply agreement")),
+    )
+    .await;
+    pdms_core::ocr::extract(&core, id, 1, false).await.unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status::text FROM document_texts WHERE document_id = $1")
+            .bind(id)
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert_eq!(status, "done");
+}
+
+#[tokio::test]
+async fn records_packages_read_files_from_sharepoint() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    let officer = directory::create_user(&core.db, &system(), "Dana", "dana@x.org", Some(dept))
+        .await
+        .unwrap();
+    let role = directory::role_id_by_key(&core.db, "records_officer")
+        .await
+        .unwrap();
+    directory::assign_role(&core.db, &system(), officer, role, None)
+        .await
+        .unwrap();
+    let ctx_o = as_user(&core, officer).await;
+    let pkg = exports::build(
+        &core,
+        &ctx_o,
+        exports::PackageRequest {
+            request_reference: "REQ-2026-001".into(),
+            document_ids: vec![id],
+            fields: vec![],
+            versions: exports::Versions::Current,
+            include_audit: false,
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    // The package re-hashes every file against PADM's record while writing (D-067).
+    let (_, package) = exports::open(&core, &ctx_o, pkg).await.unwrap();
+    assert!(!read_all(package).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn integrity_check_leaves_sharepoint_files_to_the_change_check() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf("x"))),
+    )
+    .await;
+    let r = pdms_core::integrity::verify(&core, true).await.unwrap();
+    assert!(r.problems.is_empty(), "{} problems", r.problems.len());
+    assert_eq!(r.sharepoint_files_skipped, 1);
+}
+
+#[tokio::test]
+async fn restoring_a_file_makes_a_new_file() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let original = pdf("original terms");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &original)),
+    )
+    .await;
+    documents::add_version(
+        &core,
+        &ctx,
+        id,
+        upload(&core, "b.pdf", &pdf("amended")).await,
+        documents::VersionKind::Amendment,
+        "",
+        None,
+    )
+    .await
+    .unwrap();
+    let v = documents::restore_version(&core, &ctx, id, 1, documents::RestorePart::File)
+        .await
+        .unwrap();
+    assert_eq!(v, 3);
+    let ext = external_id(&core, id).await;
+    assert_eq!(
+        sp.names(&format!("Departments/Road and Bridge/{ext} – Fuel"))
+            .len(),
+        3
+    );
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert_eq!(dl.version_no, 3);
+    assert_eq!(read_all(dl.stream).await.unwrap(), original);
 }

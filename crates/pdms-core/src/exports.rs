@@ -488,7 +488,16 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
                         v.version_no,
                         segment(v.file_name.as_deref().unwrap_or("file"))
                     );
-                    let stream = core.storage.get(hash).await.map_err(CoreError::internal)?;
+                    let stream = crate::documents::filestore::open(
+                        core,
+                        d.id,
+                        v.version_no,
+                        hash,
+                        v.size_bytes
+                            .and_then(|s| u64::try_from(s).ok())
+                            .unwrap_or(0),
+                    )
+                    .await?;
                     let size = p.add_stream(&name, hash, stream).await?;
                     file_count += 1;
                     files.push(json!({

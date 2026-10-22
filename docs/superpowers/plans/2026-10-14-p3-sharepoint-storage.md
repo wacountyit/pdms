@@ -2872,7 +2872,7 @@ git commit -m "documents: store files through filestore; SharePoint uploads with
   - `IntegrityReport.sharepoint_files_skipped: u64`;
   - audit action `sharepoint.changed_outside`.
 
-- [ ] **Step 1: Write the failing tests.** Add `use futures_util::StreamExt;` and `use pdms_core::exports;` to the imports of `tests/sharepoint.rs`, and add:
+- [x] **Step 1: Write the failing tests.** Add `use futures_util::StreamExt;` and `use pdms_core::exports;` to the imports of `tests/sharepoint.rs`, and add:
 
 ```rust
 async fn read_all(mut s: pdms_storage::ByteStream) -> Result<Vec<u8>, std::io::Error> {
@@ -2977,14 +2977,16 @@ async fn integrity_check_leaves_sharepoint_files_to_the_change_check() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail.**
+> **As built:** `text_extraction_…` uploads a `.txt` file, because the test PDFs are not real enough for the PDF text reader (it fails them whatever the storage). `records_packages_…` reads the package back. `flag_changed` updates the state and writes the audit event in one transaction (pre-flight correction), and `IntegrityReport.files_checked` leaves out the skipped SharePoint files.
+
+- [x] **Step 2: Run the tests and confirm they fail.**
 
 Run: `cargo test -p pdms-core --test sharepoint`
 Expected:
 - `downloads_stream_…`, `text_extraction_…` and `records_packages_…` FAIL with `reading blob: blob … not found`, because reads still go to the local store;
 - `integrity_check_…` fails to compile: `no field sharepoint_files_skipped`.
 
-- [ ] **Step 3: Implement verified downloads.** Add these imports to `sharepoint/files.rs`:
+- [x] **Step 3: Implement verified downloads.** Add these imports to `sharepoint/files.rs`:
 
 ```rust
 use futures_util::StreamExt;
@@ -3148,7 +3150,7 @@ pub const READ_UNAVAILABLE: &str =
     "File storage (SharePoint) is unavailable right now. Try again in a few minutes.";
 ```
 
-- [ ] **Step 4: Add the read side of the file-store router.** Append to `documents/filestore.rs` (adding `use pdms_storage::{BlobHash, ByteStream};`):
+- [x] **Step 4: Add the read side of the file-store router.** Append to `documents/filestore.rs` (adding `use pdms_storage::{BlobHash, ByteStream};`):
 
 ```rust
 /// Open the file current at `version_no`.
@@ -3184,7 +3186,7 @@ pub async fn open_version_file(core: &Core, version_id: Uuid) -> CoreResult<Byte
 }
 ```
 
-- [ ] **Step 5: Rewire the readers.**
+- [x] **Step 5: Rewire the readers.**
 
 (a) `service.rs` `open_file`: replace
 
@@ -3263,12 +3265,12 @@ An error here makes the job retry later, which is right when SharePoint is brief
                 }
 ```
 
-- [ ] **Step 6: Run the tests and confirm they pass.**
+- [x] **Step 6: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test phase4 && cargo test -p pdms-core --test phase5`
 Expected: all `test result: ok.`
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -3299,7 +3301,7 @@ In SharePoint mode, a restored file needs its own file for the new version, beca
   - `pub(crate) async fn filestore::copy_for_restore(…)`, with the same arguments;
   - `pub fn filestore::known_media_type(&str) -> &'static str`.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
 ```rust
 #[tokio::test]
@@ -3323,12 +3325,12 @@ async fn restoring_a_file_makes_a_new_file() {
 }
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails.**
+- [x] **Step 2: Run the test and confirm it fails.**
 
 Run: `cargo test -p pdms-core --test sharepoint restoring_a_file`
 Expected: FAIL. With no `sharepoint_files` row for version 3, the download returns version 2's bytes (the newest recorded file), so the content doesn't match. Only 2 files are in the folder.
 
-- [ ] **Step 3: Implement.** Append to `sharepoint/files.rs` (adding `use pdms_storage::spool::{SpoolWriter, SpooledFile};`):
+- [x] **Step 3: Implement.** Append to `sharepoint/files.rs` (adding `use pdms_storage::spool::{SpoolWriter, SpooledFile};`):
 
 ```rust
 /// Copy a version's file out of SharePoint into the spool directory,
@@ -3433,12 +3435,12 @@ In the `RestorePart::File` arm, after `let v = append_version(…).await?;`, add
             }
 ```
 
-- [ ] **Step 4: Run the tests and confirm they pass.**
+- [x] **Step 4: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test documents`
 Expected: all `test result: ok.`
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
