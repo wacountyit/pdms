@@ -10,6 +10,8 @@ D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
 finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
 D-096 was decided while building plan P2 (Entra sync, 2026-10-21).
 D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
+D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built,
+and D-103 while building it.
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -881,6 +883,40 @@ documents out. The overdue tile is labelled "Overdue dates", with the line
 "Documents and board terms", because it counts overdue dates of documents
 and board terms, while the chart's Overdue segment counts documents in
 Overdue status.
+
+### D-102 SharePoint storage: the owner's choices before P3 — Accepted (2026-10-22)
+Six questions from P3's pre-flight check, answered by the owner:
+1. **Long text is truncated in SharePoint.** Single-line columns, and the
+   built-in `Title`, hold 255 characters, while PADM titles can be 500.
+   PADM sends at most 255 characters and keeps the full value itself.
+2. **A SharePoint outage keeps the person's form.** "File storage
+   (SharePoint) is unavailable" is shown on the new-document and edit forms
+   like a validation error, and as a message on other pages, instead of a
+   503 error page. Nothing was saved, so they can try again.
+3. **Folder moves in SharePoint are audited**, as one action,
+   `sharepoint.folder_moved`, with the old and new path and the reason. It
+   is written in the same transaction as the change it records.
+4. **No real data is stored yet.** Turning SharePoint on makes files stored
+   locally unreadable, so the test server is reset at that point, as the
+   spec's rollout says.
+5. **Orphans are accepted for now.** These are staged uploads whose save then
+   fails, and folders moved before a change that then fails. The nightly
+   mirror sweep and P4's change check find them. This is listed as a known
+   gap.
+6. **SharePoint calls while a visibility change holds its row lock are
+   accepted**, because they are rare and short.
+
+### D-103 SharePoint uploads use a temporary name first — Accepted (2026-10-22)
+The spec (§7.1) says a file is uploaded straight to its final name, which
+includes the version number. PADM only knows that number inside the
+database transaction that saves the version, and the upload has to finish
+before that transaction starts, so that a failed upload saves nothing.
+So each file is uploaded into its document's folder as
+`<document ID> (uploading <random>).<ext>`. The `sharepoint.mirror_document`
+job renames it to its final name once the version is saved. Until the job
+runs, which is normally within seconds, someone browsing SharePoint sees the
+temporary name. If the save fails after the upload, the temporary file is
+left behind as an orphan (D-102, point 5).
 
 ## Open questions (configurable defaults; not blocking)
 

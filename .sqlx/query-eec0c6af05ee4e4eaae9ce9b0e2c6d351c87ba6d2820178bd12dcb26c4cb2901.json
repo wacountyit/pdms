@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_department_folders SET name = $3 WHERE area = $1 AND department_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eec0c6af05ee4e4eaae9ce9b0e2c6d351c87ba6d2820178bd12dcb26c4cb2901"
+}

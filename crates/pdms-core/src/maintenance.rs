@@ -209,9 +209,10 @@ pub fn worker(core: &Core) -> Worker {
                 }
             }
         });
-    if core.config.entra_sync.enabled {
+    let worker = if core.config.entra_sync.enabled {
         worker.every(entra_sync::TICK_JOB, Duration::from_secs(15 * 60))
     } else {
         worker
-    }
+    };
+    crate::sharepoint::register_jobs(worker, core)
 }

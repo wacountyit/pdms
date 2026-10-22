@@ -1130,3 +1130,53 @@ async fn key_numbers_show_versions_and_overdue() {
     assert!(list.contains("Amendment No. 1") && list.contains("Jun 1, 2014"));
     assert!(list.contains("Review missed"), "{list}");
 }
+
+/// When SharePoint can't be reached, nothing is saved and the new-document
+/// form comes back with what was typed and a message (D-102).
+#[tokio::test]
+async fn a_sharepoint_outage_keeps_the_new_document_form() {
+    use pdms_core::config::{GraphConfig, Secret, StorageBackend};
+    let mut config = config();
+    // Nothing listens on port 9 here, so every Graph request fails at once.
+    config.graph = GraphConfig {
+        tenant_id: "tenant-1".into(),
+        client_id: "client-1".into(),
+        certificate: Secret::new(
+            pdms_core::graph::cert::generate("PADM test", 30)
+                .unwrap()
+                .pem,
+        ),
+        authority_url: "http://127.0.0.1:9".into(),
+        api_url: "http://127.0.0.1:9/v1.0".into(),
+        timeout_seconds: 5,
+        max_retries: 0,
+    };
+    config.storage.backend = StorageBackend::SharePoint;
+    config.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PADMTest".into();
+    let app = app_with(config).await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let r = create_via_form(
+        &mut b,
+        &app,
+        dept,
+        uid,
+        "Fuel supply agreement",
+        Some(("a.pdf", &pdf("a"))),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", r.body);
+    assert!(r.body.contains("nothing was saved"), "{}", r.body);
+    assert!(r.body.contains("choose it again"), "{}", r.body);
+    assert!(
+        r.body.contains(r#"value="Fuel supply agreement""#),
+        "{}",
+        r.body
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM documents")
+        .fetch_one(&app.core.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}

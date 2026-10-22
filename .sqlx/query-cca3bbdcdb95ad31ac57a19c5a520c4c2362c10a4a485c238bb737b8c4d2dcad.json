@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sharepoint_department_folders (area, department_id, item_id, name)\n         VALUES ($1, $2, $3, $4) ON CONFLICT (area, department_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cca3bbdcdb95ad31ac57a19c5a520c4c2362c10a4a485c238bb737b8c4d2dcad"
+}

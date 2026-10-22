@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sharepoint_document_folders (document_id, item_id, parent_item_id, name)\n         VALUES ($1, $2, $3, $4) ON CONFLICT (document_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1e775b9734dea179ecc732184427ef65ebe8e4079a508859abc6a3dca9024fd2"
+}

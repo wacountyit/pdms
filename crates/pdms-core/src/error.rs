@@ -15,6 +15,9 @@ pub enum CoreError {
     Validation(String),
     #[error("{0}")]
     Conflict(String),
+    /// A service PADM depends on (SharePoint) is unreachable; nothing was changed.
+    #[error("{0}")]
+    Unavailable(String),
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
     #[error("audit error: {0}")]

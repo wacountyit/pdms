@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO jobs (id, kind, payload, max_attempts)\n         SELECT gen_random_uuid(), 'sharepoint.mirror_document', jsonb_build_object('document_id', f.document_id), 10\n           FROM sharepoint_document_folders f\n          WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'sharepoint.mirror_document'\n                              AND j.status = 'pending' AND j.payload->>'document_id' = f.document_id::text)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b4113413611511063d0227ded8fbb531fb2b056fa6f06bce7f66be38093fb33c"
+}

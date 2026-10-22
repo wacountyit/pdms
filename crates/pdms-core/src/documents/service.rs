@@ -18,12 +18,17 @@ use uuid::Uuid;
 use super::access::{self, DocRef};
 use super::fields::{self, FieldDef, FieldType};
 use super::files::{self, StoredFile, Upload};
+use super::filestore;
 use super::retention::{self, Eligibility};
 use super::status::{self, DocumentStatus};
 use super::tags::{self, TagRef};
 use crate::context::Ctx;
 use crate::error::{CoreError, CoreResult};
 use crate::model::UserStatus;
+use crate::sharepoint::{
+    self,
+    layout::{Spot, narrows},
+};
 use crate::{Core, acl};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, sqlx::Type)]
@@ -753,25 +758,45 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
     };
 
     let id = Uuid::now_v7();
+    // The document ID is allocated before the file is stored, so the file can
+    // be filed under it (spec §7.1). A number left unused by a failure is harmless.
+    let prefix = sqlx::query_scalar!(
+        "SELECT id_prefix FROM document_types WHERE id = $1",
+        meta.document_type_id
+    )
+    .fetch_one(&core.db)
+    .await?;
+    let seq = sqlx::query_scalar!(r#"SELECT nextval('document_external_seq') AS "n!""#)
+        .fetch_one(&core.db)
+        .await?;
+    let year = Utc::now()
+        .with_timezone(&core.config.timezone())
+        .format("%Y");
+    let external_id = format!("{prefix}-{year}-{seq:06}");
+    let location = match (&new.file, &stored) {
+        (Some(u), Some(f)) => Some(
+            filestore::put_version_file(
+                core,
+                &filestore::PutTarget {
+                    document_id: None,
+                    external_id: &external_id,
+                    title: &meta.title,
+                    visibility: new.visibility,
+                    department_id: meta.department_id,
+                },
+                f,
+                &u.file.path,
+            )
+            .await?,
+        ),
+        _ => None,
+    };
     let names = names_for(
         core,
         &[meta.document_type_id, meta.department_id, new.owner_id],
     )
     .await?;
     let mut tx = core.db.begin().await?;
-    let prefix = sqlx::query_scalar!(
-        "SELECT id_prefix FROM document_types WHERE id = $1",
-        meta.document_type_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    let seq = sqlx::query_scalar!(r#"SELECT nextval('document_external_seq') AS "n!""#)
-        .fetch_one(&mut *tx)
-        .await?;
-    let year = Utc::now()
-        .with_timezone(&core.config.timezone())
-        .format("%Y");
-    let external_id = format!("{prefix}-{year}-{seq:06}");
     sqlx::query!(
         "INSERT INTO documents (id, external_id, document_type_id, department_id, owner_id, title, description,
                                 status, execution_date, effective_date, last_review_date, next_review_date,
@@ -819,14 +844,14 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         .await?;
     }
     if let Some(f) = &stored {
-        files::record_blob(&mut tx, f, core.storage.backend()).await?;
+        files::record_blob(&mut tx, f, filestore::backend_name(core)).await?;
     }
     let kind = if stored.is_some() {
         VersionKind::Initial
     } else {
         VersionKind::Metadata
     };
-    append_version(
+    let version = append_version(
         &mut tx,
         ctx,
         id,
@@ -839,6 +864,9 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         &defs,
     )
     .await?;
+    if let Some(loc) = &location {
+        filestore::record_location(&mut tx, id, version, loc).await?;
+    }
     refresh_search(&mut tx, id).await?;
 
     let doc = fetch_live(&mut tx, id).await?;
@@ -872,6 +900,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
             f,
         ));
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(id)
@@ -910,6 +939,13 @@ pub async fn update(
     )
     .await?;
 
+    if core.sharepoint.is_some() {
+        let v = before_doc.visibility;
+        let target = Spot::of(v, meta.department_id, false);
+        if narrows(Spot::of(v, before_doc.department_id, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "department").await?;
+        }
+    }
     let mut tx = core.db.begin().await?;
     let updated = sqlx::query!(
         "UPDATE documents SET title = $3, description = $4, document_type_id = $5, department_id = $6,
@@ -978,6 +1014,7 @@ pub async fn update(
                 .context("to_department_id", meta.department_id),
         );
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
@@ -1019,6 +1056,7 @@ pub async fn change_status(
     }
     let mut tx = core.db.begin().await?;
     let e = set_status(&mut tx, ctx, &doc_ref, current, to, note).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, vec![e]).await?;
     tx.commit().await?;
     Ok(())
@@ -1081,6 +1119,7 @@ pub async fn transfer_owner(
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1132,6 +1171,13 @@ pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) ->
     if from == to {
         return Ok(());
     }
+    if core.sharepoint.is_some() {
+        let dept = doc_ref.attrs.department_id;
+        let target = Spot::of(to, dept, false);
+        if narrows(Spot::of(from, dept, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "visibility").await?;
+        }
+    }
     sqlx::query!(
         "UPDATE documents SET visibility = $2::text::document_visibility, updated_at = now() WHERE id = $1",
         id,
@@ -1140,6 +1186,7 @@ pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) ->
     .execute(&mut *tx)
     .await?;
     refresh_search(&mut tx, id).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1259,6 +1306,13 @@ pub async fn delete(core: &Core, ctx: &Ctx, id: Uuid, reason: &str) -> CoreResul
     if let Some(why) = deletion_eligibility(core, id).await?.reason() {
         return Err(CoreError::Conflict(why));
     }
+    if core.sharepoint.is_some() {
+        let a = &doc_ref.attrs;
+        let target = Spot::of(a.visibility, a.department_id, true);
+        if narrows(Spot::of(a.visibility, a.department_id, false), target) {
+            sharepoint::apply_placement_now(core, id, target, "deleted").await?;
+        }
+    }
     let mut tx = core.db.begin().await?;
     let d = fetch_live(&mut tx, id).await?;
     sqlx::query!(
@@ -1268,6 +1322,7 @@ pub async fn delete(core: &Core, ctx: &Ctx, id: Uuid, reason: &str) -> CoreResul
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1324,6 +1379,7 @@ pub async fn restore_deleted(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()>
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1377,6 +1433,7 @@ pub async fn add_tag(core: &Core, ctx: &Ctx, id: Uuid, name: &str) -> CoreResult
             .change("tags", names(&before), after)
             .context("tag", tag.name.clone()),
     );
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(())
@@ -1403,6 +1460,7 @@ pub async fn remove_tag(core: &Core, ctx: &Ctx, id: Uuid, tag_id: Uuid) -> CoreR
         .filter(|t| t.id != tag_id)
         .map(|t| t.name.clone())
         .collect();
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(
         &mut tx,
         vec![
@@ -1441,6 +1499,19 @@ pub async fn add_version(
         ));
     }
     let stored = files::ingest(core, ctx, Some(id), &upload).await?;
+    let location = filestore::put_version_file(
+        core,
+        &filestore::PutTarget {
+            document_id: Some(id),
+            external_id: &doc_ref.external_id,
+            title: &doc_ref.title,
+            visibility: doc_ref.attrs.visibility,
+            department_id: doc_ref.attrs.department_id,
+        },
+        &stored,
+        &upload.file.path,
+    )
+    .await?;
     let defs = fields::list(&core.db).await?;
     let mut tx = core.db.begin().await?;
     sqlx::query!("SELECT id FROM documents WHERE id = $1 FOR UPDATE", id)
@@ -1458,7 +1529,7 @@ pub async fn add_version(
     } else {
         kind
     };
-    files::record_blob(&mut tx, &stored, core.storage.backend()).await?;
+    files::record_blob(&mut tx, &stored, filestore::backend_name(core)).await?;
     let version = append_version(
         &mut tx,
         ctx,
@@ -1472,6 +1543,7 @@ pub async fn add_version(
         &defs,
     )
     .await?;
+    filestore::record_location(&mut tx, id, version, &location).await?;
     refresh_search(&mut tx, id).await?;
     let mut e = file_context(
         doc_ref
@@ -1487,6 +1559,7 @@ pub async fn add_version(
     if let Some(m) = milestone_date {
         e = e.context("milestone_date", m);
     }
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, vec![e]).await?;
     tx.commit().await?;
     Ok(version)
@@ -1521,6 +1594,45 @@ pub async fn restore_version(
     .await?
     .ok_or(CoreError::NotFound)?;
     let defs = fields::list(&core.db).await?;
+    // With SharePoint, the restored file becomes a new file in the document's
+    // folder: copy the earlier one out (verified) and upload it again.
+    let restored = match (
+        part,
+        core.sharepoint.is_some(),
+        old.blob_sha256.as_deref(),
+        old.file_name.as_deref(),
+    ) {
+        (RestorePart::File, true, Some(sha), Some(name)) => {
+            let hash =
+                BlobHash::from_slice(sha).ok_or_else(|| CoreError::internal("bad blob hash"))?;
+            let size = u64::try_from(old.size_bytes.unwrap_or(0)).unwrap_or(0);
+            let copy = filestore::copy_for_restore(core, id, version_no, hash, size).await?;
+            Some(
+                filestore::put_version_file(
+                    core,
+                    &filestore::PutTarget {
+                        document_id: Some(id),
+                        external_id: &doc_ref.external_id,
+                        title: &doc_ref.title,
+                        visibility: doc_ref.attrs.visibility,
+                        department_id: doc_ref.attrs.department_id,
+                    },
+                    &StoredFile {
+                        sha256: hash,
+                        size,
+                        media_type: filestore::known_media_type(
+                            old.media_type.as_deref().unwrap_or(""),
+                        ),
+                        file_name: name.to_owned(),
+                        scan: "previously_accepted",
+                    },
+                    &copy.path,
+                )
+                .await?,
+            )
+        }
+        _ => None,
+    };
     let mut tx = core.db.begin().await?;
     let before_doc = fetch_live(&mut tx, id).await?;
     let note = format!(
@@ -1559,6 +1671,9 @@ pub async fn restore_version(
                 &defs,
             )
             .await?;
+            if let Some(loc) = &restored {
+                filestore::record_location(&mut tx, id, v, loc).await?;
+            }
             events.push(
                 doc_ref
                     .event(ctx, Category::Content, "document.version_restored")
@@ -1693,6 +1808,7 @@ pub async fn restore_version(
         }
     };
     refresh_search(&mut tx, id).await?;
+    crate::sharepoint::mirror_later(core, &mut tx, id).await?;
     pdms_audit::append(&mut tx, events).await?;
     tx.commit().await?;
     Ok(version)
@@ -1728,11 +1844,14 @@ pub async fn open_file(
     .ok_or(CoreError::NotFound)?;
     let hash =
         BlobHash::from_slice(&v.blob_sha256).ok_or_else(|| CoreError::internal("bad blob hash"))?;
-    let stream = core
-        .storage
-        .get(hash)
-        .await
-        .map_err(|e| CoreError::internal(format!("reading blob: {e}")))?;
+    let stream = filestore::open(
+        core,
+        id,
+        v.version_no,
+        hash,
+        u64::try_from(v.size_bytes).unwrap_or(0),
+    )
+    .await?;
     pdms_audit::record(
         &core.db,
         vec![

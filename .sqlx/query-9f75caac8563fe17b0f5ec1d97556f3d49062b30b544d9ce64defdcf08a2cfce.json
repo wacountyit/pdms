@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT sf.document_version_id, sf.item_id, sf.list_item_id, sf.name, sf.fields_hash,\n                  v.version_no, v.kind AS \"kind: VersionKind\", v.file_name AS \"file_name!\", b.media_type\n             FROM sharepoint_files sf\n             JOIN document_versions v ON v.id = sf.document_version_id\n             JOIN blobs b ON b.sha256 = v.blob_sha256\n            WHERE sf.document_id = $1\n            ORDER BY v.version_no",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document_version_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "document_version_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "item_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "item_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "list_item_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "list_item_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "fields_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "fields_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "kind: VersionKind",
+        "type_info": {
+          "Custom": {
+            "name": "version_kind",
+            "kind": {
+              "Enum": [
+                "initial",
+                "revision",
+                "amendment",
+                "signed_copy",
+                "metadata",
+                "restore"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "file_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "file_name"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "media_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "9f75caac8563fe17b0f5ec1d97556f3d49062b30b544d9ce64defdcf08a2cfce"
+}

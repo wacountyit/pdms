@@ -30,8 +30,8 @@ These do not change behaviour. They change where things live.
 1. **Migrations are split per plan.** The spec's single `0008_sharepoint_entra.sql` becomes:
    - `0008_document_visibility.sql` (P1);
    - `0010_entra_sync.sql` (P2: `department_entra_values`, `sync_cursors`, user columns);
-   - `0011_sharepoint_files.sql` (P3);
-   - `0012_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
+   - `0013_sharepoint_files.sql` (P3; renumbered 2026-10-22, R2 took `0011` and `0012`);
+   - `0014_sharepoint_access.sql` (P4: `sharepoint_folder_access`).
 2. **The Graph client lives in `pdms-core::graph`** (new module), not in
    `pdms-storage`. `pdms-storage` cannot depend on `pdms-core`, and the Entra
    sync needs the same client. The SharePoint store therefore lives in
@@ -163,7 +163,7 @@ one, they update this table in the same commit.
 - **Tests:** they use P2's `tests/mock_graph` plus P3's `sp.rs` (`MockGraph`, `SpItem`, `SpState`), not a separate P4 mock.
 - **Jobs:** `RECONCILE_JOB` and `DELTA_JOB` live in `sharepoint::access` and `sharepoint::changes` and are re-exported from `sharepoint`. They are registered by `sharepoint::register_ops_jobs(worker, core)`, chained after P3's `register_jobs`.
 - **Run records:** `sync_cursors` gains a `sharepoint.reconcile` record.
-- **Migration 0012** also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
+- **Migration 0014** (P4's; it was 0012) also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by` / `changed_at`.
 - **Authorization:** new `Capability::ManageSharePoint`, and new `dispatch::Visibility::Anyone` for notices that name no document.
 - **Integrity:**
   - `verify-integrity --rehash-sharepoint` (`--rehash` stays the local-file option);

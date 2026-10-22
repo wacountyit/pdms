@@ -38,6 +38,9 @@ pub struct IntegrityReport {
     pub problems: Vec<Problem>,
     /// File contents were not re-hashed (`--skip-files`); presence and size were checked.
     pub contents_skipped: bool,
+    /// Files stored in SharePoint. They are checked against SharePoint by the
+    /// change check (P4), not re-read here, and not counted in `files_checked`.
+    pub sharepoint_files_skipped: u64,
 }
 
 impl IntegrityReport {
@@ -88,11 +91,17 @@ async fn check_blob(
 /// Run every check. `rehash = false` checks presence and size only (fast).
 pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
     let mut problems = Vec::new();
-    let blobs = sqlx::query!("SELECT sha256, size_bytes FROM blobs ORDER BY created_at")
-        .fetch_all(&core.db)
-        .await?;
+    let blobs =
+        sqlx::query!("SELECT sha256, size_bytes, storage_backend FROM blobs ORDER BY created_at")
+            .fetch_all(&core.db)
+            .await?;
     let mut bytes = 0u64;
+    let mut sharepoint_files_skipped = 0u64;
     for b in &blobs {
+        if b.storage_backend == "sharepoint" {
+            sharepoint_files_skipped += 1;
+            continue;
+        }
         let Some(hash) = BlobHash::from_slice(&b.sha256) else {
             problems.push(Problem {
                 kind: "file",
@@ -166,7 +175,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
         });
     }
     let report = IntegrityReport {
-        files_checked: blobs.len() as u64,
+        files_checked: blobs.len() as u64 - sharepoint_files_skipped,
         bytes_checked: bytes,
         packages_checked: packages.len() as u64,
         versions_checked: u64::try_from(versions).unwrap_or(0),
@@ -174,6 +183,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
         audit_last_seq: audit.last.seq,
         problems,
         contents_skipped: !rehash,
+        sharepoint_files_skipped,
     };
     let ctx = Ctx::system("verify-integrity");
     let mut e = AuditEvent::new(
@@ -194,6 +204,10 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
     .context(
         "audit_entries_checked",
         i64::try_from(report.audit_entries_checked).unwrap_or(i64::MAX),
+    )
+    .context(
+        "sharepoint_files_skipped",
+        i64::try_from(report.sharepoint_files_skipped).unwrap_or(i64::MAX),
     )
     .context("contents_rehashed", rehash)
     .context(

@@ -144,6 +144,11 @@ impl IntoResponse for AppError {
                 CoreError::Conflict(m) => {
                     error_page(StatusCode::CONFLICT, "Cannot complete that", &m)
                 }
+                CoreError::Unavailable(m) => error_page(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Temporarily unavailable",
+                    &m,
+                ),
                 other => {
                     tracing::error!(error = %other, "request failed");
                     error_page(
@@ -158,3 +163,18 @@ impl IntoResponse for AppError {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod unavailable_tests {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    use super::*;
+
+    #[test]
+    fn unavailable_is_a_503_page() {
+        let r =
+            AppError::Core(CoreError::Unavailable("File storage is down".into())).into_response();
+        assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+}

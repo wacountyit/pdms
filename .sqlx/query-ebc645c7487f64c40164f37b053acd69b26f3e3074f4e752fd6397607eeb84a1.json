@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT sha256, size_bytes FROM blobs ORDER BY created_at",
+  "query": "SELECT sha256, size_bytes, storage_backend FROM blobs ORDER BY created_at",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "size_bytes"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "storage_backend",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "blobs",
+            "name": "storage_backend"
+          }
+        }
       }
     ],
     "parameters": {
@@ -31,8 +42,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "8483f879f3999ca079e27bb1e72a50b4ba50e622cdeb123965f5eaa9fb8d04b7"
+  "hash": "ebc645c7487f64c40164f37b053acd69b26f3e3074f4e752fd6397607eeb84a1"
 }

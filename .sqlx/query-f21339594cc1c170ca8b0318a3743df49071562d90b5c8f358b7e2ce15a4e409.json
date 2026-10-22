@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_document_folders SET parent_item_id = $2, name = $3, updated_at = now()\n          WHERE document_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f21339594cc1c170ca8b0318a3743df49071562d90b5c8f358b7e2ce15a4e409"
+}

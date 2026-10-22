@@ -827,8 +827,13 @@ pub async fn create(
             true,
             "Document created.",
         )),
-        Err(CoreError::Validation(m) | CoreError::Conflict(m)) => {
-            let msg = format!("{m}. If you chose a file, choose it again.");
+        // A SharePoint outage keeps the form, like a validation error (the
+        // owner's decision, 2026-10-22): nothing was saved, so try again.
+        Err(CoreError::Validation(m) | CoreError::Conflict(m) | CoreError::Unavailable(m)) => {
+            let msg = format!(
+                "{}. If you chose a file, choose it again.",
+                m.trim_end_matches('.')
+            );
             render_new(&state, &user, FlashMsg(None), form, Some(msg)).await
         }
         Err(e) => Err(e.into()),
@@ -1581,7 +1586,7 @@ pub async fn update(
             true,
             "Changes saved.",
         )),
-        Err(CoreError::Validation(m) | CoreError::Conflict(m)) => {
+        Err(CoreError::Validation(m) | CoreError::Conflict(m) | CoreError::Unavailable(m)) => {
             render_edit(&state, &user, id, Some(form), Some(m)).await
         }
         Err(e) => Err(e.into()),
