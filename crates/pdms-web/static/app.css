@@ -32,6 +32,7 @@
   --nav-label: #8C9AAB;
   --nav-divider: #2C3E52;
   --nav-signout: #F5B76B;
+  --nav-strong: #FFFFFF; /* the date block's day number */
 
   /* Page */
   --ground: #F3F5F8;
@@ -468,7 +469,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-radius: 8px;
 }
 .table-wrap > table { margin: 0; }
-.table-wrap > table > caption { padding: 12px 12px 8px; }
+.table-wrap > table > caption:not(.visually-hidden) { padding: 12px 12px 8px; }
 
 /* Status: one tone per class. .badge, .status and .cal-ev read the tone. */
 .status-critical, .badge-critical { --tone-dot: var(--crit-dot); --tone-fg: var(--crit-fg); --tone-tint: var(--crit-tint); }
@@ -795,6 +796,11 @@ label.check > input { flex: none; }
 .decision textarea { width: 100%; }
 details.round { margin: 8px 0; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 details.round > summary { margin: 0; }
+/* Review and approval: the steps of a round, and "Submit for review" (a
+   .disclosure). The decision column holds the comment form. */
+table.steps td:last-child { min-width: 16rem; }
+table.steps q { color: var(--muted); }
+.submit-review { margin-top: 16px; }
 .note { padding-left: 8px; border-left: 3px solid var(--border); }
 
 /* Tags: a neutral pill; /tag-colors.css sets each tag's own colors. */
@@ -816,13 +822,17 @@ details.round > summary { margin: 0; }
 
 /* Comments */
 .comment { margin: 12px 0; padding: 4px 0 4px 12px; border-left: 3px solid var(--border); }
-.comment.reply { margin-left: 20px; border-left-color: var(--control-border); }
+/* Replies, and the reply form, sit indented under their thread. */
+.replies { margin: 4px 0 0 20px; }
+.comment.reply { border-left-color: var(--control-border); }
 .comment-meta { margin: 0; }
 .comment-body { margin: 4px 0; overflow-wrap: anywhere; }
 .mention { color: var(--accent-link); font-weight: 600; }
 
 /* Audit changes */
 table.audit time, table.audit summary { white-space: nowrap; }
+/* The entry's category: an outlined label, so it does not read as a status. */
+.badge.cat { background: none; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
 table.diff { margin: 0; font-size: 13px; }
 table.diff .before { color: var(--crit-fg); text-decoration: line-through; }
 table.diff .after { color: var(--good-fg); }
@@ -851,14 +861,23 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
   white-space: nowrap;
 }
 .cal-ev.projected { border-style: dashed; }
-.agenda-date { margin: 22px 0 6px; font-size: 16px; }
+/* Agenda view: one panel per day, its date heading, then its events. */
+.agenda-day {
+  margin: 0 0 16px;
+  padding: 0 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.agenda-date { margin: 14px 0 2px; font-size: 16px; }
+.agenda-day .events li:last-child { border-bottom: 0; }
 .legend { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* Old badge families mapped to the status palette. */
 .status-overdue, .task-overdue, .cal-ev.overdue,
 .status-disabled, .status-departed, .status-failed, .dl-failed,
 .outcome-denied, .outcome-failure,
-.wf-rejected, .step-rejected, .sig-declined,
+.wf-rejected, .step-rejected,
 .ev-expiration, .badge.confidential, .badge.hold {
   --tone-dot: var(--crit-dot); --tone-fg: var(--crit-fg); --tone-tint: var(--crit-tint);
 }
@@ -867,15 +886,15 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
   --tone-dot: var(--warn-dot); --tone-fg: var(--warn-fg); --tone-tint: var(--warn-tint);
 }
 .status-in_review, .wf-in_progress, .task-initiated, .step-pending,
-.sig-requested, .ev-review, .ev-term_end {
+.ev-review, .ev-term_end {
   --tone-dot: var(--info-dot); --tone-fg: var(--info-fg); --tone-tint: var(--info-tint);
 }
 .status-active, .task-completed, .task-approved, .wf-approved, .step-approved,
-.sig-signed, .status-delivered, .dl-sent, .ap-ok {
+.status-delivered, .dl-sent, .ap-ok {
   --tone-dot: var(--good-dot); --tone-fg: var(--good-fg); --tone-tint: var(--good-tint);
 }
 .status-draft, .status-expired, .status-superseded, .status-archived,
-.task-cancelled, .wf-cancelled, .step-waiting, .step-skipped, .sig-pending,
+.task-cancelled, .wf-cancelled, .step-waiting, .step-skipped,
 .status-pending, .status-skipped, .dl-pending, .dl-sending, .dl-skipped, .ap-muted {
   --tone-dot: var(--neutral-dot); --tone-fg: var(--neutral-fg); --tone-tint: var(--neutral-tint);
 }
@@ -993,6 +1012,8 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .dash-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .dash-list > li { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--row); }
 .dash-list > li.split { justify-content: space-between; }
+/* "N more" under a list that was cut short. */
+.more-link { margin: 0; padding: 10px 0 0; border-top: 1px solid var(--row); font-size: 13px; }
 .dash-list-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .dash-list-text > a { font-weight: 600; }
 .dash-list-text.right { flex: none; text-align: right; }
@@ -1002,13 +1023,13 @@ table.month td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
   flex-direction: column;
   width: 48px;
   padding: 5px 0;
-  background: #15202B;
+  background: var(--nav-bg);
   border-radius: 6px;
-  color: #FFFFFF;
+  color: var(--nav-strong);
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.date-block .month { font-size: 11px; font-weight: 700; color: #C9D3DE; }
+.date-block .month { font-size: 11px; font-weight: 700; color: var(--nav-fg); }
 .date-block .day { font-size: 19px; font-weight: 700; line-height: 1.1; }
 
 /* Documents list */

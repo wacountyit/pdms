@@ -210,12 +210,11 @@ pub async fn panel_view(
                         .map(|b| format!(" by {b}"))
                         .unwrap_or_default()
                 ),
-                SignatureStatus::Declined => format!(
-                    "Declined{}",
-                    s.recorded_at
-                        .map(|t| format!(" (recorded {})", fmt_time(state.tz, t)))
-                        .unwrap_or_default()
-                ),
+                // The state already says "Declined".
+                SignatureStatus::Declined => s
+                    .recorded_at
+                    .map(|t| format!("Recorded {}", fmt_time(state.tz, t)))
+                    .unwrap_or_default(),
                 SignatureStatus::Pending => String::new(),
             },
             note: s.note.clone(),

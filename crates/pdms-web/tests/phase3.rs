@@ -243,6 +243,30 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
     assert!(page.body.contains("Signature recorded."));
     assert!(page.body.contains("1 of 1 signed"));
     assert!(page.body.contains("Signed copy (version"));
+
+    // A declined signer's row says "Declined" once, in its state column.
+    o.post(
+        &format!("/documents/{doc}/signatories"),
+        &[
+            ("_csrf", csrf.as_str()),
+            ("user", ""),
+            ("name", "Other Party"),
+            ("title", "Director"),
+        ],
+    )
+    .await;
+    let page = o.get(&format!("/documents/{doc}")).await;
+    let other = re(r"/signatories/([0-9a-f-]{36})/declined", &page.body);
+    let r = o
+        .post(
+            &format!("/documents/{doc}/signatories/{other}/declined"),
+            &[("_csrf", csrf.as_str()), ("text", "No authority")],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    let page = o.get(&format!("/documents/{doc}")).await;
+    assert_eq!(page.body.matches(">Declined<").count(), 1, "{}", page.body);
+    assert!(!page.body.contains("Declined (recorded"));
     // The multipart route checks its token first.
     let r = o
         .multipart(

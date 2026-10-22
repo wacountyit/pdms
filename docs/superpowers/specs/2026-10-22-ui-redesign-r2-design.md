@@ -83,9 +83,11 @@ and add no screens. Branch `r2-r1-fixes`, PR title `R2: R1 fixes`.
 8. **Document page:** "Start review" is hidden when a review is already
    under way; "Declined" appears once in a declined signer's row; the
    "Review & approval" link lands on the panel heading.
-9. **County overview:** tile links keep the department filter; the "next
-   date" column says "Overdue" only for documents that are overdue, not for
-   expired, draft or archived ones.
+9. **"Next date" on the documents list** (the brief lists it under the
+   county overview) says "Overdue" only for documents the overdue report
+   also counts: not for expired, superseded or archived ones. Drafts keep
+   "Overdue", because the dashboard and the overdue report count them. The
+   overview's tile links already keep the department filter on `main`.
 
 Each item is re-checked in the code before it is fixed (brief §6), and each
 gets a test where it can have one.

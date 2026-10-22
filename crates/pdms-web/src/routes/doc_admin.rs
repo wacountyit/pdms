@@ -187,7 +187,7 @@ pub async fn types_page(
     )
     .await?;
     let page = TypesPage {
-        l: Layout::new(&state, &user, flash, "Document types", "admin"),
+        l: Layout::new(&state, &user, flash, "Document types", "admin").admin_tab("document-types"),
         types: types::list_types(&state.core.db).await?,
         policies: types::list_policies(&state.core.db).await?,
         tf: TypeFormView::empty(),
@@ -270,7 +270,7 @@ pub async fn type_page(
     .await?;
     let t = types::get_type(&state.core.db, id).await?;
     let page = TypePage {
-        l: Layout::new(&state, &user, flash, &t.name, "admin"),
+        l: Layout::new(&state, &user, flash, &t.name, "admin").admin_tab("document-types"),
         policies: types::list_policies(&state.core.db).await?,
         tf: TypeFormView::of(&t),
         t,
@@ -318,7 +318,7 @@ pub async fn fields_page(
     user.require(&state, Capability::ManageDocumentSchema, "/admin/fields")
         .await?;
     let page = FieldsPage {
-        l: Layout::new(&state, &user, flash, "Custom fields", "admin"),
+        l: Layout::new(&state, &user, flash, "Custom fields", "admin").admin_tab("fields"),
         fields: fields::list(&state.core.db).await?,
         types: types::list_types(&state.core.db).await?,
         field_types: FieldType::ALL
@@ -462,7 +462,8 @@ pub async fn field_page(
             flash,
             &format!("Field: {}", f.label),
             "admin",
-        ),
+        )
+        .admin_tab("fields"),
         ff: FieldFormView::of(&f),
         history,
         f,
@@ -534,7 +535,7 @@ pub async fn tags_page(
     user.require(&state, Capability::ManageTags, "/admin/tags")
         .await?;
     let page = TagsPage {
-        l: Layout::new(&state, &user, flash, "Tags", "admin"),
+        l: Layout::new(&state, &user, flash, "Tags", "admin").admin_tab("tags"),
         tags: tags::list(&state.core.db)
             .await?
             .into_iter()
@@ -606,7 +607,7 @@ pub async fn retention_page(
     user.require(&state, Capability::ManageRetention, "/admin/retention")
         .await?;
     let page = RetentionPage {
-        l: Layout::new(&state, &user, flash, "Retention policies", "admin"),
+        l: Layout::new(&state, &user, flash, "Retention policies", "admin").admin_tab("retention"),
         policies: types::list_policies(&state.core.db).await?,
         bases: RetentionBasis::ALL
             .iter()
@@ -691,7 +692,7 @@ pub async fn deleted_page(
     )
     .await?;
     let page = DeletedPage {
-        l: Layout::new(&state, &user, flash, "Deleted documents", "admin"),
+        l: Layout::new(&state, &user, flash, "Deleted documents", "admin").admin_tab("deleted"),
         docs: documents::list_deleted(&state.core, &user.ctx)
             .await?
             .into_iter()

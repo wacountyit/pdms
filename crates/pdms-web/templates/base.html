@@ -44,25 +44,25 @@
     <nav class="tabs admin-tabs" aria-label="Administration">
       <ul>
         {% if l.can_directory %}
-        <li><a href="/admin/users">Users</a></li>
-        <li><a href="/admin/departments">Departments</a></li>
-        <li><a href="/admin/groups">Groups</a></li>
-        <li><a href="/admin/roles">Roles</a></li>
-        <li><a href="/admin/grants">Access grants</a></li>
-        <li><a href="/admin/idp">Identity provider mappings</a></li>
-        <li><a href="/admin/entra">Entra ID sync</a></li>
+        <li><a href="/admin/users" {% if l.admin_page == "users" %}aria-current="page"{% endif %}>Users</a></li>
+        <li><a href="/admin/departments" {% if l.admin_page == "departments" %}aria-current="page"{% endif %}>Departments</a></li>
+        <li><a href="/admin/groups" {% if l.admin_page == "groups" %}aria-current="page"{% endif %}>Groups</a></li>
+        <li><a href="/admin/roles" {% if l.admin_page == "roles" %}aria-current="page"{% endif %}>Roles</a></li>
+        <li><a href="/admin/grants" {% if l.admin_page == "grants" %}aria-current="page"{% endif %}>Access grants</a></li>
+        <li><a href="/admin/idp" {% if l.admin_page == "idp" %}aria-current="page"{% endif %}>Identity provider mappings</a></li>
+        <li><a href="/admin/entra" {% if l.admin_page == "entra" %}aria-current="page"{% endif %}>Entra ID sync</a></li>
         {% endif %}
         {% if l.can_schema %}
-        <li><a href="/admin/document-types">Document types</a></li>
-        <li><a href="/admin/fields">Custom fields</a></li>
+        <li><a href="/admin/document-types" {% if l.admin_page == "document-types" %}aria-current="page"{% endif %}>Document types</a></li>
+        <li><a href="/admin/fields" {% if l.admin_page == "fields" %}aria-current="page"{% endif %}>Custom fields</a></li>
         {% endif %}
-        {% if l.can_tags %}<li><a href="/admin/tags">Tags</a></li>{% endif %}
-        {% if l.can_retention %}<li><a href="/admin/retention">Retention</a></li>{% endif %}
-        {% if l.can_restore %}<li><a href="/admin/deleted">Deleted documents</a></li>{% endif %}
-        {% if l.can_schema %}<li><a href="/admin/notification-rules">Notification rules</a></li>{% endif %}
-        {% if l.can_settings %}<li><a href="/admin/branding">Branding</a></li>{% endif %}
-        {% if l.can_settings %}<li><a href="/admin/notifications">Delivery log</a></li>{% endif %}
-        {% if l.can_integrations %}<li><a href="/admin/webhooks">Webhooks</a></li><li><a href="/admin/api">API</a></li><li><a href="/admin/outlook">Outlook &amp; OCR</a></li>{% endif %}
+        {% if l.can_tags %}<li><a href="/admin/tags" {% if l.admin_page == "tags" %}aria-current="page"{% endif %}>Tags</a></li>{% endif %}
+        {% if l.can_retention %}<li><a href="/admin/retention" {% if l.admin_page == "retention" %}aria-current="page"{% endif %}>Retention</a></li>{% endif %}
+        {% if l.can_restore %}<li><a href="/admin/deleted" {% if l.admin_page == "deleted" %}aria-current="page"{% endif %}>Deleted documents</a></li>{% endif %}
+        {% if l.can_schema %}<li><a href="/admin/notification-rules" {% if l.admin_page == "notification-rules" %}aria-current="page"{% endif %}>Notification rules</a></li>{% endif %}
+        {% if l.can_settings %}<li><a href="/admin/branding" {% if l.admin_page == "branding" %}aria-current="page"{% endif %}>Branding</a></li>{% endif %}
+        {% if l.can_settings %}<li><a href="/admin/notifications" {% if l.admin_page == "notifications" %}aria-current="page"{% endif %}>Delivery log</a></li>{% endif %}
+        {% if l.can_integrations %}<li><a href="/admin/webhooks" {% if l.admin_page == "webhooks" %}aria-current="page"{% endif %}>Webhooks</a></li><li><a href="/admin/api" {% if l.admin_page == "api" %}aria-current="page"{% endif %}>API</a></li><li><a href="/admin/outlook" {% if l.admin_page == "outlook" %}aria-current="page"{% endif %}>Outlook &amp; OCR</a></li>{% endif %}
       </ul>
     </nav>
     {% endif %}

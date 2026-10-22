@@ -22,37 +22,44 @@ fn files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
 }
 
 fn offences(text: &str) -> Vec<(usize, String)> {
-    let style_attr = Regex::new(r#"(?:^|[\s"'])style\s*="#).unwrap();
-    let style_block = Regex::new(r"<style(?:[\s>]|$)").unwrap();
+    let style_attr = Regex::new(r#"(?m)(?:^|[\s"'])(style\s*=)"#).unwrap();
+    let style_block = Regex::new(r"(?m)<style(?:[\s>]|$)").unwrap();
     let script_tag = Regex::new(r"<script\b([^>]*)").unwrap();
-    let handler = Regex::new(r#"\son[a-z]+\s*="#).unwrap();
+    let handler = Regex::new(r#"\s(on[a-z]+\s*=)"#).unwrap();
     let js_url = Regex::new(r#"=\s*["']?\s*javascript:"#).unwrap();
+    // The whole text is scanned at once, not line by line, so a tag whose
+    // attribute is split across lines (`style` on one line, `="…"` on the
+    // next) is still caught. Rust sources hold inline HTML in string
+    // literals with escaped quotes. Neither change removes a newline, so
+    // line numbers still match the file.
+    let lower = text
+        .to_ascii_lowercase()
+        .replace("\\\"", "\"")
+        .replace("\\'", "'");
+    let line_of = |at: usize| lower[..at].matches('\n').count() + 1;
     let mut found = Vec::new();
-    for (i, line) in text.lines().enumerate() {
-        // Rust sources hold inline HTML in string literals with escaped quotes.
-        let lower = line
-            .to_ascii_lowercase()
-            .replace("\\\"", "\"")
-            .replace("\\'", "'");
-        if style_attr.is_match(&lower) {
-            found.push((i + 1, "style attribute".into()));
-        }
-        if style_block.is_match(&lower) {
-            found.push((i + 1, "style element".into()));
-        }
-        for tag in script_tag.captures_iter(&lower) {
-            let attrs = &tag[1];
-            if !attrs.contains("src=") && !attrs.contains("type=\"application/json\"") {
-                found.push((i + 1, "inline script".into()));
-            }
-        }
-        if handler.is_match(&lower) {
-            found.push((i + 1, "event handler attribute".into()));
-        }
-        if js_url.is_match(&lower) {
-            found.push((i + 1, "javascript: URL".into()));
+    for c in style_attr.captures_iter(&lower) {
+        found.push((line_of(c.get(1).unwrap().start()), "style attribute".into()));
+    }
+    for m in style_block.find_iter(&lower) {
+        found.push((line_of(m.start()), "style element".into()));
+    }
+    for tag in script_tag.captures_iter(&lower) {
+        let attrs = &tag[1];
+        if !attrs.contains("src=") && !attrs.contains("type=\"application/json\"") {
+            found.push((line_of(tag.get(0).unwrap().start()), "inline script".into()));
         }
     }
+    for c in handler.captures_iter(&lower) {
+        found.push((
+            line_of(c.get(1).unwrap().start()),
+            "event handler attribute".into(),
+        ));
+    }
+    for m in js_url.find_iter(&lower) {
+        found.push((line_of(m.start()), "javascript: URL".into()));
+    }
+    found.sort();
     found
 }
 
@@ -116,4 +123,16 @@ fn guard_detects_each_offence() {
     assert!(offences(r#"<script type="application/json">{"a": 1}</script>"#).is_empty());
     assert!(offences(r#"<p data-style="x" class="muted">"#).is_empty());
     assert!(offences(r#"<link rel="stylesheet" href="/static/app.css">"#).is_empty());
+}
+
+#[test]
+fn guard_detects_attributes_split_across_lines() {
+    let style = offences("<p class=\"x\"\n   style\n   =\"color:red\">");
+    assert_eq!(style, vec![(2, "style attribute".to_owned())]);
+    assert_eq!(offences("<a href=\"#\"\n  onclick\n  =\"x()\">").len(), 1);
+    assert_eq!(offences("<a\n  href=\n  \"javascript:x()\">").len(), 1);
+    assert_eq!(offences("<script\n  defer>x()</script>").len(), 1);
+    assert!(offences("<script\n  src=\"/static/htmx.min.js\"\n  defer></script>").is_empty());
+    // The reported line is the attribute's, counted in the whole file.
+    assert_eq!(offences("<p>\n<p>\n<p style=\"x\">")[0].0, 3);
 }

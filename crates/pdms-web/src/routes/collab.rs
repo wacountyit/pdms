@@ -325,7 +325,8 @@ pub async fn outlook_page(
     let cfg = &state.core.config.graph_calendar;
     let (events, failing) = pdms_core::graph_calendar::status(&state.core, &user.ctx).await?;
     let page = OutlookPage {
-        l: Layout::new(&state, &user, flash, "Outlook calendar and OCR", "admin"),
+        l: Layout::new(&state, &user, flash, "Outlook calendar and OCR", "admin")
+            .admin_tab("outlook"),
         enabled: cfg.enabled,
         mailbox: cfg.mailbox.clone(),
         departments: cfg

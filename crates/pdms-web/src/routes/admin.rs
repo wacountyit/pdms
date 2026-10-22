@@ -103,7 +103,7 @@ pub async fn users(
 ) -> AppResult<Html<String>> {
     let rows = directory::list_users(&state.core.db, &q.q, 500).await?;
     let page = UsersPage {
-        l: Layout::new(&state, &user, flash, "Users", "admin"),
+        l: Layout::new(&state, &user, flash, "Users", "admin").admin_tab("users"),
         users: rows
             .into_iter()
             .map(|u| UserRow {
@@ -161,7 +161,7 @@ pub async fn user_detail(
 ) -> AppResult<Html<String>> {
     let u = directory::get_user(&state.core.db, id).await?;
     let page = UserPage {
-        l: Layout::new(&state, &user, flash, &u.user.display_name, "admin"),
+        l: Layout::new(&state, &user, flash, &u.user.display_name, "admin").admin_tab("users"),
         methods: methods(&u.user),
         last_login: fmt_time_opt(state.tz, u.user.last_login_at),
         departments: directory::list_departments(&state.core.db).await?,
@@ -332,7 +332,7 @@ pub async fn departments(
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
     let page = DepartmentsPage {
-        l: Layout::new(&state, &user, flash, "Departments", "admin"),
+        l: Layout::new(&state, &user, flash, "Departments", "admin").admin_tab("departments"),
         departments: directory::list_departments(&state.core.db).await?,
     };
     Ok(Html(page.render()?))
@@ -429,7 +429,7 @@ pub async fn department_detail(
     let d = directory::get_department(&state.core.db, id).await?;
     let (departments, roles, groups, users) = grant_form_options(&state).await?;
     let page = DepartmentPage {
-        l: Layout::new(&state, &user, flash, &d.name, "admin"),
+        l: Layout::new(&state, &user, flash, &d.name, "admin").admin_tab("departments"),
         members: directory::department_members(&state.core.db, id).await?,
         grants: grant_rows(&state, acl::list_grants(&state.core.db, Some(id)).await?),
         back: format!("/admin/departments/{id}"),
@@ -497,7 +497,7 @@ pub async fn grants(
 ) -> AppResult<Html<String>> {
     let (departments, roles, groups, users) = grant_form_options(&state).await?;
     let page = GrantsPage {
-        l: Layout::new(&state, &user, flash, "Access grants", "admin"),
+        l: Layout::new(&state, &user, flash, "Access grants", "admin").admin_tab("grants"),
         grants: grant_rows(&state, acl::list_grants(&state.core.db, None).await?),
         back: "/admin/grants".into(),
         scope_department: None,
@@ -614,7 +614,7 @@ pub async fn groups(
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
     let page = GroupsPage {
-        l: Layout::new(&state, &user, flash, "Groups", "admin"),
+        l: Layout::new(&state, &user, flash, "Groups", "admin").admin_tab("groups"),
         groups: directory::list_groups(&state.core.db).await?,
     };
     Ok(Html(page.render()?))
@@ -660,7 +660,7 @@ pub async fn group_detail(
 ) -> AppResult<Html<String>> {
     let (g, members) = directory::get_group(&state.core.db, id).await?;
     let page = GroupPage {
-        l: Layout::new(&state, &user, flash, &g.name, "admin"),
+        l: Layout::new(&state, &user, flash, &g.name, "admin").admin_tab("groups"),
         users: directory::list_users(&state.core.db, "", 2000).await?,
         g,
         members,
@@ -709,7 +709,7 @@ pub async fn roles(
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
     let page = RolesPage {
-        l: Layout::new(&state, &user, flash, "Roles", "admin"),
+        l: Layout::new(&state, &user, flash, "Roles", "admin").admin_tab("roles"),
         roles: directory::list_roles(&state.core.db).await?,
     };
     Ok(Html(page.render()?))
@@ -751,7 +751,8 @@ pub async fn idp(
 ) -> AppResult<Html<String>> {
     let db = &state.core.db;
     let page = IdpPage {
-        l: Layout::new(&state, &user, flash, "Identity provider mappings", "admin"),
+        l: Layout::new(&state, &user, flash, "Identity provider mappings", "admin")
+            .admin_tab("idp"),
         mappings: directory::list_idp_mappings(db).await?,
         departments: directory::list_departments(db).await?,
         groups: directory::list_groups(db).await?,
@@ -848,7 +849,7 @@ pub async fn entra(
         .filter(|e| !problems.contains(e))
         .unwrap_or_default();
     let page = EntraPage {
-        l: Layout::new(&state, &user, flash, "Entra ID sync", "admin"),
+        l: Layout::new(&state, &user, flash, "Entra ID sync", "admin").admin_tab("entra"),
         configured: core.graph.is_some(),
         thumbprint: core.graph.as_ref().map(|g| g.thumbprint().to_owned()),
         enabled: core.config.entra_sync.enabled,

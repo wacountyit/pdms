@@ -53,6 +53,7 @@
     </li>
     {% endfor %}
   </ol>
+  {% if upcoming_more > 0 %}<p class="more-link"><a href="/calendar?view=agenda&amp;days={{ days }}">{{ upcoming_more }} more in the next {{ days }} days</a></p>{% endif %}
   {% endif %}
 </section>
 </div>
@@ -65,6 +66,7 @@
   <ul class="dash-list">
     {% for s in seats %}<li class="split"><a href="{{ s.href }}">{{ s.label }}</a><span class="status status-{{ s.status_class }}">{{ s.status_text }}</span></li>{% endfor %}
   </ul>
+  {% if boards_more > 0 %}<p class="more-link"><a href="/positions">{{ boards_more }} more seat{% if boards_more != 1 %}s{% endif %} needing attention</a></p>{% endif %}
   {% endif %}
 </section>
 {% endif %}
