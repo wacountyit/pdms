@@ -107,7 +107,7 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **Plan P3, SharePoint document storage** (1) | WACountyIT | Pre-flight: **Done** (plan corrected; the owner's decisions recorded as D-102). Phase A (Tasks 1–3: QuickXorHash, naming and column rules, `[sharepoint]` settings, the 503 "unavailable" error): **Done** on the branch, not yet pushed. B (Tasks 4–5), C (Task 6), D (Tasks 7–8), E (Tasks 9–10), F (Task 11): **Not started** | Branch `p3-sharepoint-storage` (local; no draft PR yet, the owner's call). PR title starts with `P3:` | 2026-10-22 |
+| **Plan P3, SharePoint document storage** (1) | WACountyIT | Pre-flight: **Done** (plan corrected; the owner's decisions recorded as D-102). Phase A (Tasks 1–3: QuickXorHash, naming and column rules, `[sharepoint]` settings, the 503 "unavailable" error): **Done**. Phase B (Tasks 4–5: first-use setup of the site, library, columns and area folders; migration `0013_sharepoint_files.sql`; department folders): **Done**. C (Task 6, uploads): **Next**. D (Tasks 7–8), E (Tasks 9–10), F (Task 11): **Not started** | Branch `p3-sharepoint-storage` (pushed; no draft PR, the owner's call). PR title starts with `P3:` | 2026-10-22 |
 
 §0.5 lists what can start next.
 
