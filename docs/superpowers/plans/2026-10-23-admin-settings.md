@@ -111,6 +111,14 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 
 ## Phase 3: SharePoint and the Entra ID user sync
 
+> **As built (2026-10-23):**
+> - Core: `sharepoint::setup` (`state`, `save_site`, `test`, `turn_on`, `turn_off`), all `ManageSettings`; `SharePoint::probe` does the read-only test with its own Graph calls instead of `resolved` (which creates the columns and folders). It counts missing columns rather than listing them; PDMS still creates columns and folders when it stores the first file.
+> - The check interval is clamped to 1–1440 minutes. Site addresses compare without a trailing slash and case.
+> - **Test** renders the page with each step (OK or Problem) and keeps the typed values; the other buttons redirect with a message.
+> - `entra_sync::preview` (`ManageDirectory`) reads `GET /users?$select=…&$top=10` and shows the mapped department and the skip reason (guest, disabled, no email address). It is `GET /admin/entra/preview`, shown only with the connection.
+> - The installer no longer writes `backend = "local"` (the default) in its `[storage]` block, because a backend in the file locks the switch on the page. Older installs have the line; ADMIN_GUIDE says to delete it, and the page says so too. Phase 6's upgrade offer can remove it.
+> - Tests: `tests/sharepoint_setup.rs` (8, core), the preview in `tests/entra_sync.rs`, and web tests in `tests/sharepoint_admin.rs` (3) and `tests/entra.rs` (1). Worker rebuild on a settings change was already covered in Phase 1.
+
 - **SharePoint page:** a **Settings** panel above the status panels: site address, library, check interval, and the storage switch.
   - **Test** with the form's values: resolve the site and library (P3's `SharePoint::resolved`), list the columns that would be created, check the three folders, and read the library's permissions (proves full control). It changes nothing.
   - **Turn on** (`storage.backend = "sharepoint"`): refused while any document file exists (`blobs` count, shown), or when the test fails.

@@ -468,6 +468,10 @@ pub(super) fn route(
             let root = sp.items["root"].clone();
             json_resp(200, sp.json(&root))
         }
+        ("GET", ["drives", DRIVE, "root", "permissions"]) => {
+            let v: Vec<Value> = sp.items["root"].perms.iter().map(perm_json).collect();
+            json_resp(200, json!({"value": v}))
+        }
         ("GET", ["drives", DRIVE, "root", "delta"]) => delta(sp, base, None),
         ("GET", ["drives", DRIVE, "root", "delta", token]) => delta(sp, base, token.parse().ok()),
         ("GET", ["drives", DRIVE, "items", id, "versions"]) => versions(sp, id),

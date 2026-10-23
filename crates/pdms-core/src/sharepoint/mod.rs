@@ -18,6 +18,7 @@ mod mirror;
 mod ops;
 pub mod quickxor;
 pub mod resolve;
+pub mod setup;
 pub mod status;
 
 use std::sync::Arc;
@@ -150,6 +151,132 @@ struct Drive {
 #[derive(Deserialize)]
 struct Column {
     name: String,
+}
+
+/// What a read-only check of the site found (Administration → SharePoint).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Probe {
+    /// The site, library and list were found, and PDMS may manage sharing.
+    pub ok: bool,
+    /// Each step, in plain words: (worked, what).
+    pub lines: Vec<(bool, String)>,
+}
+
+impl SharePoint {
+    /// Check the site, library, columns and area folders the way first use
+    /// does, but change nothing (first use creates what is missing).
+    pub async fn probe(&self) -> Probe {
+        let mut p = Probe::default();
+        match probe(&self.inner, &mut p.lines).await {
+            Ok(()) => p.ok = true,
+            Err(line) => p.lines.push((false, line)),
+        }
+        p
+    }
+}
+
+fn graph_problem(what: &str, e: &crate::graph::GraphError) -> String {
+    use crate::graph::GraphError;
+    match e {
+        GraphError::NotFound => format!(
+            "{what} wasn't found, or the PDMS Service app has no access to it (SHAREPOINT_SETUP.md B5)."
+        ),
+        GraphError::Auth(m) => format!("Microsoft refused: {m}"),
+        other => format!("{what}: {other}"),
+    }
+}
+
+async fn probe(inner: &Inner, out: &mut Vec<(bool, String)>) -> Result<(), String> {
+    let g = &inner.graph;
+    let site: IdOnly = g
+        .get(&format!(
+            "/sites/{}:{}?$select=id",
+            inner.host, inner.site_path
+        ))
+        .await
+        .map_err(|e| graph_problem("The site", &e))?;
+    out.push((true, "Found the site.".into()));
+    let drives: Values<Drive> = g
+        .get(&format!("/sites/{}/drives?$select=id,name", site.id))
+        .await
+        .map_err(|e| graph_problem("The site's libraries", &e))?;
+    let Some(drive) = drives
+        .value
+        .iter()
+        .find(|d| d.name.eq_ignore_ascii_case(&inner.library))
+    else {
+        let names: Vec<&str> = drives.value.iter().map(|d| d.name.as_str()).collect();
+        return Err(format!(
+            "The library {:?} isn't on the site. Libraries found: {}.",
+            inner.library,
+            if names.is_empty() {
+                "none".to_owned()
+            } else {
+                names.join(", ")
+            }
+        ));
+    };
+    out.push((true, format!("Found the library {:?}.", drive.name)));
+    let list: IdOnly = g
+        .get(&format!("/drives/{}/list?$select=id", drive.id))
+        .await
+        .map_err(|e| graph_problem("The library's list", &e))?;
+    let have: Values<Column> = g
+        .get(&format!(
+            "/sites/{}/lists/{}/columns?$select=name",
+            site.id, list.id
+        ))
+        .await
+        .map_err(|e| graph_problem("The library's columns", &e))?;
+    let defs = layout::column_definitions();
+    let missing = defs
+        .iter()
+        .filter(|d| {
+            let name = d.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+            !have.value.iter().any(|c| c.name == name)
+        })
+        .count();
+    out.push((
+        true,
+        if missing == 0 {
+            format!("All {} PDMS columns are there.", defs.len())
+        } else {
+            format!(
+                "{missing} of the {} PDMS columns are missing; PDMS adds them when it stores the first file.",
+                defs.len()
+            )
+        },
+    ));
+    for area in Area::ALL {
+        let path = format!(
+            "/drives/{}/root:/{}?$select=id",
+            drive.id,
+            layout::encode_segment(area.folder_name())
+        );
+        match g.get::<IdOnly>(&path).await {
+            Ok(_) => out.push((true, format!("The {} folder is there.", area.folder_name()))),
+            Err(crate::graph::GraphError::NotFound) => out.push((
+                true,
+                if area == Area::CountyWide {
+                    "The County-wide folder is missing: PDMS creates it, but give \"Everyone except external users\" read access to it afterwards (SHAREPOINT_SETUP.md A5).".to_owned()
+                } else {
+                    format!("The {} folder is missing; PDMS creates it.", area.folder_name())
+                },
+            )),
+            Err(e) => return Err(graph_problem(&format!("The {} folder", area.folder_name()), &e)),
+        }
+    }
+    let _: serde_json::Value = g
+        .get(&format!("/drives/{}/root/permissions", drive.id))
+        .await
+        .map_err(|e| {
+            format!(
+                "PDMS can't read the library's sharing ({}). It needs full control of the site to manage department folder access (SHAREPOINT_SETUP.md B5).",
+                graph_problem("The library's sharing", &e)
+            )
+        })?;
+    out.push((true, "PDMS can read the library's sharing.".into()));
+    Ok(())
 }
 
 async fn resolve(inner: &Inner) -> CoreResult<Resolved> {

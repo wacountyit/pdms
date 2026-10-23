@@ -150,26 +150,19 @@ Entra lists matches the SHA-1 thumbprint on the Connection page. Then choose
 **Test connection** there: it should say "Signed in to Microsoft Graph as the
 PDMS Service app".
 
-### B4b. Turn SharePoint storage on
+### B4b. Enter the site
 
-For now this is still an installer step; it moves to **Administration →
-SharePoint** in the next update.
+Open **Administration → SharePoint**. Under **Settings**, enter the site
+address (for example `https://contoso.sharepoint.com/sites/PDMSRecordsTest`)
+and the library (`Documents` unless you named it differently in A4), then
+choose **Save**. Leave storage off for now: turn it on in B6, after the site
+grant.
 
-```sh
-./install.sh --configure sharepoint
-```
-
-Give it the same tenant and client IDs as the Connection page. On an install
-that already has documents, it asks you to confirm first: files already
-stored on the server are not moved to SharePoint, and PDMS cannot open them
-once SharePoint storage is on. Turn SharePoint on before real documents are
-added; on the test server, reset it first (rollout, at the end of this
-guide). The installer writes the IDs into `config/pdms.toml`, so they then
-show read-only on the Connection page. It can't see the certificate made on
-the page, so it also makes a file certificate in `secrets/graph_certificate`,
-which would win over the page's. Until this step moves to the admin page,
-empty that file afterwards so PDMS keeps the certificate you uploaded:
-`: > secrets/graph_certificate && docker compose up -d --force-recreate app worker`.
+**Test** checks what you typed without saving it and without changing
+anything in SharePoint. It lists each step: the site, the library, the PDMS
+columns, the three folders, and whether PDMS can read the library's sharing.
+Before B5 it reports that the site wasn't found, because PDMS has no access
+to it yet.
 
 ### B5. Give the app full control of this one site
 
@@ -222,10 +215,17 @@ Recent PnP releases name these `Grant-PnPEntraIDAppSitePermission` and
 To disconnect PDMS later, remove this permission
 (`Remove-MgSitePermission -SiteId $site.Id -PermissionId <id>`).
 
-### B6. Check the connection
+### B6. Turn storage on and check it
 
-In PDMS, open **Administration → SharePoint** and choose **Check for changes
-now**. On
+In PDMS, open **Administration → SharePoint** and choose **Test** again:
+every line should now say OK. Then choose **Turn SharePoint storage on**.
+PDMS refuses while any document file is stored on this server, because it
+can't read those files once SharePoint storage is on: turn it on before real
+documents are added (on the test server, reset it first: rollout, at the end
+of this guide). It also tests the site again and stays off if the test
+fails.
+
+Then choose **Check for changes now**. On
 its first connection PDMS creates the library columns (Document ID, Document
 Type, Tags, Status, Visibility, Department, Owner, the four dates, Version,
 Current, Open in PDMS) and checks the three folders. The page should show the
@@ -311,10 +311,19 @@ after uploading the new public certificate.
 
 ### C3. Turning SharePoint storage off
 
-`./install.sh --configure sharepoint` and answer `none` for the site
-address. Files already in SharePoint stay there, but PDMS can no longer open
-them, so it asks you to confirm. `[graph]` stays in the configuration for
-the Entra ID user sync.
+On **Administration → SharePoint**, under **Settings → Storage**, type the
+site address and choose **Turn SharePoint storage off**. New document files
+are stored on the server again. Files already in SharePoint stay there, but
+PDMS can no longer open them until storage is turned back on, which is why
+it asks for the address. The Microsoft 365 connection stays, for the Entra
+ID user sync.
+
+While SharePoint holds PDMS files, the site and library can't be changed:
+PDMS tracks each file by its ID in that library.
+
+If `config/pdms.toml` sets `[storage] backend` or the `[sharepoint]` values
+(for example from `./install.sh --configure sharepoint`), the page shows
+them read-only; change them in the file instead.
 
 ## Rollout on the test server
 
@@ -322,13 +331,15 @@ the Entra ID user sync.
 > anything on it matters.
 
 1. On the test server: `cd <install directory> && git pull && docker compose down -v`.
-2. `./install.sh`. Answer the SharePoint step with the test site, the tenant
-   ID, and the `PDMS Service – Test` client ID. Then do B4 to B6.
+2. `./install.sh`. Answer `none` at the SharePoint step: the next steps
+   are done on the admin pages. Then do B3 to B6.
 3. `docker compose run --rm app seed-demo`. The demo files go to the test site.
 4. Optional, from a workstation with the repository: run the three opt-in
    live tests against the test site (`live_sharepoint_round_trip`,
    `live_pdms_writes_are_recognised`, `live_department_staff_get_read_access`
    in `crates/pdms-core/tests/sharepoint.rs`; each lists the variables it
-   needs). Point `PDMS_LIVE_CERTIFICATE_FILE` at a copy of the test server's
-   `secrets/graph_certificate`, and delete the copy afterwards.
+   needs). They sign in with a certificate file
+   (`PDMS_LIVE_CERTIFICATE_FILE`), so they need one made for the purpose
+   and uploaded to the app registration as well, not the certificate made
+   on the Connection page. Delete the file afterwards.
 5. Do B7 to B9.

@@ -943,6 +943,8 @@ span.label { font-weight: 600; }
   margin: 16px 0;
 }
 .grid-form > button, .grid-form > .button { justify-self: start; }
+/* A field with help under it: its label lines up with the field, not the middle of both. */
+.grid-form > label:has(+ div > .help) { align-self: start; padding-top: 10px; }
 .inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
 .stack { display: flex; flex-direction: column; gap: 6px; }
 .stack button { margin-top: 12px; }

@@ -335,6 +335,16 @@ last run (the first run reads every account):
 - guest (B2B) accounts are skipped (unless `include_guests = true`). An
   account with no user type counts as a member.
 
+**Settings.** On **Administration → Entra ID sync**, under **Settings**:
+turn the sync on, the time it runs, the department field, and whether to
+include guest accounts. The same values can be set in `[entra_sync]` in
+`config/pdms.toml`; there they win and show read-only. Turning the sync on
+needs the Microsoft 365 connection and Microsoft sign-in with `oid` as the
+subject claim; PDMS refuses with the reason otherwise. **Preview** reads the
+first ten accounts from Entra ID and shows, for each, the department value,
+the PDMS department it maps to, and whether the sync would skip it (guest,
+disabled, no email address). It changes nothing.
+
 The department comes from the Entra account property named by
 `[entra_sync] attribute` (default **Department**). Under **Administration →
 Entra ID sync**, map each value in use ("Road & Bridge", "R&B", ...) to a PDMS
@@ -562,18 +572,32 @@ stay in `local_path`.
 2. Register the `PDMS Service` app with the Graph application permission
    `Sites.Selected`, and give it full control on this one site (the guide has
    the exact commands).
-3. Run `./install.sh --configure sharepoint`. It writes `[graph]` and
-   `[sharepoint]`, sets `[storage] backend = "sharepoint"` (in the installer's
-   `[storage]` block, which also holds the virus-scanning setting), creates
-   the certificate in `secrets/` if there is none, and prints its
-   thumbprints. If you wrote `[storage]` by hand, the installer leaves it
-   alone and tells you to set `backend` yourself. PDMS refuses to start with
-   `backend = "sharepoint"` and no `[graph]` section.
-4. **Start with an empty system.** Files already stored locally or in S3 are
-   not moved to SharePoint and can't be read once the backend changes, so on
-   an install with documents the installer asks you to confirm. Turn
-   SharePoint on before real documents are added; on the test server, reset
-   it when you switch. To switch back, run the same step and answer `none`.
+3. Set up the Microsoft 365 connection (**Administration → Microsoft 365 →
+   Connection**), then, on **Administration → SharePoint** under
+   **Settings**, enter the site address and library and choose **Save**.
+   **Test** checks the site without saving or changing anything: the site,
+   the library, the PDMS columns, the three folders, and whether PDMS can
+   read the library's sharing. It is in the audit log as `settings.tested`.
+4. Choose **Turn SharePoint storage on**. PDMS tests the site again first and
+   stays off if the test fails. **Start with an empty system:** it refuses
+   while any document file is stored on this server (or in S3), because those
+   files are not moved to SharePoint and can't be read once the backend
+   changes. On the test server, reset it first.
+5. To switch back, type the site address under **Storage** and choose **Turn
+   SharePoint storage off**. Files already in SharePoint stay there, but PDMS
+   can no longer open them until storage is on again. While SharePoint holds
+   PDMS files, the site and library can't be changed, because PDMS tracks each
+   file by its ID in that library (D-114).
+
+The page needs the `manage_settings` capability for the Settings panel; the
+rest of the page needs `manage_sharepoint`. Values set in `config/pdms.toml`
+show read-only and win over the page (D-111). `./install.sh --configure
+sharepoint` still writes `[sharepoint]` and `[storage] backend =
+"sharepoint"` into the file; settings from the page are easier to change. An
+install made by an older installer has `backend = "local"` in its
+`[storage]` block, which locks the switch on the page: delete that line
+(`local` is the default) and restart PDMS. PDMS refuses to start with
+`backend = "sharepoint"` and no Microsoft 365 connection.
 
 **How it works:**
 - **Layout.** `Departments/`, `County-wide/` or `Restricted/` (from the

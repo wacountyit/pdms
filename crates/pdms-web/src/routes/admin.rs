@@ -6,14 +6,15 @@
 use askama::Template;
 use axum::Form;
 use axum::extract::{Path, Query, State};
-use axum::response::{Html, Response};
+use axum::response::{Html, IntoResponse, Response};
 use chrono::NaiveDate;
-use pdms_authz::{Permission, Scope, Subject};
+use pdms_authz::{Capability, Permission, Scope, Subject};
 use pdms_core::directory::{
     self, Department, Group, GroupMember, IdpMapping, MappingTarget, Role, UserDetail, UserSummary,
     entra_sync, entra_values,
 };
 use pdms_core::model::UserStatus;
+use pdms_core::settings::{self, Change, NewValue};
 use pdms_core::{CoreError, acl};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -21,7 +22,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::session::CurrentUser;
 use crate::state::AppState;
-use crate::views::{FlashMsg, Layout, done, fmt_time, fmt_time_opt};
+use crate::views::{FlashMsg, Layout, done, fmt_time, fmt_time_opt, redirect_with};
 
 fn uuid_opt(s: &str) -> AppResult<Option<Uuid>> {
     let s = s.trim();
@@ -822,6 +823,19 @@ struct EntraPage {
     values: Vec<entra_values::EntraValue>,
     unmapped: Vec<entra_values::UnmappedValue>,
     departments: Vec<Department>,
+    /// The Settings panel, for people who can manage settings (S1).
+    settings: Option<EntraSettings>,
+    /// The result of **Preview**.
+    preview: Option<Vec<entra_sync::PreviewUser>>,
+}
+
+pub struct EntraSettings {
+    pub run_at: String,
+    pub include_guests: bool,
+    pub enabled_locked: bool,
+    pub run_at_locked: bool,
+    pub attribute_locked: bool,
+    pub guests_locked: bool,
 }
 
 pub async fn entra(
@@ -829,7 +843,48 @@ pub async fn entra(
     user: CurrentUser,
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
+    entra_page(&state, &user, flash, None).await
+}
+
+/// The first ten Entra accounts and what the sync would do with each,
+/// changing nothing.
+pub async fn entra_preview(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Response> {
+    match entra_sync::preview(&state.core, &user.ctx).await {
+        Ok(rows) => Ok(entra_page(&state, &user, FlashMsg(None), Some(rows))
+            .await?
+            .into_response()),
+        Err(e @ CoreError::Forbidden(_)) => Err(e.into()),
+        Err(e) => Ok(redirect_with(
+            &state,
+            "/admin/entra",
+            false,
+            &format!("The preview failed: {e}"),
+        )),
+    }
+}
+
+async fn entra_page(
+    state: &AppState,
+    user: &CurrentUser,
+    flash: FlashMsg,
+    preview: Option<Vec<entra_sync::PreviewUser>>,
+) -> AppResult<Html<String>> {
     let core = &state.core;
+    let settings = user.can(Capability::ManageSettings).then(|| {
+        let file = core.file_config();
+        let config = core.config();
+        EntraSettings {
+            run_at: config.entra_sync.run_at.clone(),
+            include_guests: config.entra_sync.include_guests,
+            enabled_locked: file.locked.contains("entra_sync.enabled"),
+            run_at_locked: file.locked.contains("entra_sync.run_at"),
+            attribute_locked: file.locked.contains("entra_sync.attribute"),
+            guests_locked: file.locked.contains("entra_sync.include_guests"),
+        }
+    });
     let status = entra_sync::status(&core.db).await?;
     let (summary, problems) = match &status.last_summary {
         Some(r) => (
@@ -849,7 +904,7 @@ pub async fn entra(
         .filter(|e| !problems.contains(e))
         .unwrap_or_default();
     let page = EntraPage {
-        l: Layout::new(&state, &user, flash, "Entra ID sync", "admin").admin_tab("entra"),
+        l: Layout::new(state, user, flash, "Entra ID sync", "admin").admin_tab("entra"),
         configured: core.graph().is_some(),
         thumbprint: core.graph().as_ref().map(|g| g.thumbprint().to_owned()),
         enabled: core.config().entra_sync.enabled,
@@ -861,8 +916,57 @@ pub async fn entra(
         values: entra_values::list(&core.db).await?,
         unmapped: entra_values::unmapped(&core.db).await?,
         departments: directory::list_departments(&core.db).await?,
+        settings,
+        preview,
     };
     Ok(Html(page.render()?))
+}
+
+#[derive(Deserialize)]
+pub struct EntraSettingsForm {
+    enabled: Option<String>,
+    #[serde(default)]
+    run_at: String,
+    #[serde(default)]
+    attribute: String,
+    include_guests: Option<String>,
+}
+
+pub async fn save_entra_settings(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<EntraSettingsForm>,
+) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, "/admin/entra")
+        .await?;
+    let file = state.core.file_config();
+    let changes = [
+        (
+            "entra_sync.enabled",
+            serde_json::Value::Bool(checkbox(&f.enabled)),
+        ),
+        (
+            "entra_sync.run_at",
+            serde_json::Value::String(f.run_at.trim().to_owned()),
+        ),
+        (
+            "entra_sync.attribute",
+            serde_json::Value::String(f.attribute.trim().to_owned()),
+        ),
+        (
+            "entra_sync.include_guests",
+            serde_json::Value::Bool(checkbox(&f.include_guests)),
+        ),
+    ]
+    .into_iter()
+    .filter(|(key, _)| !file.locked.contains(*key))
+    .map(|(key, value)| Change {
+        key: key.into(),
+        value: NewValue::Set(value),
+    })
+    .collect();
+    let r = settings::save(&state.core, &user.ctx, changes).await;
+    done(&state, "/admin/entra", r, "Saved.")
 }
 
 #[derive(Deserialize)]

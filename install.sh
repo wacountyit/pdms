@@ -213,11 +213,14 @@ custom_storage() { has_table storage && ! has_block storage && ! clamav_block_ha
 storage_backend() { local b; b=$(toml_value storage backend); echo "${b:-local}"; }
 write_storage_block() { # write_storage_block BACKEND CLAMAV_ADDR
   if has_block clamav; then remove_block clamav; env_set PDMS_CLAMAV_DECIDED yes; fi
+  # "local" is the default, so it is left out: a backend in this file can't be
+  # switched on Administration -> SharePoint.
+  local backend_line="# Where document files live is set on Administration -> SharePoint."
+  [[ "$1" != local ]] && backend_line="# Where document files live (./install.sh --configure sharepoint).
+backend = $(toml "$1")"
   write_block storage "sharepoint or clamav" <<EOF
 [storage]
-# Where document files live: "local" (the pdmsdata volume), or "sharepoint"
-# (./install.sh --configure sharepoint; see docs/SHAREPOINT_SETUP.md).
-backend = $(toml "$1")
+$backend_line
 # Virus scanning: "clamav:3310" turns it on (./install.sh --configure clamav).
 clamav_addr = $(toml "$2")
 EOF

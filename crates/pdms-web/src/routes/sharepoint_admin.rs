@@ -2,13 +2,16 @@
 // Copyright (C) 2026 PDMS contributors
 //! Administration → SharePoint: background run status, files changed
 //! directly in SharePoint and how to resolve them, files PDMS does not track,
-//! and access on department folders that PDMS did not grant.
+//! and access on department folders that PDMS did not grant. The Settings
+//! panel (S1, D-114) sets the site up and turns storage on and off.
 
 use askama::Template;
 use axum::extract::{Path, State};
-use axum::response::{Html, Response};
+use axum::response::{Html, IntoResponse, Response};
+use axum_extra::extract::Form;
 use pdms_authz::Capability;
-use pdms_core::sharepoint::{access, changes, resolve, status};
+use pdms_core::sharepoint::{Probe, access, changes, resolve, setup, status};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::error::AppResult;
@@ -58,6 +61,21 @@ struct SharePointPage {
     flagged: Vec<FlagRow>,
     unexpected: Vec<StrayRow>,
     foreign: Vec<status::ForeignGrant>,
+    /// The Settings panel, for people who can manage settings.
+    settings: Option<SettingsPanel>,
+}
+
+pub struct SettingsPanel {
+    pub site_url: String,
+    pub library: String,
+    pub interval: u64,
+    pub site_locked: bool,
+    pub library_locked: bool,
+    pub interval_locked: bool,
+    pub backend_locked: bool,
+    pub storage: setup::StorageState,
+    /// The result of **Test**, shown under the form.
+    pub probe: Option<Probe>,
 }
 
 fn run_label(name: &str) -> &'static str {
@@ -74,11 +92,49 @@ pub async fn page(
     user: CurrentUser,
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
-    user.require(&state, Capability::ManageSharePoint, BACK)
+    render(&state, &user, flash, None).await
+}
+
+/// `typed`: the site and library a **Test** tried, with its result.
+async fn render(
+    state: &AppState,
+    user: &CurrentUser,
+    flash: FlashMsg,
+    typed: Option<(SettingsForm, Probe)>,
+) -> AppResult<Html<String>> {
+    user.require(state, Capability::ManageSharePoint, BACK)
         .await?;
     let p = status::panel(&state.core, &user.ctx).await?;
+    let settings = if user.can(Capability::ManageSettings) {
+        let config = state.core.config();
+        let file = state.core.file_config();
+        let (form, probe) = match typed {
+            Some((f, probe)) => (f, Some(probe)),
+            None => (
+                SettingsForm {
+                    site_url: config.sharepoint.site_url.clone(),
+                    library: config.sharepoint.library.clone(),
+                    interval: config.sharepoint.delta_interval_minutes,
+                },
+                None,
+            ),
+        };
+        Some(SettingsPanel {
+            site_url: form.site_url,
+            library: form.library,
+            interval: form.interval,
+            site_locked: file.locked.contains("sharepoint.site_url"),
+            library_locked: file.locked.contains("sharepoint.library"),
+            interval_locked: file.locked.contains("sharepoint.delta_interval_minutes"),
+            backend_locked: file.locked.contains("storage.backend"),
+            storage: setup::state(&state.core).await?,
+            probe,
+        })
+    } else {
+        None
+    };
     let page = SharePointPage {
-        l: Layout::new(&state, &user, flash, "SharePoint", "admin").admin_tab("sharepoint"),
+        l: Layout::new(state, user, flash, "SharePoint", "admin").admin_tab("sharepoint"),
         enabled: p.enabled,
         site_url: p.site_url,
         client_id: p.client_id,
@@ -121,8 +177,82 @@ pub async fn page(
             })
             .collect(),
         foreign: p.foreign,
+        settings,
     };
     Ok(Html(page.render()?))
+}
+
+#[derive(Deserialize)]
+pub struct SettingsForm {
+    #[serde(default)]
+    site_url: String,
+    #[serde(default)]
+    library: String,
+    #[serde(default = "default_interval")]
+    interval: u64,
+}
+
+fn default_interval() -> u64 {
+    15
+}
+
+pub async fn save_settings(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<SettingsForm>,
+) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, BACK)
+        .await?;
+    let r = setup::save_site(&state.core, &user.ctx, &f.site_url, &f.library, f.interval).await;
+    done(&state, BACK, r, "Saved.")
+}
+
+/// Check the typed site and library without saving them, and show each step.
+pub async fn test(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<SettingsForm>,
+) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, BACK)
+        .await?;
+    let probe = setup::test(&state.core, &user.ctx, &f.site_url, &f.library).await?;
+    Ok(render(&state, &user, FlashMsg(None), Some((f, probe)))
+        .await?
+        .into_response())
+}
+
+pub async fn turn_on(State(state): State<AppState>, user: CurrentUser) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, BACK)
+        .await?;
+    let r = setup::turn_on(&state.core, &user.ctx).await;
+    done(
+        &state,
+        BACK,
+        r,
+        "SharePoint storage is on. New document files are stored in SharePoint from now on.",
+    )
+}
+
+#[derive(Deserialize)]
+pub struct TurnOffForm {
+    #[serde(default)]
+    confirm_site: String,
+}
+
+pub async fn turn_off(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<TurnOffForm>,
+) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, BACK)
+        .await?;
+    let r = setup::turn_off(&state.core, &user.ctx, &f.confirm_site).await;
+    done(
+        &state,
+        BACK,
+        r,
+        "SharePoint storage is off. New document files are stored on this server.",
+    )
 }
 
 pub async fn check_now(State(state): State<AppState>, user: CurrentUser) -> AppResult<Response> {

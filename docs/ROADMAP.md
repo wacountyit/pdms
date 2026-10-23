@@ -150,7 +150,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phase 1 (foundation: settings storage, the configuration file wins, encryption, live apply, worker rebuild, `pdms settings show`; migration `0015`): **Done**. Phase 2 (Administration → Microsoft 365 → Connection: the app's IDs, the certificate made in PDMS, the connection test, the expiry reminder): **Done**. Phases 3 (SharePoint and Entra sync settings) to 7: **Not started** | Phase 3 next | 2026-10-23 |
+| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phase 1 (foundation: settings storage, the configuration file wins, encryption, live apply, worker rebuild, `pdms settings show`; migration `0015`): **Done**. Phase 2 (Administration → Microsoft 365 → Connection: the app's IDs, the certificate made in PDMS, the connection test, the expiry reminder): **Done**. Phase 3 (SharePoint storage settings with the read-only test and the on and off switch; Entra ID sync settings and preview; D-114): **Done**. Phases 4 (Microsoft sign-in) to 7: **Not started** | Phase 4 next | 2026-10-23 |
 
 §0.5 lists what can start next.
 

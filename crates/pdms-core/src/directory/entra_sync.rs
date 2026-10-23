@@ -169,6 +169,70 @@ fn parse_user(v: &Value, attribute: &str) -> Option<EntraUser> {
     })
 }
 
+/// One account in the sync preview.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreviewUser {
+    pub name: String,
+    pub email: String,
+    /// The value of the department attribute in Entra.
+    pub department: String,
+    /// The PDMS department it maps to.
+    pub maps_to: Option<String>,
+    /// Why the sync would skip this account (guest, disabled, no email).
+    pub skipped: Option<&'static str>,
+}
+
+/// The first accounts Microsoft Graph returns, with what the sync would do
+/// with each, changing nothing (requires `ManageDirectory`).
+pub async fn preview(core: &Core, ctx: &Ctx) -> CoreResult<Vec<PreviewUser>> {
+    ctx.require(Capability::ManageDirectory)?;
+    let graph = graph(core)?;
+    let config = core.config();
+    let attribute = config.entra_sync.attribute.as_str();
+    let page: Value = graph
+        .get(&format!(
+            "/users?$select={}&$top=10",
+            select_list(attribute)
+        ))
+        .await?;
+    let mut out = Vec::new();
+    for v in page
+        .get("value")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(u) = parse_user(v, attribute) else {
+            continue;
+        };
+        let maps_to = match super::entra_values::lookup(&core.db, u.department.as_deref()).await? {
+            Some(id) => {
+                sqlx::query_scalar!("SELECT name FROM departments WHERE id = $1", id)
+                    .fetch_optional(&core.db)
+                    .await?
+            }
+            None => None,
+        };
+        let skipped = if u.guest && !config.entra_sync.include_guests {
+            Some("guest account")
+        } else if !u.enabled {
+            Some("disabled")
+        } else if u.email.is_none() {
+            Some("no email address")
+        } else {
+            None
+        };
+        out.push(PreviewUser {
+            name: u.name.unwrap_or_default(),
+            email: u.email.unwrap_or_default(),
+            department: u.department.unwrap_or_default(),
+            maps_to,
+            skipped,
+        });
+    }
+    Ok(out)
+}
+
 /// Incremental sync (falls back to a full one when Graph asks for it).
 pub async fn run(core: &Core, ctx: &Ctx) -> CoreResult<SyncReport> {
     run_inner(core, ctx, false).await

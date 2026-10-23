@@ -12,8 +12,54 @@
 </header>
 {% endblock %}
 {% block content %}
-{% if !enabled %}<p class="flash flash-info" role="status">SharePoint storage is not turned on for this installation. See <code>docs/SHAREPOINT_SETUP.md</code>, then run <code>./install.sh --configure sharepoint</code>.</p>{% endif %}
+{% if !enabled %}<p class="flash flash-info" role="status">SharePoint storage is not turned on: document files are stored on this server. See <code>docs/SHAREPOINT_SETUP.md</code>{% if settings.is_some() %}, then use <strong>Settings</strong> below{% endif %}.</p>{% endif %}
 {% if !flagged.is_empty() %}<p class="flash flash-error" role="alert">{{ flagged.len() }} file{% if flagged.len() != 1 %}s{% endif %} changed outside PDMS need{% if flagged.len() == 1 %}s{% endif %} a decision. See "Files changed outside PDMS" below.</p>{% endif %}
+
+{% if let Some(st) = settings %}
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2>{% if st.storage.on %}<span class="status status-good">Storage on</span>{% else %}<span class="status status-neutral">Storage off</span>{% endif %}</div>
+  <p class="help">The site and document library PDMS stores files in, through the Microsoft 365 connection (Administration → Microsoft 365 → Connection). <strong>Test</strong> checks what you typed without saving it or changing anything in SharePoint.</p>
+  <form method="post" action="/admin/sharepoint/settings" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="sp-site">Site address</label>
+    <div><input id="sp-site" name="site_url" type="url" value="{{ st.site_url }}" size="60" placeholder="https://contoso.sharepoint.com/sites/PDMS" autocomplete="off" spellcheck="false"{% if st.site_locked %} disabled aria-describedby="sp-site-locked"{% endif %}>
+    {% if st.site_locked %}<p class="help" id="sp-site-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="sp-library">Document library</label>
+    <div><input id="sp-library" name="library" value="{{ st.library }}" size="30" autocomplete="off"{% if st.library_locked %} disabled aria-describedby="sp-library-locked"{% endif %}>
+    {% if st.library_locked %}<p class="help" id="sp-library-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="sp-interval">Check for changes every</label>
+    <div><input id="sp-interval" name="interval" type="number" min="1" max="1440" value="{{ st.interval }}" aria-describedby="sp-interval-unit{% if st.interval_locked %} sp-interval-locked{% endif %}"{% if st.interval_locked %} disabled{% endif %}> <span id="sp-interval-unit">minutes</span>
+    {% if st.interval_locked %}<p class="help" id="sp-interval-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button><button type="submit" class="button" formaction="/admin/sharepoint/test">Test</button></div>
+  </form>
+  {% if let Some(p) = st.probe %}
+  <h3>Test result</h3>
+  <div role="status">
+  <ul class="checklist">
+    {% for (ok, line) in p.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
+  </ul>
+  {% if p.ok %}<p>The site is ready. Save it, then turn storage on.</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <h3>Storage</h3>
+  {% if st.backend_locked %}<p class="help">The configuration file sets where files are stored (<code>[storage] backend</code>), so it can't be switched here. To switch it here instead, remove that line from <code>config/pdms.toml</code> and restart PDMS.</p>
+  {% else if st.storage.on %}
+  <p class="help">Turning storage off stores new document files on this server again. The {{ st.storage.sharepoint_files }} file{% if st.storage.sharepoint_files != 1 %}s{% endif %} already in SharePoint stay there, but PDMS can no longer open them until storage is turned back on. To confirm, type the site address.</p>
+  <form method="post" action="/admin/sharepoint/turn-off" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="sp-confirm">Site address</label>
+    <div><input id="sp-confirm" name="confirm_site" size="60" autocomplete="off" spellcheck="false" required></div>
+    <span></span><div class="toolbar"><button type="submit" class="button danger">Turn SharePoint storage off</button></div>
+  </form>
+  {% else if st.storage.local_files > 0 %}
+  <p class="help">{{ st.storage.local_files }} document file{% if st.storage.local_files != 1 %}s are{% else %} is{% endif %} stored on this server. PDMS can't read them once SharePoint storage is on, so storage can only be turned on before documents are added. On a test server, reset it first (<code>docs/SHAREPOINT_SETUP.md</code>).</p>
+  {% else %}
+  <p class="help">Turning storage on stores every new document file in the saved site. PDMS tests the site first, and adds its columns and folders when it stores the first file.</p>
+  <form method="post" action="/admin/sharepoint/turn-on" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button primary">Turn SharePoint storage on</button></form>
+  {% endif %}
+</section>
+{% endif %}
 
 <section class="panel" aria-labelledby="runs-h">
   <div class="panel-head"><h2 id="runs-h">Background work</h2></div>

@@ -107,6 +107,8 @@ pub fn router(state: AppState) -> Router {
         .route("/entra/values", post(admin::add_entra_value))
         .route("/entra/values/remove", post(admin::remove_entra_value))
         .route("/entra/sync", post(admin::entra_sync_now))
+        .route("/entra/settings", post(admin::save_entra_settings))
+        .route("/entra/preview", get(admin::entra_preview))
         .route_layer(from_fn_with_state(state.clone(), require_admin));
 
     let max_body = state.core.config().server.max_body_bytes;
@@ -241,6 +243,13 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/sharepoint", get(sharepoint_admin::page))
         .route("/sharepoint/check", post(sharepoint_admin::check_now))
+        .route(
+            "/sharepoint/settings",
+            post(sharepoint_admin::save_settings),
+        )
+        .route("/sharepoint/test", post(sharepoint_admin::test))
+        .route("/sharepoint/turn-on", post(sharepoint_admin::turn_on))
+        .route("/sharepoint/turn-off", post(sharepoint_admin::turn_off))
         .route("/sharepoint/access", post(sharepoint_admin::update_access))
         .route(
             "/sharepoint/files/{version}/restore",

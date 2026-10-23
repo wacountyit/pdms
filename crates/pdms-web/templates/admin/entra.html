@@ -8,8 +8,8 @@
 </header>
 {% endblock %}
 {% block content %}
-{% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PDMS cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
-{% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
+{% if !configured %}<p class="flash flash-error" role="alert">The Microsoft 365 connection is not set up, so PDMS cannot read Entra ID. Set it up under Administration → Microsoft 365 → Connection.</p>
+{% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off.{% if settings.is_some() %} Turn it on under <strong>Settings</strong> below.{% endif %}</p>{% endif %}
 <p>Each night PDMS picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PDMS department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
 
 <section class="panel" aria-labelledby="sync-h">
@@ -36,6 +36,46 @@
     </form>
   </div>
 </section>
+
+{% if let Some(st) = settings %}
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2></div>
+  <p class="help">Turning the sync on needs the Microsoft 365 connection and Microsoft sign-in (with <code>oid</code> as the subject claim), because synced people sign in with Microsoft. <strong>Preview</strong> reads the first ten accounts and shows what the sync would do with each, changing nothing.</p>
+  <form method="post" action="/admin/entra/settings" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="enabled" value="true"{% if enabled %} checked{% endif %}{% if st.enabled_locked %} disabled{% endif %}> Sync people from Entra ID every night</label>
+    {% if st.enabled_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="es-run">Run at</label>
+    <div><input id="es-run" name="run_at" type="time" value="{{ st.run_at }}" aria-describedby="es-run-help"{% if st.run_at_locked %} disabled{% endif %}>
+    <p class="help" id="es-run-help">Daily, in the organization's time zone.{% if st.run_at_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <label for="es-attr">Department field</label>
+    <div><input id="es-attr" name="attribute" value="{{ attribute }}" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="es-attr-help"{% if st.attribute_locked %} disabled{% endif %}>
+    <p class="help" id="es-attr-help">The Entra account property that names the department, for example <code>department</code> or <code>officeLocation</code>.{% if st.attribute_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="include_guests" value="true"{% if st.include_guests %} checked{% endif %}{% if st.guests_locked %} disabled{% endif %}> Include guest accounts (people from other organizations)</label>
+    {% if st.guests_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button>{% if configured %}<a class="button" href="/admin/entra/preview">Preview</a>{% endif %}</div>
+  </form>
+  {% if let Some(rows) = preview %}
+  <h3 id="preview-h">Preview</h3>
+  {% if rows.is_empty() %}<p class="empty">Microsoft Graph returned no accounts.</p>{% else %}
+  <div class="table-wrap">
+  <table aria-labelledby="preview-h">
+    <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">{{ attribute }}</th><th scope="col">PDMS department</th><th scope="col">Sync</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td>{{ r.name }}</td><td>{{ r.email }}</td><td>{% if r.department.is_empty() %}<em>(blank)</em>{% else %}{{ r.department }}{% endif %}</td>
+      <td>{% if let Some(d) = r.maps_to %}{{ d }}{% else %}<span class="muted">None: map the value below</span>{% endif %}</td>
+      <td>{% if let Some(why) = r.skipped %}<span class="status status-neutral">Skipped: {{ why }}</span>{% else %}<span class="status status-good">Synced</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
 
 <section class="panel" aria-labelledby="map-h">
   <div class="panel-head"><h2 id="map-h">Department mapping</h2><span class="muted small">{{ values.len() }}</span></div>

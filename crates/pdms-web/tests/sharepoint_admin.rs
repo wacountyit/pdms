@@ -175,3 +175,100 @@ async fn sharepoint_panel_is_for_administrators() {
         .await;
     assert_eq!(r.status, StatusCode::SEE_OTHER);
 }
+
+#[tokio::test]
+async fn administrators_set_sharepoint_up_on_the_page() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/sharepoint").await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains(r#"id="settings-h""#), "{}", page.body);
+    assert!(page.body.contains("Storage off"));
+    let csrf = page.csrf();
+    let site = "https://contoso.sharepoint.com/sites/PDMS";
+
+    // The test needs the Microsoft 365 connection, and shows each step.
+    let r = b
+        .post(
+            "/admin/sharepoint/test",
+            &[
+                ("_csrf", &csrf),
+                ("site_url", site),
+                ("library", "Documents"),
+                ("interval", "15"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(r.body.contains("Test result"));
+    assert!(r.body.contains("Set up the Microsoft 365 connection first"));
+    assert!(r.body.contains(site), "the typed address stays in the form");
+    assert!(
+        actions(&app.core)
+            .await
+            .contains(&"settings.tested".to_owned())
+    );
+
+    b.post(
+        "/admin/sharepoint/settings",
+        &[
+            ("_csrf", &csrf),
+            ("site_url", site),
+            ("library", "Documents"),
+            ("interval", "20"),
+        ],
+    )
+    .await;
+    assert_eq!(app.core.config().sharepoint.site_url, site);
+    assert_eq!(app.core.config().sharepoint.delta_interval_minutes, 20);
+
+    // Turning storage on tests the site first, so it stays off here.
+    b.post("/admin/sharepoint/turn-on", &[("_csrf", &csrf)])
+        .await;
+    let page = b.get("/admin/sharepoint").await;
+    assert!(
+        page.body.contains("SharePoint storage stays off"),
+        "{}",
+        page.body
+    );
+    assert_eq!(
+        app.core.config().storage.backend,
+        pdms_core::config::StorageBackend::Local
+    );
+}
+
+#[tokio::test]
+async fn files_stored_here_keep_sharepoint_storage_off() {
+    let app = app().await;
+    let (admin, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let rb = directory::create_department(&app.core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    flagged_document(&app, admin, rb, Visibility::Department, "Agreement").await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/sharepoint").await;
+    assert!(
+        page.body
+            .contains("1 document file is stored on this server")
+    );
+    assert!(!page.body.contains("Turn SharePoint storage on"));
+}
+
+#[tokio::test]
+async fn settings_from_the_configuration_file_are_shown_locked() {
+    let mut c = config();
+    c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PDMS".into();
+    c.locked.insert("sharepoint.site_url".into());
+    c.locked.insert("storage.backend".into());
+    let app = app_with(c).await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/sharepoint").await;
+    assert!(page.body.contains(r#"aria-describedby="sp-site-locked""#));
+    assert!(page.body.contains("<code>[storage] backend</code>"));
+    assert!(!page.body.contains("Turn SharePoint storage on"));
+}

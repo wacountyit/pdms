@@ -1048,6 +1048,22 @@ without saving anything, and reports a missing `User.Read.All` as a note,
 because SharePoint storage doesn't need it. Administrators are reminded 30
 days before the active certificate expires.
 
+### D-114 SharePoint storage is switched on Administration → SharePoint — Accepted (2026-10-23)
+Administrators enter the site and library, test them, and turn SharePoint
+storage on and off on **Administration → SharePoint** (the Settings panel,
+`manage_settings`). The test is read-only: it finds the site, the library and
+its list, counts missing PDMS columns, looks for the three area folders, and
+reads the library's sharing, but creates nothing; PDMS still creates columns
+and folders when it stores the first file. Three rules keep files readable:
+storage turns on only while no document file is stored on this server or in
+S3 (they would be unreadable, D-102) and only when the saved site passes the
+test; the site and library can't change while SharePoint holds PDMS files,
+which PDMS tracks by item ID; and turning storage off needs the site address
+typed as confirmation, because files already in SharePoint can't be opened
+until it is on again. `[storage] backend` in the configuration file still
+wins (D-111), so the installer no longer writes `backend = "local"`, the
+default.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |

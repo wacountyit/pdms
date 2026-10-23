@@ -1444,3 +1444,44 @@ async fn a_successful_sync_queues_a_folder_access_run() {
             .unwrap();
     assert!(n >= 1, "{n}");
 }
+
+#[tokio::test]
+async fn the_preview_shows_what_the_sync_would_do_and_changes_nothing() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    entra_values::upsert(&core.db, &system(), "Road & Bridge", rb)
+        .await
+        .unwrap();
+    m.add_user(member(
+        OID_A,
+        "Ann",
+        "ann@example.org",
+        Some("Road & Bridge"),
+    ));
+    m.add_user(member(OID_B, "Bob", "bob@example.org", Some("Parks")));
+    let mut guest = member(OID_C, "Gus", "gus@example.net", None);
+    guest["userType"] = json!("Guest");
+    m.add_user(guest);
+    let mut off = member(OID_D, "Dee", "dee@example.org", None);
+    off["accountEnabled"] = json!(false);
+    m.add_user(off);
+
+    let rows = entra_sync::preview(&core, &system()).await.unwrap();
+    let by = |n: &str| rows.iter().find(|r| r.name == n).unwrap();
+    assert_eq!(by("Ann").maps_to.as_deref(), Some("Road and Bridge"));
+    assert_eq!(by("Ann").skipped, None);
+    assert_eq!(by("Bob").department, "Parks");
+    assert_eq!(by("Bob").maps_to, None);
+    assert_eq!(by("Gus").skipped, Some("guest account"));
+    assert_eq!(by("Dee").skipped, Some("disabled"));
+    assert_eq!(id_of(&core, OID_A).await, None, "nobody was added");
+    assert_eq!(saved_link(&core).await, None);
+
+    let (clerk, _) = user_in_new_department(&core, "CL", "clerk@x.org").await;
+    let ctx = as_user(&core, clerk).await;
+    let err = entra_sync::preview(&core, &ctx).await.unwrap_err();
+    assert!(matches!(err, CoreError::Forbidden(_)), "{err:?}");
+}

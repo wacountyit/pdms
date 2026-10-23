@@ -27,7 +27,8 @@ async fn admins_map_department_values_and_see_sync_status() {
     let page = b.get("/admin/entra").await;
     assert_eq!(page.status, 200);
     assert!(
-        page.body.contains("Microsoft Graph is not configured"),
+        page.body
+            .contains("The Microsoft 365 connection is not set up"),
         "{}",
         page.body
     );
@@ -132,4 +133,67 @@ async fn people_without_directory_rights_cannot_open_it() {
         )
         .await;
     assert_eq!(r.status, 403);
+}
+
+#[tokio::test]
+async fn administrators_change_the_sync_settings_on_the_page() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    assert!(page.body.contains(r#"id="settings-h""#));
+    assert!(
+        !page.body.contains("/admin/entra/preview"),
+        "no preview without the connection"
+    );
+    let csrf = page.csrf();
+
+    b.post(
+        "/admin/entra/settings",
+        &[
+            ("_csrf", &csrf),
+            ("run_at", "03:15"),
+            ("attribute", "officeLocation"),
+            ("include_guests", "true"),
+        ],
+    )
+    .await;
+    let e = &app.core.config().entra_sync;
+    assert_eq!(e.run_at, "03:15");
+    assert_eq!(e.attribute, "officeLocation");
+    assert!(e.include_guests);
+    assert!(!e.enabled);
+
+    // Turning it on needs the Microsoft 365 connection: refused, with the reason.
+    b.post(
+        "/admin/entra/settings",
+        &[
+            ("_csrf", &csrf),
+            ("enabled", "true"),
+            ("run_at", "03:15"),
+            ("attribute", "officeLocation"),
+        ],
+    )
+    .await;
+    let page = b.get("/admin/entra").await;
+    assert!(
+        page.body.contains("entra_sync needs [graph]"),
+        "{}",
+        page.body
+    );
+    assert!(!app.core.config().entra_sync.enabled);
+    assert!(app.core.config().entra_sync.include_guests, "nothing saved");
+
+    // A bad time is refused too.
+    b.post(
+        "/admin/entra/settings",
+        &[
+            ("_csrf", &csrf),
+            ("run_at", "25:00"),
+            ("attribute", "department"),
+        ],
+    )
+    .await;
+    assert_eq!(app.core.config().entra_sync.run_at, "03:15");
 }
