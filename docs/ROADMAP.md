@@ -14,7 +14,7 @@ record**. Read it first if you are picking up the work.
 
 ## 0. Where things stand
 
-Last updated 2026-10-22.
+Last updated 2026-10-23.
 
 The product is now called **PADM**. The code, crates, binary, and Docker
 images are still named `pdms`.
@@ -30,7 +30,10 @@ images are still named `pdms`.
     passed, 0 failed, and 2 ignored.
   - On `main` on 2026-10-22, after UI redesign R2 (with sub-project 3), it
     gives 408 passed, 0 failed, and 2 ignored.
-  - The ignored ones are the opt-in real-OCR and real-ClamAV tests.
+  - On `main` on 2026-10-22, after plan P3, it gives 455 passed, 0 failed,
+    and 3 ignored.
+  - The ignored ones are the opt-in real-OCR, real-ClamAV and (since P3)
+    real-SharePoint tests.
 - **Test deployment:** installed on the county's development server with
   `install.sh`.
   - It uses the bundled Caddy (HTTPS with an internal certificate), OCR,
@@ -82,6 +85,26 @@ images are still named `pdms`.
   - admin-curated tags;
   - the Outlook calendar sync removed;
   - the OCR status on its own admin page.
+- **Plan P3, SharePoint document storage** (2026-10-22, by WACountyIT;
+  [PR #5](https://github.com/wacountyit/pdms/pull/5) the build,
+  [PR #7](https://github.com/wacountyit/pdms/pull/7) the example config,
+  live test and docs):
+  - `[storage] backend = "sharepoint"` keeps document files in one SharePoint
+    library, set up on first use;
+  - uploads checked by QuickXorHash, and downloads, text extraction, records
+    packages and restores checked against the recorded SHA-256;
+  - the mirror job for file names, library columns and folder placement,
+    with a nightly sweep;
+  - changes that narrow access move the folder first, and folder moves are
+    audited;
+  - a SharePoint outage keeps the person's form, with a message.
+
+  It adds migration `0013` and decisions D-102 and D-103. It is off unless
+  configured: the admin guide's "SharePoint storage" section explains turning
+  it on (start with an empty system). Folder permissions and change
+  detection follow in P4.
+- **Installer:** Caddy can use other ports when 80 or 443 is taken
+  ([PR #6](https://github.com/wacountyit/pdms/pull/6)).
 - **Before upgrading the test server to this `main`:** back it up, and read
   the admin guide's note "The Outlook calendar sync was removed". Everyone
   sees dark mode until they switch (Your account → Appearance).
@@ -107,9 +130,8 @@ never inside a pull request:
 
 | Work | Who | State | Branches and PRs | Updated |
 |---|---|---|---|---|
-| **Plan P3, SharePoint document storage** (1) | WACountyIT | Pre-flight: **Done** (plan corrected; the owner's decisions recorded as D-102). Phase A (Tasks 1–3: QuickXorHash, naming and column rules, `[sharepoint]` settings, the 503 "unavailable" error): **Done**. Phase B (Tasks 4–5: first-use setup of the site, library, columns and area folders; migration `0013_sharepoint_files.sql`; department folders): **Done**. Phase C (Task 6: uploads go to SharePoint under a temporary name, D-103): **Done**. Phase D (Tasks 7–8: downloads, text extraction and records packages read from SharePoint, checked against the recorded SHA-256; restoring a file uploads a checked copy): **Done**. Phase E (Tasks 9–10: the `sharepoint.mirror_document` job for file names, columns and folder placement, queued on every change, with a nightly sweep; changes that narrow access move the folder first; folder moves audited): **Done**. Phases A–E: **Done**, merged in [PR #5](https://github.com/wacountyit/pdms/pull/5). Phase F (Task 11: example config, opt-in live test, docs and records): **In review** | Branch `p3-finish` (Phase F); `p3-sharepoint-storage` merged | 2026-10-22 |
 
-§0.5 lists what can start next.
+Nothing is claimed. §0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
