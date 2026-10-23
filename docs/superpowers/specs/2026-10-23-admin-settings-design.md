@@ -1,7 +1,7 @@
 # Settings in Administration (S1): design
 
 - **Date:** 2026-10-23
-- **Status:** draft, waiting for the owner's approval.
+- **Status:** approved by the owner, 2026-10-23.
 - **Item:** S1 in ROADMAP §0.3. Commit messages start with `S1:`.
 - **Why:** today an administrator has to log on to the server and run
   `./install.sh --configure …` (or edit `config/pdms.toml`) to set up

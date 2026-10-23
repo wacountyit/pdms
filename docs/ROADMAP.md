@@ -150,7 +150,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **S1, settings in Administration** (S1) | WACountyIT | Spec: **In progress** (written 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md); waiting for the owner's approval). Plan, build: **Not started** | Spec written; next, the owner's approval, then the plan | 2026-10-23 |
+| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phases 1 (foundation) to 7 (records): **Not started** | Phase 1 next | 2026-10-23 |
 
 §0.5 lists what can start next.
 
@@ -193,7 +193,7 @@ taken up.
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
-| S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Designing**: spec written 2026-10-23, waiting for approval | [spec](superpowers/specs/2026-10-23-admin-settings-design.md) |
+| S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Planned**: spec approved and [plan](superpowers/plans/2026-10-23-admin-settings.md) written 2026-10-23 | [spec](superpowers/specs/2026-10-23-admin-settings-design.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
