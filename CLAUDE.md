@@ -30,10 +30,12 @@ The README ("Layout") describes each crate.
    Don't rely on a copy of these lists anywhere else; copies go stale.
    Two people work on PDMS in turns, so read "Working in turns" below
    before you start.
-   - **Next up: SharePoint plan P4.** P3 (SharePoint storage) is merged.
-     Start with ROADMAP §0.5 (its pre-flight steps), then the
-     [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md),
-     which holds the shared contracts and what P3 produced.
+   - **SharePoint storage is built** (plans P1 to P4, done 2026-10-23). The
+     live test on a real SharePoint site is the owner's next step
+     ([docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)); ROADMAP §0.5
+     lists what can start next. The
+     [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md)
+     records what each plan produced.
    - **UI redesign R2 is done** (2026-10-22). Its
      [spec](docs/superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §5.2
      is the pattern every new admin page follows.

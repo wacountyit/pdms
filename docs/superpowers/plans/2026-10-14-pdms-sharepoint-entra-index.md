@@ -156,12 +156,19 @@ one, they update this table in the same commit.
 
 ### Produced by P4
 
+Built 2026-10-23 (directly on `main`). The P4 plan's header, "As built" notes, and closing "Deviations" section are authoritative.
+
 | Name | Definition |
 |---|---|
-| Jobs | `sharepoint::RECONCILE_JOB = "sharepoint.reconcile_access"`; `sharepoint::DELTA_JOB = "sharepoint.delta"` |
-| DB | `sharepoint_folder_access` (spec §6) |
-| Admin | `/admin/sharepoint` status panel and flagged-files resolution; `/admin/entra` panel from P2 gains a SharePoint access section |
-| Docs | `docs/SHAREPOINT_SETUP.md` (county setup runbook, from spec Appendix A, with exact PnP/Graph commands); ADMIN_GUIDE sections |
+| Jobs | `sharepoint::RECONCILE_JOB = "sharepoint.reconcile_access"` (defined in `sharepoint::access`); `sharepoint::DELTA_JOB = "sharepoint.delta"` (defined in `sharepoint::changes`); both registered by `sharepoint::register_ops_jobs(worker, core)` |
+| Run records | `sync_cursors` rows `sharepoint.delta` (with the delta link) and `sharepoint.reconcile` |
+| DB | `0014_sharepoint_access.sql`: `sharepoint_folder_access`, `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, `sharepoint_files.changed_by/changed_at` (the app may insert and delete `sharepoint_folder_access` rows, not update them) |
+| Authz | `Capability::ManageSharePoint` (org-wide `admin` role); notifications `dispatch::Visibility::Anyone` |
+| Change flag | `sharepoint::files::changed_outside_event` (one audit shape for the download check and the change check) and `flag_changed(&Core, …)`, which flags once, sets `changed_at`, and notifies administrators |
+| Admin | `/admin/sharepoint` (in `doc_admin_routes`, menu group *Integrations*) status panel and resolution; P2's `/admin/entra` gains a SharePoint access section; a notice on the document page |
+| CLI | `pdms verify-integrity --rehash-sharepoint`; `IntegrityReport.sharepoint_files_checked` replaces P3's `sharepoint_files_skipped` |
+| Install | `./install.sh --configure sharepoint`; one managed `[storage]` block (backend and `clamav_addr`); Compose secret `graph_certificate` (P2's `secrets/graph_certificate` and `.crt`) |
+| Docs | `docs/SHAREPOINT_SETUP.md`; ADMIN_GUIDE "SharePoint storage"; D-104 to D-110 |
 
 **Changes recorded when P4 was written** (the P4 plan's closing "Deviations" section is authoritative; its Task 9 Step 7 only needs to confirm this list):
 
@@ -174,13 +181,13 @@ one, they update this table in the same commit.
   - `verify-integrity --rehash-sharepoint` (`--rehash` stays the local-file option);
   - `IntegrityReport.sharepoint_files_checked`;
   - `integrity::verify_with(core, VerifyOptions)`, with `verify(core, rehash)` kept as a wrapper.
-- **Storage selection in Docker:** `PDMS_STORAGE__BACKEND=sharepoint` in `config/pdms.env` (Compose `env_file`, so Docker Compose ≥ 2.24 is needed). The installer creates the Graph certificate with `openssl`, in the same format as `pdms gen-graph-cert`; the file is mode 644 inside the 700 `secrets/` directory, like the other Compose secrets.
+- **Storage selection in Docker (changed at build, D-108):** the installer's managed `[storage]` block holds `backend`; no `config/pdms.env`, no Compose `env_file`. (Planned: `PDMS_STORAGE__BACKEND=sharepoint` in `config/pdms.env`, Compose ≥ 2.24.) The installer creates the Graph certificate with `openssl`, in the same format as `pdms gen-graph-cert`; the file is mode 644 inside the 700 `secrets/` directory, like the other Compose secrets.
 - **Admin page:** `/admin/sharepoint` lives in `doc_admin_routes`.
 - **Admin page pattern (added by R2, 2026-10-22):** build `admin/sharepoint.html` to R2's admin pattern ([R2 spec](../specs/2026-10-22-ui-redesign-r2-design.md) §5.2), not the markup in P4 Task 7. Concretely: a `{% block heading %}` with `<header class="page-head">` (h1, `.page-lede`, `.page-actions`); each section a `.panel` with a `.panel-head`; notices as `flash-info` with `role="status"`; problems as `flash-error` with `role="alert"`; empty states as `<p class="empty">`. The page has no tab in `base.html` any more: add `link("sharepoint", "SharePoint")` to the *Integrations* group in `Layout::admin_groups()` (`src/views.rs`), behind its capability, and set `.admin_tab("sharepoint")` in the handler. `admin/entra.html` already uses the pattern; add P4's section as another `.panel`.
 - **Migrations (R2, 2026-10-22):** R2 took `0011` (`0011_small_changes.sql`) and `0012` (`0012_color_scheme.sql`), so P3's is `0013` and P4's `0014`. R2 also took decisions D-097 to D-101.
 - **Audit:** extra action `sharepoint.unexpected_dismissed`.
 - **Edits to earlier plans' code:**
-  - P2's `entra_sync::run_job` and `sync_one` queue a folder-access run;
+  - P2's `entra_sync::set_idp_department` queues a folder-access run whenever it changes a membership (planned: `run_job` and `sync_one`);
   - `admin/entra.html` gains a SharePoint access section;
   - P3's `maintenance::worker()` last line changes.
 - **Change feed:** an area folder appearing in it counts only when its name changed.

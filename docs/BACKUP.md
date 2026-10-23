@@ -11,7 +11,8 @@ restore is complete with `verify-integrity`.
 |---|---|---|
 | **PostgreSQL database** `pdms` | `pgdata` volume | Every record, version, permission, notification, workflow, appointment, and the hash-chained audit log |
 | **File store** | `pdmsdata` volume, `blobs/` (or your S3 bucket) | Every uploaded file and every records request package, stored by SHA-256 |
-| **Secrets** | `secrets/` | `pdms_secret_key` encrypts TOTP enrollments and webhook signing secrets, and signs sessions. **Without it**, break-glass accounts must re-enroll and webhook secrets must be rotated. Also the database passwords and the SSO/SMTP secrets |
+| **SharePoint site** (with SharePoint storage) | the `PDMS Records` site | Every document file. Not copied by `pdms-backup.sh`: protected by library versioning, the recycle bin, and the Purview retention policy ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) A4, A6). Include the site in your Microsoft 365 backup if you have one. Records request packages stay in the `pdmsdata` volume |
+| **Secrets** | `secrets/` | `pdms_secret_key` encrypts TOTP enrollments and webhook signing secrets, and signs sessions. **Without it**, break-glass accounts must re-enroll and webhook secrets must be rotated. Also the database passwords and the SSO/SMTP secrets, and `graph_certificate` (without it, make a new one and upload it to the app registration: SHAREPOINT_SETUP.md C1) |
 | **Configuration** | `config/pdms.toml` (and `.env` if you use one) | Organization name, time zone, sign-in, storage, email, integrations |
 
 Not needed: the `spool/` directory (uploads in progress), the `clamdb`
@@ -23,6 +24,11 @@ deletes a stored file; files are added before the database rows that point at
 them are committed. So a database dump followed by a file copy always contains
 every file the dump refers to. (A copy taken in the other order can miss files
 uploaded in between, and `verify-integrity` would report them as missing.)
+
+With SharePoint storage the same rule holds: PDMS uploads a file before the
+database rows that point at it are committed. After restoring an older
+database dump, files uploaded since the dump stay in SharePoint and appear
+under **Administration → SharePoint → Files PDMS does not track**.
 
 Store backups encrypted and off the server. `config-secrets.tar` contains
 passwords and the master key: protect it like a password vault.

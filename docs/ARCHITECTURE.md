@@ -8,8 +8,9 @@ time (default: "Policy and Document Management System").
 Status: **Phases 0–5 complete.** This document describes the system as built.
 SharePoint file storage, Entra user sync and County-wide visibility (D-081 to
 D-089) are designed in [the spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md).
-Visibility (P1), the Entra sync (P2) and SharePoint storage (P3) are built;
-SharePoint folder permissions and change detection (P4) are tracked in
+Visibility (P1), the Entra sync (P2), SharePoint storage (P3) and SharePoint
+folder access, change detection and operations (P4) are built; their live
+test on a real SharePoint site is tracked in
 [ROADMAP §0](ROADMAP.md#0-where-things-stand). Decisions referenced as `D-nnn` are
 in [DECISIONS.md](DECISIONS.md).
 
@@ -344,6 +345,20 @@ document files in one SharePoint library through Microsoft Graph (P2's
   Changes that narrow who can browse a document (`layout::narrows`) move the
   folder before the change is saved and are refused if SharePoint is down.
   Every folder move is audited as `sharepoint.folder_moved`.
+- **Operations (P4):** `sharepoint::access` grants each department's active
+  Entra members read access on `Departments/<department>` (one Graph invite
+  per person, recorded in `sharepoint_folder_access`; other access is only
+  reported) and runs after membership changes, after the Entra sync, and
+  nightly. `sharepoint::changes` reads the library's Graph delta feed every
+  few minutes and compares each tracked file's size and QuickXorHash with
+  `sharepoint_files`; differences and deletions are flagged and audited and
+  administrators notified, renames queue the mirror, and untracked files are
+  listed after ten minutes. `sharepoint::resolve` restores the original
+  (chosen from SharePoint's version history by SHA-256), accepts the change as
+  a new version, re-checks, or dismisses; `sharepoint::status` keeps run
+  records in `sync_cursors` and serves **Administration → SharePoint**.
+  `verify-integrity` checks SharePoint files through Graph metadata, and
+  `--rehash-sharepoint` downloads them.
 
 **Data model:**
 - `documents` holds the current metadata. `custom_fields` is typed JSONB keyed
@@ -393,6 +408,7 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
 | 7 (`0012_color_scheme`, R2) | `users.color_scheme` (`dark` default, `light`, `system`; D-098), loaded with the session and written as `<html data-theme>`. |
 | 7 (`0011_small_changes`, R2 with sub-project 3) | Renames the seeded `partnership_agreement` type to `interlocal_agreement` ("Interlocal Agreement (ILA)", prefix `ILA`), keeping a name or prefix an administrator changed (D-088); deletes queued Outlook sync jobs and drops `graph_calendar_links` (D-087). |
 | 8 (`0013_sharepoint_files`, P3) | sharepoint_department_folders (one folder per department and area), sharepoint_document_folders (one per document), sharepoint_files (one per version that introduced a file: drive and item IDs, list item ID, name, QuickXorHash, size, last known path, hash of the column values last written, state `ok` / `changed_outside` / `missing`) |
+| 9 (`0014_sharepoint_access`, P4) | sharepoint_folder_access (read access PDMS granted, per department and person, with the Graph permission ID), sharepoint_foreign_grants (other access found on department folders), sharepoint_unexpected_items (files PDMS does not track, with dismissals), `sharepoint_files.changed_by`, `changed_at` |
 
 ## 13. Phase 0 deliverables and tests (done)
 

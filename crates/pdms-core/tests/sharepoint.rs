@@ -1068,6 +1068,33 @@ async fn deleted_documents_leave_the_department_folder() {
     assert_eq!(sp.names("Departments/Road and Bridge").len(), 1);
 }
 
+/// A `Core` connected to the real SharePoint **test** site named by the
+/// `PDMS_LIVE_*` variables (see `live_sharepoint_round_trip`).
+async fn live_core() -> (Core, pdms_testkit::TestDb) {
+    let var = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("set {k}"));
+    let graph = pdms_core::config::GraphConfig {
+        tenant_id: var("PDMS_LIVE_TENANT_ID"),
+        client_id: var("PDMS_LIVE_CLIENT_ID"),
+        certificate: pdms_core::config::Secret::new(
+            std::fs::read_to_string(var("PDMS_LIVE_CERTIFICATE_FILE")).unwrap(),
+        ),
+        ..Default::default()
+    };
+    let site = var("PDMS_LIVE_SITE_URL");
+    core_with(|c| {
+        c.graph = graph;
+        c.storage.backend = StorageBackend::SharePoint;
+        c.sharepoint.site_url = site;
+    })
+    .await
+}
+
+/// A department code no earlier live run used.
+fn live_code() -> String {
+    let id = Uuid::new_v4().simple().to_string();
+    format!("LIVE{}", id[..6].to_uppercase())
+}
+
 /// Round trip against a real SharePoint **test** site. Not run by default.
 ///
 /// ```text
@@ -1081,32 +1108,8 @@ async fn deleted_documents_leave_the_department_folder() {
 #[tokio::test]
 #[ignore = "needs a real SharePoint test site and app registration"]
 async fn live_sharepoint_round_trip() {
-    let var = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("set {k}"));
-    let graph = pdms_core::config::GraphConfig {
-        tenant_id: var("PDMS_LIVE_TENANT_ID"),
-        client_id: var("PDMS_LIVE_CLIENT_ID"),
-        certificate: pdms_core::config::Secret::new(
-            std::fs::read_to_string(var("PDMS_LIVE_CERTIFICATE_FILE")).unwrap(),
-        ),
-        ..Default::default()
-    };
-    let site = var("PDMS_LIVE_SITE_URL");
-    let (core, _db) = core_with(|c| {
-        c.graph = graph;
-        c.storage.backend = StorageBackend::SharePoint;
-        c.sharepoint.site_url = site;
-    })
-    .await;
-    let code = format!(
-        "LIVE{}",
-        Uuid::new_v4()
-            .simple()
-            .to_string()
-            .chars()
-            .take(6)
-            .collect::<String>()
-            .to_uppercase()
-    );
+    let (core, _db) = live_core().await;
+    let code = live_code();
     let (dept, alice) = editing_department(
         &core,
         &code,
@@ -1136,4 +1139,116 @@ async fn live_sharepoint_round_trip() {
         "left in SharePoint: Restricted/PDMS live test {code}/{} – Live test",
         external_id(&core, id).await
     );
+}
+
+/// PDMS's own folders, files, and column values must not look like changes
+/// made outside PDMS. This checks how SharePoint reports the app in
+/// `lastModifiedBy` (D-105). Same variables as `live_sharepoint_round_trip`.
+///
+/// ```text
+/// cargo test -p pdms-core --test sharepoint live_pdms_writes_are_recognised -- --ignored --nocapture
+/// ```
+#[tokio::test]
+#[ignore = "needs a real SharePoint test site and app registration"]
+async fn live_pdms_writes_are_recognised() {
+    let (core, _db) = live_core().await;
+    // Read the whole change feed once, so only this test's writes follow.
+    sharepoint::changes::detect_changes(&core).await.unwrap();
+    let code = live_code();
+    let (dept, alice) = editing_department(
+        &core,
+        &code,
+        &format!("PDMS live test {code}"),
+        "live@x.org",
+    )
+    .await;
+    let ctx = as_user(&core, alice).await;
+    let bytes = pdf("PDMS live change check");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Live change check",
+        Visibility::Department,
+        Some(("live.pdf", &bytes)),
+    )
+    .await;
+    sharepoint::mirror_document(&core, id).await.unwrap();
+
+    // SharePoint's change feed can lag behind by a minute or more.
+    let mut seen = sharepoint::changes::DeltaReport::default();
+    for _ in 0..18 {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        let r = sharepoint::changes::detect_changes(&core).await.unwrap();
+        seen.items += r.items;
+        seen.modified += r.modified;
+        seen.missing += r.missing;
+        seen.mirrors += r.mirrors;
+        if seen.items >= 3 {
+            break;
+        }
+    }
+    assert!(
+        seen.items >= 3,
+        "the feed never listed the department folder, document folder, and file: {seen:?}"
+    );
+    assert_eq!(
+        (seen.modified, seen.missing, seen.mirrors),
+        (0, 0, 0),
+        "PDMS's own writes were reported: {seen:?}"
+    );
+    assert!(
+        sharepoint::status::document_flags(&core.db, id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    println!(
+        "left in SharePoint: Departments/PDMS live test {code}/{} – Live change check",
+        external_id(&core, id).await
+    );
+}
+
+/// Read access for a real person. `PDMS_LIVE_READER_EMAIL` is an ordinary
+/// member account in the test tenant, not a site owner. This checks that the
+/// invite call works with `Sites.Selected` plus full control on the site
+/// (D-104), and that SharePoint's copied site permissions are not reported.
+///
+/// ```text
+/// PDMS_LIVE_READER_EMAIL=someone@example.org … \
+/// cargo test -p pdms-core --test sharepoint live_department_staff_get_read_access -- --ignored --nocapture
+/// ```
+#[tokio::test]
+#[ignore = "needs a real SharePoint test site, app registration, and a test account"]
+async fn live_department_staff_get_read_access() {
+    let reader = std::env::var("PDMS_LIVE_READER_EMAIL")
+        .unwrap_or_else(|_| panic!("set PDMS_LIVE_READER_EMAIL"));
+    let (core, _db) = live_core().await;
+    let code = live_code();
+    let dept = new_department(&core, &code, &format!("PDMS live test {code}")).await;
+    let person = directory::create_user(&core.db, &system(), &reader, &reader, Some(dept))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET source = 'entra' WHERE id = $1")
+        .bind(person)
+        .execute(&core.db)
+        .await
+        .unwrap();
+
+    let r = sharepoint::access::reconcile(&core).await.unwrap();
+    assert_eq!((r.granted, r.foreign, r.errors.len()), (1, 0, 0), "{r:?}");
+    let again = sharepoint::access::reconcile(&core).await.unwrap();
+    assert_eq!(
+        (again.granted, again.revoked, again.foreign),
+        (0, 0, 0),
+        "{again:?}"
+    );
+
+    directory::remove_department_member(&core.db, &system(), person, dept)
+        .await
+        .unwrap();
+    let r = sharepoint::access::reconcile(&core).await.unwrap();
+    assert_eq!((r.revoked, r.errors.len()), (1, 0), "{r:?}");
+    println!("left in SharePoint: Departments/PDMS live test {code} (empty)");
 }

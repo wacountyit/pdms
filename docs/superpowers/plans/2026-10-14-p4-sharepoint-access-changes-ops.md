@@ -1,5 +1,7 @@
 # P4: SharePoint folder access, change detection, and operations. Implementation Plan
 
+> **Status: done (2026-10-23), built directly on `main` in seven phases (pre-flight, then A to F).** Every task is built except Task 9, Step 11, the live rollout on the test server, which is the owner's step once the SharePoint test site and app registration exist. Where the build differs from the text, an "As built" note says so, and the deviations are listed at the end.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Pre-flight done (2026-10-23, WACountyIT).** This plan was written on 2026-10-15, before P2, P3, R1 and R2 were built. It was checked against `main` at `2915b94`. Most of what it consumes exists as assumed (`GraphError::Auth`, `actions::send`, `Notice`, `sync_cursors`, the mock Graph anchors in `sp.rs`, the directory functions, `Worker::handle`/`every`, `documents::access::can`). Everyone works directly on `main` now: ignore any branch or pull-request wording, and start commit messages with `P4:`. These corrections apply; the text below already carries the numeric ones.
@@ -4055,7 +4057,15 @@ P2 left the Compose secret wiring for the Graph certificate, and the installer s
   - `config/pdms.env`, which sets `PDMS_STORAGE__BACKEND=sharepoint`;
   - `config/pdms-service.cer`, the public certificate to upload to Entra.
 
-- [ ] **Step 1: Compose.** In `docker-compose.yml`:
+> **As built (2026-10-23), following the owner's answers 1, 2 and 4:**
+> - **No `config/pdms.env`**, no Compose `env_file`, and no Docker Compose 2.24 check. One managed block, `storage`, holds `[storage] backend` and `clamav_addr`; `write_storage_block` writes it for both `--configure sharepoint` and `--configure clamav`. An older install's `clamav` block is moved into it the first time (and `PDMS_CLAMAV_DECIDED=yes` recorded, so the virus-scanning question is not asked again). A hand-written `[storage]` is left alone, with a warning to set `backend` there. `write_block` takes an optional second argument naming the `--configure` options in the block's header.
+> - **The certificate** is P2's pair, `secrets/graph_certificate` and `secrets/graph_certificate.crt` (no `config/pdms-service.cer`), created with `openssl` only when missing; the installer prints both the SHA-1 and the SHA-256 (base64url, as Administration → Entra ID sync shows) thumbprints. A generated certificate was checked to load in `graph::cert::Credential::from_pem` with the printed SHA-256 thumbprint.
+> - **`[entra_sync]` is never written** by this step; `[graph]` and `[sharepoint]` are (a hand-written `[graph]` is adopted: its values become the defaults). Switching off (`none` as the site address, with confirmation) keeps `[graph]` for the Entra sync and sets `backend = "local"`.
+> - **An install that already has documents** (`PDMS_ADMIN_CREATED=yes`) must confirm the switch (`PDMS_INSTALL_SWITCH_STORAGE`), because local files can't be read once SharePoint is on (D-102).
+> - **Compose** has `PDMS_GRAPH__CERTIFICATE_FILE` after `PDMS_EMAIL__SMTP_PASSWORD_FILE`, and the `graph_certificate` secret on the shared block and `migrate`; the installer's secrets loop creates an empty file when there is none. No `.gitignore` change was needed (`secrets/` is already ignored).
+> - Tested with a harness that runs the real helpers and steps on sample configurations (fresh install, an older install's `clamav` block, a hand-written `[storage]` and `[graph]`, an install with documents, switching off, a re-run that changes nothing), plus `bash -n` and `docker compose config`.
+
+- [x] **Step 1: Compose.** In `docker-compose.yml`:
 
 (a) In the `x-pdms` anchor's `environment: &pdms-env` map, after `PDMS_GRAPH_CALENDAR__CLIENT_SECRET_FILE: …`, add:
 
@@ -4081,7 +4091,7 @@ P2 left the Compose secret wiring for the Graph certificate, and the installer s
   graph_certificate: { file: ./secrets/graph_certificate }
 ```
 
-- [ ] **Step 2: The installer's prerequisites and bookkeeping.** In `install.sh`:
+- [x] **Step 2: The installer's prerequisites and bookkeeping.** In `install.sh`:
 
 (a) In the header comment, change the `--configure` list to:
 
@@ -4124,7 +4134,7 @@ for f in oidc_client_secret smtp_password graph_client_secret graph_certificate;
    Change one part later: ./install.sh --configure sso|smtp|sharepoint|outlook|ocr|clamav|network|database-port|source|admin
 ```
 
-- [ ] **Step 3: The SharePoint section.** Insert directly before the line `# --- 7. Outlook calendar (Microsoft Graph) ----…`. The block uses nested here-documents ending in `EOF`, matching the rest of `install.sh`.
+- [x] **Step 3: The SharePoint section.** Insert directly before the line `# --- 7. Outlook calendar (Microsoft Graph) ----…`. The block uses nested here-documents ending in `EOF`, matching the rest of `install.sh`.
 
 ```bash
 # --- 6b. SharePoint document storage and Entra user sync (Microsoft Graph) -------------
@@ -4217,14 +4227,14 @@ EOF
 fi
 ```
 
-- [ ] **Step 4: Git-ignore the generated files.** In `.gitignore`, under `/config/Caddyfile`, add:
+- [x] **Step 4: Git-ignore the generated files.** In `.gitignore`, under `/config/Caddyfile`, add:
 
 ```
 /config/pdms.env
 /config/pdms-service.cer
 ```
 
-- [ ] **Step 5: Check the scripts.**
+- [x] **Step 5: Check the scripts.**
 
 ```bash
 bash -n install.sh && echo syntax-ok
@@ -4238,7 +4248,7 @@ tmp=$(mktemp -d) && mkdir -p "$tmp/secrets" "$tmp/config" \
 
 Expected: `syntax-ok`, `1`, `compose-ok`.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add docker-compose.yml install.sh .gitignore
@@ -4262,7 +4272,9 @@ git commit -m "install: --configure sharepoint, Graph certificate secret, storag
 - Consumes: everything above; P3's live test `live_sharepoint_round_trip`, its variables `PDMS_LIVE_TENANT_ID`, `PDMS_LIVE_CLIENT_ID`, `PDMS_LIVE_CERTIFICATE_FILE`, `PDMS_LIVE_SITE_URL`, and its test helpers `core_with`, `new_department`, `editing_department`, `as_user`, `pdf`, `new_doc`, `external_id`.
 - Produces: the county runbook; `live_pdms_writes_are_recognised` and `live_department_staff_get_read_access` (ignored by default); the extra variable `PDMS_LIVE_READER_EMAIL`.
 
-- [ ] **Step 1: The county setup guide.** Create `docs/SHAREPOINT_SETUP.md`:
+> **As built (2026-10-23):** the setup guide uses `secrets/graph_certificate.crt` and both thumbprints, leaves the Entra sync to its own step, names the button "Check for changes now", and gains C3 (turning SharePoint off) and "Rollout on the test server" (Step 11, for the owner). ADMIN_GUIDE's existing §4 "SharePoint storage" (from P3) was updated instead of adding a §12 section, and Entra step 3 no longer asks for a hand edit of `docker-compose.yml` (with an "undo it before `git pull`" note for installs that did). DECISIONS D-104 to D-110 record what was built and the owner's answers (D-108 replaces the `config/pdms.env` decision); D-082, D-084 and D-089 got their status lines by hand. ROADMAP: P4 moved to §0.1, its §0.1a row removed, §0.5 now starts with the live test, §0.6's P3/P4 columns removed. The live-test example address is `someone@example.org`.
+
+- [x] **Step 1: The county setup guide.** Create `docs/SHAREPOINT_SETUP.md`:
 
 ````markdown
 # Setting up SharePoint for PDMS
@@ -4560,7 +4572,7 @@ old certificate from the app registration.
 Run: `grep -c '^### ' docs/SHAREPOINT_SETUP.md`
 Expected: `18`.
 
-- [ ] **Step 2: The administrator guide.** In `docs/ADMIN_GUIDE.md`:
+- [x] **Step 2: The administrator guide.** In `docs/ADMIN_GUIDE.md`:
 
 (a) In the "### File storage and virus scanning" table, after the `[storage] backend` row, add:
 
@@ -4631,7 +4643,7 @@ SharePoint reports. `--rehash-sharepoint` downloads every file and compares
 its SHA-256 (slow).
 ```
 
-- [ ] **Step 3: Backups.** In `docs/BACKUP.md`, "## What to protect":
+- [x] **Step 3: Backups.** In `docs/BACKUP.md`, "## What to protect":
 
 (a) After the **File store** row, add:
 
@@ -4652,13 +4664,13 @@ database dump, files uploaded since the dump stay in SharePoint and appear
 under **Administration → SharePoint → Files PDMS does not track**.
 ```
 
-- [ ] **Step 4: Architecture.** In `docs/ARCHITECTURE.md` §12, after the phase-5 row, add:
+- [x] **Step 4: Architecture.** In `docs/ARCHITECTURE.md` §12, after the phase-5 row, add:
 
 ```markdown
 | SharePoint and Entra (`0010_entra_sync`, `0013_sharepoint_files`, `0014_sharepoint_access`; plans P2–P4) | `user_source` enum and users `source`, `entra_department`, `entra_synced_at`; department_entra_values, sync_cursors; sharepoint_department_folders, sharepoint_document_folders, sharepoint_files (incl. `state`, `changed_by`, `changed_at`); sharepoint_folder_access, sharepoint_foreign_grants, sharepoint_unexpected_items |
 ```
 
-- [ ] **Step 5: Decision records.** Find the last decision number:
+- [x] **Step 5: Decision records.** Find the last decision number:
 
 ```bash
 grep -oE '^### D-[0-9]+' docs/DECISIONS.md | tail -1
@@ -4731,7 +4743,7 @@ Expected: D-081 to D-086 and D-089 end in "— Accepted". D-087 and D-088 are un
 
 In the open-questions table, change the "SharePoint/OneDrive storage" row's answer to: `Decided and built: SharePoint holds the files (D-081 to D-084, D-089, D-104 to D-110). Setup: SHAREPOINT_SETUP.md`.
 
-- [ ] **Step 6: Roadmap.** In `docs/ROADMAP.md` §0.3:
+- [x] **Step 6: Roadmap.** In `docs/ROADMAP.md` §0.3:
 
 (a) Below P2's `2a` row, add:
 
@@ -4743,7 +4755,7 @@ In the open-questions table, change the "SharePoint/OneDrive storage" row's answ
 
 (c) In "**Waiting on the county**", change "the steps are in Appendix A of the spec" to "the steps are in [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md)".
 
-- [ ] **Step 7: The plan index.** In `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, replace the "Produced by P4" table's rows with:
+- [x] **Step 7: The plan index.** In `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, replace the "Produced by P4" table's rows with:
 
 ```markdown
 | Jobs | `sharepoint::RECONCILE_JOB = "sharepoint.reconcile_access"` (defined in `sharepoint::access`); `sharepoint::DELTA_JOB = "sharepoint.delta"` (defined in `sharepoint::changes`); both registered by `sharepoint::register_ops_jobs(worker, core)` |
@@ -4758,7 +4770,7 @@ In the open-questions table, change the "SharePoint/OneDrive storage" row's answ
 
 and below the table add the "Deviations from the index and the spec" list from the end of this plan.
 
-- [ ] **Step 8: Opt-in live tests.** In `crates/pdms-core/tests/sharepoint.rs` (P3's file):
+- [x] **Step 8: Opt-in live tests.** In `crates/pdms-core/tests/sharepoint.rs` (P3's file):
 
 (a) Above `live_sharepoint_round_trip`, add the shared setup:
 
@@ -4879,7 +4891,7 @@ async fn live_department_staff_get_read_access() {
 Run: `cargo test -p pdms-core --test sharepoint -- --list --ignored 2>/dev/null | grep live_`
 Expected: `live_department_staff_get_read_access: test`, `live_pdms_writes_are_recognised: test`, `live_sharepoint_round_trip: test`.
 
-- [ ] **Step 9: Full verification.**
+- [x] **Step 9: Full verification.**
 
 ```bash
 cargo fmt --all --check
@@ -4897,7 +4909,7 @@ Expected:
 - `bash -n` prints nothing;
 - the final `grep` prints nothing.
 
-- [ ] **Step 10: Commit.**
+- [x] **Step 10: Commit.**
 
 ```bash
 git add docs crates/pdms-core/tests/sharepoint.rs
@@ -4930,12 +4942,13 @@ Recorded in the index by Task 9, Step 7.
    - The spec's `verify-integrity --rehash` → `--rehash-sharepoint`. `--rehash` stays the local-file option.
    - P3's `IntegrityReport.sharepoint_files_skipped` → `sharepoint_files_checked`. P3's test is renamed to `integrity_check_covers_sharepoint_files`.
    - `integrity::verify` → `verify_with(core, VerifyOptions)`. `verify(core, rehash)` stays as a wrapper.
-7. **Storage selection:** the spec's `[storage] backend = "sharepoint"` in `pdms.toml` → `PDMS_STORAGE__BACKEND=sharepoint` in `config/pdms.env` (Compose `env_file`). This needs Docker Compose 2.24 or newer.
-8. **Certificate:** the installer creates it with `openssl`, not P2's `pdms gen-graph-cert`, because the image is not built yet at that point. The format is the same: PEM certificate plus PKCS#8 key, RSA-2048, two years. The file is mode 644 inside the 700 `secrets/` directory, like the other Compose secrets. (P2 writes mode 600.)
+7. **Storage selection (as built, D-108):** the spec's `[storage] backend = "sharepoint"` in `pdms.toml` is kept, in one managed `[storage]` block shared with the virus-scanning setting. The plan's `config/pdms.env` and Compose `env_file` (Compose 2.24 or newer) were dropped at the owner's choice.
+8. **Certificate:** the installer creates it with `openssl`, not P2's `pdms gen-graph-cert`, because the image is not built yet at that point. The format and files are P2's: PEM certificate plus PKCS#8 key in `secrets/graph_certificate`, the public half in `secrets/graph_certificate.crt`, RSA-2048, two years. The file is mode 644 inside the 700 `secrets/` directory, like the other Compose secrets. (P2 writes mode 600.)
 9. **Admin page:** `/admin/sharepoint` lives in `doc_admin_routes`.
 10. **Audit:** one extra action, `sharepoint.unexpected_dismissed`.
 11. **Edits to P2 and P3 code:**
-    - P2: `entra_sync::run_job` (Ok arm) and `sync_one` queue a folder-access run, and `templates/admin/entra.html` gains a SharePoint access section.
+    - P2: `entra_sync::set_idp_department` queues a folder-access run whenever it changes a membership (planned: `run_job` and `sync_one`), and `templates/admin/entra.html` gains a SharePoint access section.
+    - P3: `files::flag_changed` takes `&Core`, flags once, and notifies administrators; its event is shared as `files::changed_outside_event` (D-105).
     - P3: the `maintenance::worker()` last line changes.
 12. **Spec §7.6, area folders:** an area folder in the change feed counts only when its name changed. SharePoint can list a parent folder whenever something inside it changes, and the setup guide has people create the area folders by hand.
 13. **Spec §7.4, copied permissions:** when a folder's inheritance breaks, SharePoint copies the site's permissions onto it. Permissions that match the `Departments` folder's (same grantee and roles) are not reported as other access.

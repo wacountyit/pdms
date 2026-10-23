@@ -410,15 +410,15 @@ queued run is skipped. **Full resync** reads every account again.
    **application** permission `User.Read.All`, grant admin consent, and
    upload `secrets/graph_certificate.crt` (the public certificate, from the
    host) under **Certificates & secrets**. There is no client secret.
-3. Set `[graph] tenant_id` and `client_id` in `config/pdms.toml`. The
-   installer does not yet wire the certificate into Docker Compose, so edit
-   `docker-compose.yml` by hand, following the existing secrets:
-   - in the shared `environment:` block, add
-     `PDMS_GRAPH__CERTIFICATE_FILE: /run/secrets/graph_certificate`;
-   - add `graph_certificate` to the `secrets: [...]` list of the shared block
-     (used by `app` and `worker`) and of `migrate`;
-   - in the top-level `secrets:` section, add
-     `graph_certificate: { file: ./secrets/graph_certificate }`.
+3. Set `[graph] tenant_id` and `client_id` in `config/pdms.toml` (with
+   SharePoint storage, `./install.sh --configure sharepoint` writes them for
+   you). Docker Compose mounts `secrets/graph_certificate` for PDMS; an empty
+   file means Microsoft Graph is not set up.
+
+   **If you followed an earlier version of this guide** and added the
+   certificate to `docker-compose.yml` by hand, undo that edit before
+   upgrading (`git checkout docker-compose.yml`), or `git pull` stops with a
+   conflict. The file now has those lines itself.
 
    Then set:
 
@@ -536,7 +536,7 @@ consistent for everyone who filters by it:
 
 | Setting (`config/pdms.toml`) | Default | Notes |
 |---|---|---|
-| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage, or `sharepoint` to keep document files in a SharePoint library (below) |
+| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage, or `sharepoint` to keep document files in a SharePoint library (below; `./install.sh --configure sharepoint` sets it) |
 | `[storage] max_upload_bytes` | 100 MB | |
 | `[storage.s3] endpoint, bucket, region, access_key_id, prefix` | | Any S3-compatible service: AWS, SeaweedFS, MinIO, and appliance S3 endpoints. Put the secret in a file and set `PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE`. Enable bucket versioning or object lock if available |
 | `[storage] clamav_addr` | empty (off) | e.g. `clamav:3310` with `docker compose --profile clamav up -d`. The bundled `deploy/clamav/clamd.conf` raises clamd's size limits to match uploads |
@@ -560,24 +560,28 @@ stay in `local_path`.
 | `[sharepoint] site_url` | empty | The site, for example `https://contoso.sharepoint.com/sites/PDMSRecords` |
 | `[sharepoint] library` | `Documents` | The document library's name |
 | `[sharepoint] upload_chunk_bytes` | 10 MiB | Files are sent in pieces of this size: a multiple of 320 KiB, at most 60 MiB |
-| `[sharepoint] delta_interval_minutes` | 5 | For the change check that comes with plan P4 |
+| `[sharepoint] delta_interval_minutes` | 5 | How often the change check reads SharePoint's change feed |
 
-**Before you turn it on:**
-1. Set up the site as the SharePoint setup steps describe (the design spec,
-   Appendix A): owners only, sharing restricted, versioning on, and
+**Setting it up:** follow [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md). In short:
+1. Set up the site: owners only, sharing restricted, versioning on, and
    `County-wide` readable by **Everyone except external users**. If PDMS has
    to create `County-wide` itself, it logs a warning, because that read
    permission is then missing.
-2. The `PDMS Service` app registration needs the Graph application permission
-   `Sites.Selected`, with full control on this one site, and PDMS needs the
-   `[graph]` settings and certificate described under "Entra ID user sync"
-   above. PDMS refuses to start with `backend = "sharepoint"` and no `[graph]`
-   section. The exact commands for the site grant come with plan P4's setup
-   guide.
-3. **Start with an empty system.** Files already stored locally or in S3 are
-   not moved to SharePoint and can't be read once the backend changes. Turn
+2. Register the `PDMS Service` app with the Graph application permission
+   `Sites.Selected`, and give it full control on this one site (the guide has
+   the exact commands).
+3. Run `./install.sh --configure sharepoint`. It writes `[graph]` and
+   `[sharepoint]`, sets `[storage] backend = "sharepoint"` (in the installer's
+   `[storage]` block, which also holds the virus-scanning setting), creates
+   the certificate in `secrets/` if there is none, and prints its
+   thumbprints. If you wrote `[storage]` by hand, the installer leaves it
+   alone and tells you to set `backend` yourself. PDMS refuses to start with
+   `backend = "sharepoint"` and no `[graph]` section.
+4. **Start with an empty system.** Files already stored locally or in S3 are
+   not moved to SharePoint and can't be read once the backend changes, so on
+   an install with documents the installer asks you to confirm. Turn
    SharePoint on before real documents are added; on the test server, reset
-   it when you switch.
+   it when you switch. To switch back, run the same step and answer `none`.
 
 **How it works:**
 - **Layout.** `Departments/`, `County-wide/` or `Restricted/` (from the
@@ -602,17 +606,45 @@ stay in `local_path`.
   `sharepoint.folder_moved`.
 - **Downloads** are streamed through PDMS and checked against the SHA-256
   recorded at upload. If someone changed the file in SharePoint, the download
-  stops with an error, the file is marked as changed, and
-  `sharepoint.changed_outside` is written to the audit log. Restoring an
-  earlier version copies its file into a new file.
+  stops with an error, the file is marked as changed,
+  `sharepoint.changed_outside` is written to the audit log, and
+  administrators are notified. Restoring an earlier version copies its file
+  into a new file.
+- **Department folder access.** Members of a department whose account comes
+  from Entra ID get read access to `Departments/<department>` in SharePoint,
+  one person at a time and with no invitation email. PDMS updates it about a
+  minute after a membership changes (including changes the Entra ID user sync
+  makes) and every night, and removes it when someone leaves the department
+  or is departed. It removes only access it granted; anything else on the
+  folder is reported, never changed. Local accounts, such as the break-glass
+  administrator, never get SharePoint access. Without the Entra ID user sync,
+  memberships come from sign-in or are set by hand.
+- **The change check** reads the site's change feed every
+  `delta_interval_minutes`. A file whose size or content hash no longer
+  matches what PDMS uploaded, or that was deleted, is flagged and audited,
+  and administrators get one notice per check that finds changes. Who made
+  the change is shown, but the hashes decide. Renamed or moved files and
+  folders are put back in PDMS's layout without a flag. Files PDMS does not
+  track are listed once they are ten minutes old (an upload in progress has
+  no record yet), and PDMS never deletes them.
 - **Administration → SharePoint** (administrators only) shows when the
   change check and the folder-access run last ran and any problem, files
-  changed outside PDMS with their actions (**Restore original**, **Accept as
-  new version**, **Re-check**), files PDMS does not track (**Dismiss** takes
-  one off the list; PDMS never deletes it), and access on department folders
-  that PDMS did not grant. A document you cannot open is listed only as "A
-  Restricted document" and its version. People who can see a flagged
-  document see a notice on its page.
+  changed outside PDMS with their actions, files PDMS does not track
+  (**Dismiss** takes one off the list; PDMS never deletes it), and access on
+  department folders that PDMS did not grant. A document you cannot open is
+  listed only as "A Restricted document" and its version. People who can see
+  a flagged document see a notice on its page, and its downloads stop until
+  it is resolved. Every action is audited:
+
+  | Action | What it does | Who |
+  |---|---|---|
+  | **Restore original** | Puts back the SharePoint version whose content matches PDMS's record (checked by SHA-256, never by its label) | administrators |
+  | **Accept as new version** | Takes the file as it is now through the normal upload checks (file type, virus scan) and adds it as a new version with a note saying who changed it; then puts the original back | administrators with edit permission on the document |
+  | **Re-check** | Compares the file again, for example after a site owner restored a deleted file from the recycle bin, and clears the flag if it matches | administrators |
+
+  If PDMS cannot sign in to Microsoft Graph (expired certificate, removed
+  consent or site grant), administrators get a notice at most once an hour.
+  See [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) C2.
 - **Integrity check.** `verify-integrity` checks every SharePoint file
   through Microsoft Graph: present, the right size, and the QuickXorHash
   recorded at upload (`--skip-files` checks presence and size only). Add
@@ -620,9 +652,11 @@ stay in `local_path`.
   that is slow on a large library, so run it occasionally, for example after
   restoring a backup. Files still flagged by the change check are reported
   as problems.
-- **Known gap.** If a save fails after the upload, or after a folder has
-  already moved, the uploaded file or the moved folder stays in SharePoint
-  until the nightly sweep or P4's change check finds it.
+- **If a save fails** after its file was uploaded, the file stays in
+  SharePoint and the change check lists it under "Files PDMS does not track"
+  as "PDMS (a save that did not finish; safe to delete)". If a change fails
+  after its folder already moved, the next mirror run or the nightly sweep
+  puts the folder back.
 
 ## 5. Reminders, reviews, and the calendar
 

@@ -11,7 +11,9 @@ finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
 D-096 was decided while building plan P2 (Entra sync, 2026-10-21).
 D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
 D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built,
-and D-103 while building it.
+and D-103 while building it. D-104 to D-110 were decided on 2026-10-23 for plan
+P4 (SharePoint access, change detection, and operations), with the owner's
+answers to its pre-flight questions.
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -601,7 +603,7 @@ search index stay in PostgreSQL. SharePoint is the file store and a
 read-only browsing mirror, and PDMS is authoritative when they disagree.
 Spec: `docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md`.
 
-### D-082 App-only Graph access to one site; downloads go through PDMS — Accepted (certificate sign-in built in P2; downloads through PDMS built in P3, 2026-10-22; the site grant is in P4's setup guide)
+### D-082 App-only Graph access to one site; downloads go through PDMS — Accepted (certificate sign-in built in P2; downloads through PDMS built in P3; the one-site grant documented in SHAREPOINT_SETUP.md, P4, 2026-10-23)
 PDMS authenticates to Microsoft Graph as itself, with a certificate rather
 than a client secret, using `Sites.Selected`. It is granted full control on
 one dedicated site only; full control is needed to manage folder
@@ -620,7 +622,7 @@ permissions. Microsoft Search would filter by SharePoint permissions, which
 under D-081 are locked to the PDMS app, so its results could not match what
 each user may see in PDMS.
 
-### D-084 SharePoint layout with folder-level permissions only — Accepted (layout and columns built in P3, 2026-10-22; folder permissions pending P4)
+### D-084 SharePoint layout with folder-level permissions only — Accepted (layout and columns built in P3; department folder access built in P4, 2026-10-23)
 **Layout.** One site and one library, with top-level `Departments/`,
 `County-wide/`, and `Restricted/`. Under each are department folders, then a
 folder per document (`{ID} – {title}`), then one file per version. Files
@@ -705,7 +707,7 @@ page. The Outlook removal (D-087) went in the same migration: queued sync jobs
 are deleted and `graph_calendar_links` is dropped. Events already created in
 Outlook stay until someone deletes them.
 
-### D-089 Changes made directly in SharePoint are detected, not prevented — Accepted (design, not built)
+### D-089 Changes made directly in SharePoint are detected, not prevented — Accepted (built in P4, 2026-10-23: D-105, D-106)
 One or two named site owners keep edit rights for emergencies, so PDMS
 cannot rely on SharePoint permissions alone. Every few minutes PDMS reads
 the site's change feed (Graph delta). If a file is edited, added, or deleted
@@ -918,6 +920,83 @@ runs, which is normally within seconds, someone browsing SharePoint sees the
 temporary name. If the save fails after the upload, the temporary file is
 left behind as an orphan (D-102, point 5).
 
+### D-104 Department folder access: one read grant per person, Entra accounts only — Accepted (2026-10-23)
+Entra security groups are not available to PDMS (D-086), so each member of a
+department gets their own `read` permission on `Departments/<department>`
+through the Graph invite call (sign-in required, no invitation email). Only
+active members whose account comes from Entra get one; local break-glass
+accounts never do. PDMS records each grant and removes only what it
+recorded. Other access on the folder is reported and never changed. Runs are
+coalesced to one per minute after membership changes (including those the
+Entra sync makes), and repeat nightly. Permissions SharePoint copies from the
+site when a folder's inheritance breaks are not reported.
+
+### D-105 Changes in SharePoint are found by comparing file hashes — Accepted (2026-10-23)
+A tracked file counts as changed when its size or QuickXorHash in the change
+feed differs from what PDMS recorded at upload. `lastModifiedBy` is shown and
+audited but never trusted: it decides only whether a rename or a column
+change needs PDMS's layout put back. An expired change token (HTTP 410)
+rereads everything; unchanged files are not flagged. The owner's answers:
+- **One audit shape.** The download check (P3) and the change check write the
+  same `sharepoint.changed_outside` event (category system, outcome failure,
+  context `source`, `item_id`, `detail`), naming no title.
+- **A change first found by a download also notifies administrators**, once;
+  the next change check then records who made it, without a second notice.
+- **The document page** shows everyone who can see the document a status
+  message, not an alert: "A file of this document was changed outside PDMS.
+  Downloads of it are paused until an administrator checks it."
+  Administrators also get a link to Administration → SharePoint.
+
+### D-106 Files PDMS does not track: listed after ten minutes, never deleted — Accepted (2026-10-23)
+An upload in progress has no database row until it commits, so untracked
+files are listed only once they are ten minutes old. PDMS never deletes them;
+an administrator deletes them in SharePoint or dismisses them (audited). A
+file PDMS uploaded for a save that then failed (D-102, point 5) is labelled as
+such.
+
+### D-107 SharePoint administration: `ManageSharePoint` — Accepted (2026-10-23)
+A new capability, held by the org-wide administrator role, gates
+Administration → SharePoint and the restore, re-check, and dismiss actions.
+"Accept as new version" also needs `edit` on the document, through the normal
+version check, because it adds content. "Restore original" picks the
+SharePoint version by SHA-256, never by its label. A SharePoint outage while
+resolving shows "…so the change was not made" (D-102). The owner's answer: for
+a document the administrator cannot open, the page shows only "A Restricted
+document" and the version number, no ID, title, or path (D-085).
+
+### D-108 The installer's `[storage]` block selects SharePoint storage — Accepted (2026-10-23)
+The owner's answer: one managed `[storage]` block in `config/pdms.toml`,
+written by both `--configure sharepoint` and `--configure clamav`, holds
+`backend` and `clamav_addr` together (a TOML table can't be split across two
+blocks). Older installs' ClamAV block is moved into it the first time. A
+hand-written `[storage]` is left alone, with a warning to set `backend`
+there. This replaces the plan's `config/pdms.env` and Compose `env_file`, so
+no newer Docker Compose is needed. On an install that already has documents,
+switching to SharePoint asks for confirmation (D-102, point 4); `none` as the
+site address switches it off again.
+
+The Graph certificate is always mounted as the `graph_certificate` secret; an
+empty file means "not configured". The owner's answers: it is P2's file pair,
+`secrets/graph_certificate` and its public half `secrets/graph_certificate.crt`,
+created by the installer with `openssl` only when missing (the PDMS image is
+not built yet at that point); the installer shows both its SHA-1 thumbprint
+(what the Entra admin center lists) and its SHA-256 thumbprint (what
+Administration → Entra ID sync shows). `--configure sharepoint` writes
+`[graph]` and `[sharepoint]` but never `[entra_sync]`: the Entra user sync
+stays a separate step that uses the same certificate.
+
+### D-109 `verify-integrity --rehash-sharepoint` — Accepted (2026-10-23)
+By default `verify-integrity` checks SharePoint files through Graph metadata
+(present, size, QuickXorHash) without downloading them. Downloading every file
+and comparing SHA-256 is opt-in, because it can take hours on a large
+library.
+
+### D-110 Graph sign-in failures: one notice an hour — Accepted (2026-10-23)
+HTTP 401/403 from Microsoft Graph means the certificate, consent, or site
+grant is broken, and every run fails the same way. Administrators get one
+in-app (and email) notice per hour, and the status page shows the latest
+error. The notice names no document.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |
@@ -930,7 +1009,7 @@ left behind as an orphan (D-102, point 5).
 | Self-approval | Off (`[workflow] allow_self_approval = false`) |
 | Reappointment decision lead time | 90 days before term end, per position |
 | Retention periods | Placeholder policies only (D-036); confirm with your records retention schedule |
-| SharePoint/OneDrive storage | Decided: SharePoint holds the files (D-081 to D-084). Not built yet; see ROADMAP §0.3, sub-project 1 |
+| SharePoint/OneDrive storage | Decided and built: SharePoint holds the files (D-081 to D-084, D-089, D-102 to D-110). Setup: [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md); the live test on a real site is pending (ROADMAP §0.3) |
 | ECM system vs. records-request portal | Neither integrated. Either can use the REST API (read documents, files, history), receive webhooks, or get a dedicated `IntegrationProvider`; the records request package format is product-neutral |
 | Audit forwarding target | Off; file (JSON lines) or syslog when configured |
 | API token lifetime | Up to 365 days; 90 suggested |

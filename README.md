@@ -45,7 +45,9 @@ The installer asks everything first, then builds and starts unattended:
   something else on the machine already has them.
 - **Name and time zone** (detected from the host).
 - **Optionally:** PostgreSQL on `127.0.0.1` for host tools (on a free port),
-  Microsoft Entra ID sign-in, SMTP email, OCR, and virus scanning.
+  Microsoft Entra ID sign-in, SMTP email, SharePoint document storage (see
+  [docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)), OCR, and virus
+  scanning.
 - **The first administrator.** The password is generated and shown once,
   along with an authenticator secret.
 
@@ -127,8 +129,9 @@ those containers are removed when each test finishes. A real OCR test is opt-in 
 `cargo test -p pdms-core --test phase5 -- --ignored`. A real ClamAV test is opt-in:
 `cargo test -p pdms-storage --test clamav -- --ignored`. SharePoint storage is
 tested against an in-process mock of Microsoft Graph; a round trip against a
-real SharePoint test site is opt-in (`live_sharepoint_round_trip` in
-`crates/pdms-core/tests/sharepoint.rs` lists the variables it needs).
+real SharePoint test site is opt-in (the three `live_` tests in
+`crates/pdms-core/tests/sharepoint.rs`; `live_sharepoint_round_trip` lists the
+variables they need).
 
 After changing any `sqlx::query!` or a migration, refresh the offline metadata
 (CI checks it): `cargo sqlx prepare --workspace -- --all-targets`.
@@ -153,7 +156,8 @@ crates/pdms-testkit  disposable test databases
 migrations/          SQL migrations
 deploy/              database bootstrap, reverse-proxy samples, backup and restore scripts,
                      the OCR sidecar (deploy/ocr)
-docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP, ROADMAP; superpowers/specs (designs)
+docs/                ARCHITECTURE, DECISIONS, ADMIN_GUIDE, BACKUP, SHAREPOINT_SETUP, ROADMAP;
+                     superpowers/specs (designs)
                      and superpowers/plans (implementation plans)
 tools/               developer tools (ui-screenshots: page screenshots for UI work)
 ```

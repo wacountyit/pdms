@@ -29,8 +29,10 @@ Last updated 2026-10-23.
     gives 408 passed, 0 failed, and 2 ignored.
   - On `main` on 2026-10-22, after plan P3, it gives 455 passed, 0 failed,
     and 3 ignored.
-  - The ignored ones are the opt-in real-OCR, real-ClamAV and (since P3)
-    real-SharePoint tests.
+  - On `main` on 2026-10-23, after plan P4, it gives 485 passed, 0
+    failed, and 5 ignored.
+  - The ignored ones are the opt-in real-OCR, real-ClamAV and (since P3 and
+    P4) real-SharePoint tests.
 - **Test deployment:** installed on the county's development server with
   `install.sh`.
   - It uses the bundled Caddy (HTTPS with an internal certificate), OCR,
@@ -101,7 +103,29 @@ Last updated 2026-10-23.
   it on (start with an empty system). Folder permissions and change
   detection follow in P4.
 - **Installer:** Caddy can use other ports when 80 or 443 is taken
-  ([PR #6](https://github.com/wacountyit/pdms/pull/6)).
+  ([PR #6](https://github.com/wacountyit/pdms/pull/6)), and the exact Entra
+  redirect URI is shown ([PR #8](https://github.com/wacountyit/pdms/pull/8)).
+- **Plan P4, SharePoint access, change detection and operations**
+  (2026-10-23, by WACountyIT, built directly on `main`):
+  - department staff get read access on their `Departments/` folder, kept up
+    to date after membership changes, the Entra sync, and nightly;
+  - a change check every few minutes flags files edited or deleted directly
+    in SharePoint and lists files PDMS doesn't track; administrators are
+    notified;
+  - Administration → SharePoint to restore the original, accept a change as
+    a new version, re-check, or dismiss; a notice on the document page;
+  - `verify-integrity` checks SharePoint files (`--rehash-sharepoint`
+    downloads them);
+  - `./install.sh --configure sharepoint`, the Compose certificate secret,
+    and [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) for the site and app
+    registration.
+
+  It adds migration `0014` and decisions D-104 to D-110. The live test on a
+  real SharePoint site is the next step (§0.5).
+- **Upgrading after P4:** run `./install.sh` after `git pull`, as usual. It
+  creates `secrets/graph_certificate` (empty unless Microsoft Graph is set
+  up), which Docker Compose now expects; `docker compose up` alone stops with
+  "secret file not found" until it exists.
 - **Before upgrading the test server to this `main`:** back it up, and read
   the admin guide's note "The Outlook calendar sync was removed". Everyone
   sees dark mode until they switch (Your account → Appearance).
@@ -126,9 +150,8 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110; the owner's answers recorded at the top of the plan). Phase A (Task 1: migration `0014`, `ManageSharePoint`, run records and admin notices): **Done**. Phase B (Tasks 2–3: department staff get read access on their `Departments/` folder; updated after membership changes, the Entra sync, and nightly): **Done**. Phase C (Task 4: the change check reads SharePoint's change feed every few minutes, flags files edited or deleted there, lists files PDMS doesn't track, and tells administrators; a change first found by a download also reaches them): **Done**. Phase D (Tasks 5–6: administrators restore the original, accept the change as a new version, re-check, or dismiss; `verify-integrity` checks SharePoint files, `--rehash-sharepoint` downloads them): **Done**. Phase E (Task 7: Administration → SharePoint, the document-page notice, a section on the Entra page): **Done**. Phase F (Tasks 8–9): **Not started** | Phase F next (installer and Compose, setup guide, docs, live tests) | 2026-10-23 |
 
-§0.5 lists what can start next.
+Nothing is claimed. §0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -163,8 +186,8 @@ taken up.
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
-| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PDMS; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **In progress**: spec approved. P1 (visibility) done. P3 (storage) done (2026-10-22: [PR #5](https://github.com/wacountyit/pdms/pull/5) plus a follow-up with the example config, the opt-in live test and the docs; migration `0013`; D-102, D-103). **P4** (access, change detection, operations) is next; it needs the same pre-flight check against `main` (§0.5) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md) |
-| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PDMS; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Built** (P1, P3 and P4 done; P4 finished 2026-10-23: migration `0014`, D-104 to D-110). What remains is the live test on a real SharePoint test site, which waits on the items below ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test server") | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md) |
+| 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access built with P4 (D-104) | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Done** (2026-10-22, built inside R2, [PR #4](https://github.com/wacountyit/pdms/pull/4); migration `0011`). The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088; [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
@@ -174,12 +197,12 @@ taken up.
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
 
 **Waiting on the county** (needed before sub-projects 1–2 can be tested live;
-the steps are in Appendix A of the spec):
+the steps are in [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md)):
 
-- a `PDMS Records – Test` SharePoint site, set up as described there;
+- a `PDMS Records – Test` SharePoint site, set up as Part A describes;
 - a correct **Department** value on every staff account, plus the list of
-  distinct values in use;
-- later, the `PDMS Service` app registration and the site grant.
+  distinct values in use (A7);
+- the `PDMS Service – Test` app registration and the one-site grant (Part B).
 
 ### 0.4 How work moves through this list
 
@@ -209,21 +232,11 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **Plan P4, SharePoint access, change detection and operations. Start
-   here.** P3 ([PR #5](https://github.com/wacountyit/pdms/pull/5)) and R2,
-   which P4 builds on, are merged.
-   - **Pre-flight first**, as P3 had (its plan header shows how): check every
-     name it consumes against `main`, using the plan index's "Produced by P3"
-     table; its migration takes the next free number after P3's (`0014` if
-     nothing else takes one; the plan says `0011`), and its decisions take
-     the next free numbers (the plan creates D-091 to D-097, but D-091 to
-     D-103 are taken).
-   - **P3 left for P4:** re-export `sharepoint::files::flag_changed` for the
-     change check; `verify-integrity` already leaves SharePoint files to it;
-     the orphans listed in §4.
-   - **Admin page:** `/admin/sharepoint` follows R2's admin page pattern
-     and goes in the admin menu's *Integrations* group (plan index,
-     "Changes recorded when P4 was written").
+1. **SharePoint live test on the test server.** Everything is built; this is
+   the owner's step once the items "Waiting on the county" (§0.3) are ready:
+   follow [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test
+   server" (it resets the test server), then work through §1.2. Set
+   sub-projects 1 and 2 to **Done** when they pass.
 2. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
 3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
@@ -231,25 +244,26 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
 ### 0.6 Which work touches which files
 
-Two pieces of work that share a row can conflict. Check this table before
-you claim something. (R2 and sub-project 3 are merged, so their columns were
-removed on 2026-10-22; P4 waits for P3, so the two don't overlap in time.) If your work and claimed work share a row, agree the
-order with the owner first. Paths are under `crates/pdms-web/` unless they
-start with `crates/` or name a top-level folder.
+Two pieces of work that share a row can conflict. When you claim something,
+add a column for it with what it changes in each row, and check the other
+columns first. If your work and claimed work share a row, agree the order
+with the owner first. (P3 and P4 are done, so their columns were removed on
+2026-10-23; nothing else is claimed.) Paths are under `crates/pdms-web/`
+unless they start with `crates/` or name a top-level folder.
 
-| Files | P3 | P4 |
-| --- | --- | --- |
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`) | No | Adds `admin/sharepoint.html` and its handler, and a section in `admin/entra.html` |
-| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | No | One item in the admin menu (`Layout::admin_groups()`) |
-| Route table: `src/lib.rs`, `src/routes/mod.rs` | No | A new route and module |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | No templates. The upload and download code changes underneath | A notice on `documents/show.html`, and `ShowPage` in `documents.rs` |
-| Web errors and API: `src/error.rs`, `src/routes/api.rs` | A new 503 "Temporarily unavailable" response | No |
-| Web tests: `crates/pdms-web/tests/` | The 503 responses, and the new-document form during a SharePoint outage | `shell.rs`, and new SharePoint admin tests |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity | Most of P3 | Most of P4 |
-| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | `[sharepoint]` settings and the mirror jobs | Its jobs |
-| `migrations/` | The next free number | The next free number after P3's |
-| `.sqlx/` | Yes | Yes |
-| `config/`, `install.sh`, `docker-compose.yml` | `[sharepoint]` in the example config | The installer, and the Compose secret for the certificate |
+| Files | (no claimed work) |
+| --- | --- |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`) | |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | |
+| Web errors and API: `src/error.rs`, `src/routes/api.rs` | |
+| Web tests: `crates/pdms-web/tests/` | |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | |
+| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | |
+| `migrations/` | |
+| `.sqlx/` | |
+| `config/`, `install.sh`, `docker-compose.yml` | |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
   and ADMIN_GUIDE. In this table, change only your own column. Take
@@ -411,7 +425,7 @@ Things that work but are limited, or were deliberately left for later:
 | Scaling | Login and API rate limits live in memory per app instance; one app instance is assumed. | Fine for a single organization; matters only for multiple app instances. | M |
 | OCR | English only; date suggestions are keyword-based and miss unusual wording. | Spanish documents, odd contract language. | S–M |
 | Settings | Most settings live in `config/pdms.toml` (installer or a text editor), not in an admin screen. | IT staff need shell access for some changes. | M |
-| SharePoint storage | **Orphans.** If a save fails after its file was uploaded, or after a narrowing change already moved the folder, the file or the moved folder stays in SharePoint until the nightly mirror sweep or P4's change check finds it (D-102). | SharePoint can briefly hold a file PDMS has no record of, or a folder narrower than PDMS says. Both are the safe direction. | S |
+| SharePoint storage | **Orphans are listed, not removed.** If a save fails after its file was uploaded, the file stays in SharePoint; the change check lists it under "Files PDMS does not track" after ten minutes, and an administrator deletes it there (D-102, D-106). A folder moved by a change that then failed is put back by the next mirror run. | An administrator has to clean up the rare failed save by hand. | S |
 | SharePoint storage | **No migration between storage backends.** Turning SharePoint on doesn't move files already stored locally or in S3, and they can't be read afterwards. | Turn it on before real documents are added; the test server is reset when it is switched (D-102). | M |
 | Audit | No archival of old audit entries (nothing is purged; forwarding gives an external copy). | Only matters after many years of heavy use. | S |
 

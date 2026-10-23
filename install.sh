@@ -5,8 +5,8 @@
 #
 #   ./install.sh                     first install, or finish anything not yet set up
 #   ./install.sh --configure smtp    redo one part later (repeatable, comma-separated):
-#                                    network, database-port, source, sso, smtp, ocr,
-#                                    clamav, admin
+#                                    network, database-port, source, sso, smtp,
+#                                    sharepoint, ocr, clamav, admin
 #   ./install.sh --non-interactive   take answers from PDMS_INSTALL_* variables (see --help)
 #
 # What it does: checks prerequisites, finds free ports, asks how users will
@@ -59,6 +59,11 @@ takes its default or is skipped:
   PDMS_INSTALL_SMTP_HOST, PDMS_INSTALL_SMTP_PORT, PDMS_INSTALL_SMTP_SECURITY (starttls|tls|none),
   PDMS_INSTALL_SMTP_USERNAME, PDMS_INSTALL_SMTP_PASSWORD, PDMS_INSTALL_SMTP_FROM
   PDMS_INSTALL_OCR, PDMS_INSTALL_CLAMAV               yes | no (default: no)
+  PDMS_INSTALL_SHAREPOINT_SITE_URL  SharePoint site for document files (blank: files stay on this server;
+                                    "none" switches SharePoint storage off again)
+  PDMS_INSTALL_GRAPH_TENANT_ID, PDMS_INSTALL_GRAPH_CLIENT_ID   the "PDMS Service" app registration
+  PDMS_INSTALL_SWITCH_STORAGE       yes: an existing install switches its document files to SharePoint
+  PDMS_INSTALL_STOP_SHAREPOINT      yes: a blank site URL switches SharePoint storage off again
 EOF
       exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
@@ -152,13 +157,14 @@ remove_table() {
     !skip { print }' "$CONFIG" > "$tmp" && cat "$tmp" > "$CONFIG" && rm -f "$tmp"
 }
 
-# write_block NAME (content on stdin) -- replace the managed block or append it.
+# write_block NAME [OPTIONS] (content on stdin) -- replace the managed block or
+# append it. OPTIONS names the --configure option(s) that rewrite it (default NAME).
 write_block() {
-  local name=$1 body tmp
+  local name=$1 options=${2:-$1} body tmp
   body=$(cat)
   tmp=$(mktemp)
   {
-    printf '# >>> install.sh:%s (./install.sh --configure %s rewrites this block)\n' "$name" "$name"
+    printf '# >>> install.sh:%s (./install.sh --configure %s rewrites this block)\n' "$name" "$options"
     printf '%s\n' "$body"
     printf '# <<< install.sh:%s\n' "$name"
   } > "$tmp.block"
@@ -177,6 +183,45 @@ write_block() {
 # set up yet -- neither a managed block nor a hand-written table -- or when
 # --configure NAME asks for it.
 needs() { configuring "$1" || { ! has_block "$1" && ! has_table "$2"; }; }
+
+# toml_value TABLE KEY -- a plain string or bare value from config/pdms.toml.
+toml_value() {
+  [[ -f $CONFIG ]] || return 0
+  awk -v h="[$1]" -v k="$2" '
+    $0 == h { f = 1; next }
+    /^\[/ { f = 0 }
+    f && $1 == k { sub(/^[^=]*=[[:space:]]*/, ""); gsub(/^"|"$/, ""); print; exit }' "$CONFIG"
+}
+
+# remove_block NAME -- delete a managed block.
+remove_block() {
+  local tmp; tmp=$(mktemp)
+  awk -v start="# >>> install.sh:$1" -v end="# <<< install.sh:$1" '
+    index($0, start) == 1 { skip = 1; next }
+    skip && index($0, end) == 1 { skip = 0; next }
+    !skip { print }' "$CONFIG" > "$tmp" && cat "$tmp" > "$CONFIG" && rm -f "$tmp"
+}
+
+# [storage] is one managed block, "storage", written by the SharePoint and the
+# virus-scanning steps: one TOML table cannot be split across two blocks. Older
+# installs kept [storage] in the "clamav" block; it is moved the first time.
+clamav_block_has_storage() {
+  has_block clamav && awk '/^# >>> install.sh:clamav/ { f = 1; next } /^# <<< install.sh:clamav/ { f = 0 }
+    f && /^\[storage\]/ { found = 1 } END { exit !found }' "$CONFIG"
+}
+custom_storage() { has_table storage && ! has_block storage && ! clamav_block_has_storage; }
+storage_backend() { local b; b=$(toml_value storage backend); echo "${b:-local}"; }
+write_storage_block() { # write_storage_block BACKEND CLAMAV_ADDR
+  if has_block clamav; then remove_block clamav; env_set PDMS_CLAMAV_DECIDED yes; fi
+  write_block storage "sharepoint or clamav" <<EOF
+[storage]
+# Where document files live: "local" (the pdmsdata volume), or "sharepoint"
+# (./install.sh --configure sharepoint; see docs/SHAREPOINT_SETUP.md).
+backend = $(toml "$1")
+# Virus scanning: "clamav:3310" turns it on (./install.sh --configure clamav).
+clamav_addr = $(toml "$2")
+EOF
+}
 
 # Whether Microsoft Entra ID sign-in is turned on in the configuration.
 sso_enabled() {
@@ -495,7 +540,7 @@ new_secret pg_app_password "$(rand_hex 32)"
 new_secret pdms_secret_key "$(openssl rand -base64 64 | tr -d '\n')"
 new_secret db_owner_url "postgres://pdms_owner:$(cat secrets/pg_owner_password)@postgres:5432/pdms"
 new_secret db_app_url "postgres://pdms_app:$(cat secrets/pg_app_password)@postgres:5432/pdms"
-for f in oidc_client_secret smtp_password; do
+for f in oidc_client_secret smtp_password graph_certificate; do
   [[ -e "secrets/$f" ]] || : > "secrets/$f"; chmod 644 "secrets/$f"
 done
 note "Database passwords (256-bit) and the master key (512-bit) are random and stay in secrets/."
@@ -594,6 +639,115 @@ EOF
   fi
 fi
 
+# --- 6b. SharePoint document storage (Microsoft Graph) ---------------------------------
+if needs sharepoint sharepoint; then
+  say "SharePoint document storage (optional)"
+  note "PDMS can keep every document file in a dedicated SharePoint site, where staff can"
+  note "browse their department's files read-only. Set up the site and the \"PDMS Service\""
+  note "app registration first: docs/SHAREPOINT_SETUP.md. Leave the site URL blank to keep"
+  note "files on this server."
+  was_sharepoint=no; [[ "$(storage_backend)" == sharepoint ]] && was_sharepoint=yes
+  # [graph] is shared with the Entra ID user sync. A hand-written one is adopted
+  # (its values become the defaults); [entra_sync] is never touched here.
+  graph_tenant=$(toml_value graph tenant_id)
+  graph_client=$(toml_value graph client_id)
+  current_site=$(toml_value sharepoint site_url)
+  if [[ -n "$current_site" ]]; then
+    note "Answer \"none\" to stop using SharePoint for document files."
+    ask SHAREPOINT_SITE_URL "SharePoint site URL" "$current_site"
+  else
+    ask SHAREPOINT_SITE_URL "SharePoint site URL (e.g. https://contoso.sharepoint.com/sites/PDMSRecords)" ""
+  fi
+  [[ "$SHAREPOINT_SITE_URL" == none ]] && SHAREPOINT_SITE_URL=""
+  SHAREPOINT_SITE_URL=${SHAREPOINT_SITE_URL%/}
+  if [[ -n "$SHAREPOINT_SITE_URL" ]]; then
+    [[ "$SHAREPOINT_SITE_URL" =~ ^https://[A-Za-z0-9.-]+\.sharepoint\.(com|us)/sites/[A-Za-z0-9._-]+$ ]] \
+      || fail "the site URL must look like https://<tenant>.sharepoint.com/sites/<name>"
+    sso_tenant=$(sed -n 's#^issuer_url = "https://login.microsoftonline.com/\([^/]*\)/v2.0"#\1#p' "$CONFIG" | head -1)
+    ask GRAPH_TENANT_ID "Directory (tenant) ID" "${graph_tenant:-$sso_tenant}"
+    ask GRAPH_CLIENT_ID "Application (client) ID of the PDMS Service app" "$graph_client"
+    guid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    [[ "$GRAPH_TENANT_ID" =~ $guid && "$GRAPH_CLIENT_ID" =~ $guid ]] \
+      || fail "the tenant and client IDs are GUIDs like 01234567-89ab-cdef-0123-456789abcdef"
+    if [[ $was_sharepoint == no && "$(env_get PDMS_ADMIN_CREATED)" == yes ]]; then
+      warn "files already stored on this server are not moved to SharePoint, and PDMS cannot open"
+      note "them once SharePoint storage is on. Turn it on before real documents are added; on a"
+      note "test server, reset it first (docs/SHAREPOINT_SETUP.md)."
+      yes_no SWITCH_STORAGE "Switch document storage to SharePoint now?" n
+      [[ $SWITCH_STORAGE == yes ]] || fail "keeping document files on this server; nothing was changed"
+    fi
+    # The same certificate as the Entra ID user sync (pdms gen-graph-cert writes
+    # the same two files). Created only when missing: RSA-2048, two years.
+    if [[ ! -s secrets/graph_certificate ]]; then
+      tmpd=$(mktemp -d)
+      openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PDMS Service" \
+        -keyout "$tmpd/key.pem" -out "$tmpd/cert.pem" 2>/dev/null
+      cat "$tmpd/cert.pem" "$tmpd/key.pem" > secrets/graph_certificate
+      cp "$tmpd/cert.pem" secrets/graph_certificate.crt
+      rm -rf "$tmpd"
+      echo "   generated secrets/graph_certificate (valid for 2 years)"
+    fi
+    chmod 644 secrets/graph_certificate
+    [[ -s secrets/graph_certificate.crt ]] || openssl x509 -in secrets/graph_certificate -out secrets/graph_certificate.crt
+    chmod 644 secrets/graph_certificate.crt
+    sha256=$(openssl x509 -in secrets/graph_certificate.crt -outform der | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+    sha1=$(openssl x509 -in secrets/graph_certificate.crt -noout -fingerprint -sha1 | sed 's/^.*=//; s/://g')
+    expires=$(openssl x509 -in secrets/graph_certificate.crt -noout -enddate | sed 's/^notAfter=//')
+    note "Upload secrets/graph_certificate.crt to the PDMS Service app registration"
+    note "(Certificates & secrets -> Certificates). It expires $expires."
+    note "  SHA-1 thumbprint (the Entra admin center lists this): $sha1"
+    note "  SHA-256 thumbprint (Administration -> Entra ID sync shows this): $sha256"
+    for t in graph sharepoint; do
+      if has_table "$t" && ! has_block sharepoint; then
+        remove_table "$t"; note "replaced the hand-written [$t] settings with the ones above"
+      fi
+    done
+    write_block sharepoint <<EOF
+[graph]
+# The "PDMS Service" app registration (docs/SHAREPOINT_SETUP.md), shared with the
+# Entra ID user sync. Certificate and key: secrets/graph_certificate (a Docker
+# secret); upload its public half, secrets/graph_certificate.crt, to Entra.
+tenant_id = $(toml "$GRAPH_TENANT_ID")
+client_id = $(toml "$GRAPH_CLIENT_ID")
+
+[sharepoint]
+# Document files live here ([storage] backend = "sharepoint").
+site_url = $(toml "$SHAREPOINT_SITE_URL")
+library = "Documents"
+EOF
+    if custom_storage; then
+      warn "your [storage] settings in $CONFIG are hand-written; set backend = \"sharepoint\" there yourself."
+    else
+      write_storage_block sharepoint "$(toml_value storage clamav_addr)"
+    fi
+    echo "   SharePoint storage configured. Check it under Administration -> SharePoint once running."
+  else
+    if [[ $was_sharepoint == yes ]]; then
+      warn "files already stored in SharePoint stay there, but PDMS will no longer be able to open them."
+      yes_no STOP_SHAREPOINT "Stop using SharePoint for document files anyway?" n
+      [[ $STOP_SHAREPOINT == yes ]] || fail "keeping SharePoint storage; nothing was changed"
+    fi
+    # Keep [graph] if this block wrote it: the Entra ID user sync may use it. A
+    # hand-written [graph] stays where it is.
+    graph_lines=""
+    if has_block sharepoint && [[ -n "$graph_tenant" ]]; then
+      graph_lines=$(printf '[graph]\n# Shared with the Entra ID user sync.\ntenant_id = %s\nclient_id = %s\n\n' \
+        "$(toml "$graph_tenant")" "$(toml "$graph_client")")
+    fi
+    has_table sharepoint && ! has_block sharepoint && remove_table sharepoint
+    write_block sharepoint <<EOF
+$graph_lines
+[sharepoint]
+# Not set up: document files stay on this server. Run ./install.sh --configure
+# sharepoint (see docs/SHAREPOINT_SETUP.md).
+site_url = ""
+EOF
+    if [[ $was_sharepoint == yes ]] && ! custom_storage; then
+      write_storage_block local "$(toml_value storage clamav_addr)"
+    fi
+  fi
+fi
+
 # --- 7. Removed: Outlook calendar sync --------------------------------------------------
 # The Outlook calendar sync was removed (D-087). Tidy what an earlier install wrote:
 # the [graph_calendar] block or table, and its client secret file.
@@ -628,29 +782,18 @@ sidecar_url = ""
 EOF
   fi
 fi
-if needs clamav storage; then
+# Asked once; older installs answered it in the "clamav" block.
+if configuring clamav || { [[ -z "$(env_get PDMS_CLAMAV_DECIDED)" ]] && ! has_block clamav; }; then
   say "Virus scanning (optional)"
   note "Uploads can be scanned by ClamAV in an extra container (about 1 GB of memory)."
-  if has_table storage && ! has_block clamav; then
+  if custom_storage; then
     note "Your [storage] settings are custom; set clamav_addr = \"clamav:3310\" there yourself."
-    write_block clamav <<'EOF'
-# ClamAV: see [storage] clamav_addr.
-EOF
   else
     yes_no CLAMAV "Enable virus scanning?" n
-    if [[ $CLAMAV == yes ]]; then
-      write_block clamav <<'EOF'
-[storage]
-clamav_addr = "clamav:3310"
-EOF
-    else
-      write_block clamav <<'EOF'
-[storage]
-# Virus scanning off. Run ./install.sh --configure clamav to enable it.
-clamav_addr = ""
-EOF
-    fi
+    clamav_addr=""; [[ $CLAMAV == yes ]] && clamav_addr="clamav:3310"
+    write_storage_block "$(storage_backend)" "$clamav_addr"
   fi
+  env_set PDMS_CLAMAV_DECIDED yes
 fi
 
 # --- 9. first administrator (asked now; created after the build) -----------------------
@@ -756,7 +899,7 @@ fi
 cat <<EOF
 
    Settings: .env (ports, profiles), config/pdms.toml (application), secrets/ (keep private).
-   Change one part later: ./install.sh --configure sso|smtp|ocr|clamav|network|database-port|source|admin
+   Change one part later: ./install.sh --configure sso|smtp|sharepoint|ocr|clamav|network|database-port|source|admin
    Back up: deploy/backup/pdms-backup.sh (see docs/BACKUP.md). Check integrity: docker compose run --rm app verify-integrity
    Next steps and testing plan: docs/ROADMAP.md
 EOF

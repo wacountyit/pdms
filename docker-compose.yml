@@ -16,8 +16,10 @@
 #             `docker compose --profile ocr up -d` and set
 #             ocr.sidecar_url = "http://ocr:8080" in config/pdms.toml
 #
-# Files live in the `pdmsdata` volume (local storage backend). To use S3-compatible
-# object storage instead, set [storage] backend = "s3" in config/pdms.toml.
+# Files live in the `pdmsdata` volume (local storage backend). To keep document
+# files in SharePoint, run ./install.sh --configure sharepoint
+# (docs/SHAREPOINT_SETUP.md). For S3-compatible object storage, set
+# [storage] backend = "s3" in config/pdms.toml.
 
 name: pdms
 
@@ -32,10 +34,11 @@ x-pdms: &pdms
     PDMS_SECRET_KEY_FILE: /run/secrets/pdms_secret_key
     PDMS_AUTH__OIDC__CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
     PDMS_EMAIL__SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    PDMS_GRAPH__CERTIFICATE_FILE: /run/secrets/graph_certificate
   volumes:
     - ./config/pdms.toml:/etc/pdms/pdms.toml:ro
     - pdmsdata:/var/lib/pdms
-  secrets: [db_app_url, pdms_secret_key, oidc_client_secret, smtp_password]
+  secrets: [db_app_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_certificate]
 
 services:
   postgres:
@@ -63,7 +66,7 @@ services:
     environment:
       <<: *pdms-env
       PDMS_DATABASE__OWNER_URL_FILE: /run/secrets/db_owner_url
-    secrets: [db_app_url, db_owner_url, pdms_secret_key, oidc_client_secret, smtp_password]
+    secrets: [db_app_url, db_owner_url, pdms_secret_key, oidc_client_secret, smtp_password, graph_certificate]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -132,6 +135,9 @@ secrets:
   pdms_secret_key: { file: ./secrets/pdms_secret_key }
   oidc_client_secret: { file: ./secrets/oidc_client_secret }
   smtp_password: { file: ./secrets/smtp_password }
+  # The "PDMS Service" certificate and key (Entra ID user sync, SharePoint storage).
+  # An empty file means Microsoft Graph is not set up.
+  graph_certificate: { file: ./secrets/graph_certificate }
 
 volumes:
   pgdata:
