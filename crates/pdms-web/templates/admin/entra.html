@@ -73,4 +73,10 @@
   </table>
   </div>
 </section>
+{% if l.can_sharepoint %}
+<section class="panel" aria-labelledby="sp-access-h">
+  <div class="panel-head"><h2 id="sp-access-h">SharePoint folder access</h2></div>
+  <p>After each change to a department's membership, including the ones this sync makes, PDMS gives the department's synced staff read access on its SharePoint folder, and removes it when they leave. Status and anything that needs attention: <a href="/admin/sharepoint">Administration → SharePoint</a>.</p>
+</section>
+{% endif %}
 {% endblock %}

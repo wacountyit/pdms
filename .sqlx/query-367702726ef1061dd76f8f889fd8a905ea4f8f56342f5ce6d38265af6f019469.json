@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.name AS department, g.granted_to, g.roles\n           FROM sharepoint_foreign_grants g JOIN departments d ON d.id = g.department_id\n          ORDER BY d.name, g.granted_to",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "department",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "departments",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "granted_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_foreign_grants",
+            "name": "granted_to"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "roles",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_foreign_grants",
+            "name": "roles"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "367702726ef1061dd76f8f889fd8a905ea4f8f56342f5ce6d38265af6f019469"
+}

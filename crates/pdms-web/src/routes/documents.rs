@@ -890,6 +890,8 @@ pub type KeyDate = (String, String, bool);
 #[template(path = "documents/show.html")]
 struct ShowPage {
     l: Layout,
+    /// Files of this document flagged by the SharePoint change check.
+    sp_flagged: bool,
     visibility_options: Vec<(&'static str, &'static str, &'static str)>,
     can_set_visibility: bool,
     d: documents::Document,
@@ -1334,7 +1336,11 @@ pub async fn show(
         .filter(|c| !d.tags.iter().any(|t| t.id == c.0))
         .map(|c| c.1)
         .collect();
+    let sp_flagged = !pdms_core::sharepoint::status::document_flags(&core.db, id)
+        .await?
+        .is_empty();
     let page = ShowPage {
+        sp_flagged,
         free_tags,
         tag_options,
         visibility_options: visibility_options(),

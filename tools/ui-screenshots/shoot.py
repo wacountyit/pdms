@@ -94,6 +94,8 @@ DESKTOP_PAGES = [
     ("admin-ocr", "/admin/ocr"),
     # Added by plan P2 (Entra ID sync); a 404 here means P2 is not merged yet.
     ("admin-entra", "/admin/entra"),
+    # Added by plan P4 (SharePoint operations).
+    ("admin-sharepoint", "/admin/sharepoint"),
     ("error-404", "/documents/00000000-0000-0000-0000-000000000000"),
     ("source", "/source"),
     ("license", "/license"),

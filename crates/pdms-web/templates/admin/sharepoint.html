@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Document files are stored in SharePoint. PDMS compares every file with what it stored every few minutes, and gives each department's staff read access on its folder.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="/admin/sharepoint/access" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button">Update folder access now</button></form>
+    <form method="post" action="/admin/sharepoint/check" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button primary">Check for changes now</button></form>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+{% if !enabled %}<p class="flash flash-info" role="status">SharePoint storage is not turned on for this installation. See <code>docs/SHAREPOINT_SETUP.md</code>, then run <code>./install.sh --configure sharepoint</code>.</p>{% endif %}
+{% if !flagged.is_empty() %}<p class="flash flash-error" role="alert">{{ flagged.len() }} file{% if flagged.len() != 1 %}s{% endif %} changed outside PDMS need{% if flagged.len() == 1 %}s{% endif %} a decision. See "Files changed outside PDMS" below.</p>{% endif %}
+
+<section class="panel" aria-labelledby="runs-h">
+  <div class="panel-head"><h2 id="runs-h">Background work</h2></div>
+  {% if enabled %}
+  <dl class="facts">
+    <dt>Site</dt><dd><code>{{ site_url }}</code></dd>
+    <dt>PDMS Service app</dt><dd><code>{{ client_id }}</code></dd>
+  </dl>
+  {% endif %}
+  {% if runs.is_empty() %}<p class="empty">Nothing has run yet.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Background work</caption>
+    <thead><tr><th scope="col">Task</th><th scope="col">Last run</th><th scope="col">Problem</th></tr></thead>
+    <tbody>
+    {% for r in runs %}<tr><td>{{ r.label }}</td><td class="small">{{ r.last_run }}</td><td>{% if r.error.is_empty() %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">{{ r.error }}</span>{% endif %}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if !dead_jobs.is_empty() %}
+  <h3>Jobs that stopped after repeated failures</h3>
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Jobs that stopped after repeated failures</caption>
+    <thead><tr><th scope="col">Job</th><th scope="col">Count</th><th scope="col">Last error</th></tr></thead>
+    <tbody>{% for j in dead_jobs %}<tr><td><code>{{ j.kind }}</code></td><td>{{ j.count }}</td><td class="small">{% if let Some(e) = j.last_error %}{{ e }}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="flagged-h">
+  <div class="panel-head"><h2 id="flagged-h">Files changed outside PDMS</h2>{% if !flagged.is_empty() %}<span class="muted small">{{ flagged.len() }}</span>{% endif %}</div>
+  <p class="help"><strong>Restore original</strong> puts PDMS's recorded file back. <strong>Accept as new version</strong> keeps the change as a new version of the document (you need edit rights on it) and puts the earlier file back. <strong>Re-check</strong> compares the file again, for example after a site owner restored it from the recycle bin.</p>
+  {% if flagged.is_empty() %}<p class="empty">None. Every file matches what PDMS stored.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Files changed outside PDMS</caption>
+    <thead><tr><th scope="col">Document</th><th scope="col">Version</th><th scope="col">What happened</th><th scope="col">By</th><th scope="col">Noticed</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for f in flagged %}
+      <tr>
+        <td>{% if f.can_view %}<a href="/documents/{{ f.document_id }}">{{ f.external_id }}</a> {{ f.title }}<br><code class="small">{{ f.path }}</code>{% else %}A Restricted document <span class="muted small">(you cannot open it)</span>{% endif %}</td>
+        <td>v{{ f.version_no }}</td>
+        <td>{% if f.missing %}<span class="status status-critical">Deleted</span>{% else %}<span class="status status-warning">Edited</span>{% endif %}</td>
+        <td>{{ f.changed_by }}</td>
+        <td class="small">{{ f.changed_at }}</td>
+        <td>
+          {% if !f.missing %}
+          <form method="post" action="/admin/sharepoint/files/{{ f.version_id }}/restore" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small">Restore original<span class="visually-hidden"> of version {{ f.version_no }}</span></button></form>
+          <form method="post" action="/admin/sharepoint/files/{{ f.version_id }}/accept" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small">Accept as new version</button></form>
+          {% else %}<span class="small">Restore it from the site's recycle bin, then</span>{% endif %}
+          <form method="post" action="/admin/sharepoint/files/{{ f.version_id }}/recheck" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small">Re-check</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="stray-h">
+  <div class="panel-head"><h2 id="stray-h">Files PDMS does not track</h2>{% if !unexpected.is_empty() %}<span class="muted small">{{ unexpected.len() }}</span>{% endif %}</div>
+  <p class="help">Files added to the site some other way, listed ten minutes after they appear. PDMS never deletes them; a site owner can, after checking.</p>
+  {% if unexpected.is_empty() %}<p class="empty">None.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Files PDMS does not track</caption>
+    <thead><tr><th scope="col">File</th><th scope="col">Added by</th><th scope="col">First seen</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for u in unexpected %}
+      <tr><td><code>{{ u.path }}</code></td>
+      <td>{% if u.by_pdms %}PDMS (a save that did not finish; safe to delete){% else %}{{ u.created_by }}{% endif %}</td>
+      <td class="small">{{ u.first_seen }}</td>
+      <td><form method="post" action="/admin/sharepoint/unexpected/{{ u.item_id }}/dismiss" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small">Dismiss<span class="visually-hidden"> {{ u.name }}</span></button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="foreign-h">
+  <div class="panel-head"><h2 id="foreign-h">Other access on department folders</h2>{% if !foreign.is_empty() %}<span class="muted small">{{ foreign.len() }}</span>{% endif %}</div>
+  <p class="help">PDMS gives each department's staff read access on its folder. These permissions were added some other way; PDMS leaves them alone.</p>
+  {% if foreign.is_empty() %}<p class="empty">None.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Other access on department folders</caption>
+    <thead><tr><th scope="col">Department folder</th><th scope="col">Who</th><th scope="col">Access</th></tr></thead>
+    <tbody>
+    {% for g in foreign %}<tr><td>{{ g.department }}</td><td>{{ g.granted_to }}</td><td>{{ g.roles }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

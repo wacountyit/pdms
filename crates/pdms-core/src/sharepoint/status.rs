@@ -9,7 +9,7 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use pdms_audit::{AuditEvent, Category};
-use pdms_authz::role_keys;
+use pdms_authz::{Capability, Permission, role_keys};
 use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -239,4 +239,126 @@ pub async fn unexpected_files(db: &PgPool) -> CoreResult<Vec<UnexpectedFile>> {
     )
     .fetch_all(db)
     .await?)
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RunStatus {
+    pub name: String,
+    pub last_run: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DeadJob {
+    pub kind: String,
+    pub count: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FlaggedFile {
+    pub version_id: Uuid,
+    pub document_id: Uuid,
+    /// `None` when the viewer cannot open the document: then the panel shows
+    /// only "A Restricted document" and the version (the owner's answer for
+    /// P4, D-085), not even the ID.
+    pub external_id: Option<String>,
+    /// `None` when the viewer cannot open the document.
+    pub title: Option<String>,
+    /// The SharePoint path names the document, so it is hidden the same way.
+    pub path: Option<String>,
+    pub version_no: i32,
+    pub state: String,
+    pub changed_by: Option<String>,
+    pub changed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ForeignGrant {
+    pub department: String,
+    pub granted_to: String,
+    pub roles: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Panel {
+    pub enabled: bool,
+    pub site_url: String,
+    pub client_id: String,
+    pub runs: Vec<RunStatus>,
+    pub dead_jobs: Vec<DeadJob>,
+    pub flagged: Vec<FlaggedFile>,
+    pub unexpected: Vec<UnexpectedFile>,
+    pub foreign: Vec<ForeignGrant>,
+}
+
+/// Everything Administration → SharePoint shows (requires `ManageSharePoint`).
+pub async fn panel(core: &Core, ctx: &Ctx) -> CoreResult<Panel> {
+    ctx.require(Capability::ManageSharePoint)?;
+    let names = vec![
+        DELTA_CURSOR.to_owned(),
+        RECONCILE_CURSOR.to_owned(),
+        ENTRA_CURSOR.to_owned(),
+    ];
+    let runs = sqlx::query_as!(
+        RunStatus,
+        "SELECT name, last_run, last_error FROM sync_cursors WHERE name = ANY($1) ORDER BY name",
+        &names
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let dead_jobs = sqlx::query_as!(
+        DeadJob,
+        r#"SELECT kind, count(*) AS "count!", (array_agg(last_error ORDER BY updated_at DESC))[1] AS last_error
+             FROM jobs
+            WHERE status = 'dead' AND (kind LIKE 'sharepoint.%' OR kind LIKE 'directory.entra_sync%')
+            GROUP BY kind ORDER BY kind"#
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let rows = sqlx::query!(
+        "SELECT f.document_version_id, f.document_id, d.external_id, d.title, v.version_no, f.state,
+                f.changed_by, f.changed_at, f.last_known_path
+           FROM sharepoint_files f
+           JOIN document_versions v ON v.id = f.document_version_id
+           JOIN documents d ON d.id = f.document_id
+          WHERE f.state <> 'ok'
+          ORDER BY f.changed_at DESC NULLS LAST LIMIT 500"
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let mut flagged = Vec::with_capacity(rows.len());
+    for r in rows {
+        let visible =
+            crate::documents::access::can(core, ctx, r.document_id, Permission::View).await?;
+        flagged.push(FlaggedFile {
+            version_id: r.document_version_id,
+            document_id: r.document_id,
+            external_id: visible.then_some(r.external_id),
+            title: visible.then_some(r.title),
+            path: visible.then_some(r.last_known_path),
+            version_no: r.version_no,
+            state: r.state,
+            changed_by: r.changed_by,
+            changed_at: r.changed_at,
+        });
+    }
+    let foreign = sqlx::query_as!(
+        ForeignGrant,
+        "SELECT d.name AS department, g.granted_to, g.roles
+           FROM sharepoint_foreign_grants g JOIN departments d ON d.id = g.department_id
+          ORDER BY d.name, g.granted_to"
+    )
+    .fetch_all(&core.db)
+    .await?;
+    Ok(Panel {
+        enabled: core.sharepoint.is_some(),
+        site_url: core.config.sharepoint.site_url.clone(),
+        client_id: core.config.graph.client_id.clone(),
+        runs,
+        dead_jobs,
+        flagged,
+        unexpected: unexpected_files(&core.db).await?,
+        foreign,
+    })
 }

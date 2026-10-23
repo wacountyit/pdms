@@ -51,6 +51,7 @@ pub struct Layout {
     pub can_audit: bool,
     pub can_settings: bool,
     pub can_integrations: bool,
+    pub can_sharepoint: bool,
     /// Records request packages: records officers build them, auditors review them.
     pub can_exports: bool,
     pub unread: i64,
@@ -97,6 +98,8 @@ impl Layout {
             "/admin/retention"
         } else if self.can_integrations {
             "/admin/webhooks"
+        } else if self.can_sharepoint {
+            "/admin/sharepoint"
         } else {
             "/admin/tags"
         }
@@ -158,6 +161,9 @@ impl Layout {
         let mut integrations = Vec::new();
         if self.can_integrations {
             integrations.extend([link("webhooks", "Webhooks"), link("api", "API")]);
+        }
+        if self.can_sharepoint {
+            integrations.push(link("sharepoint", "SharePoint"));
         }
         let mut system = Vec::new();
         if self.can_settings {
@@ -224,6 +230,7 @@ impl Layout {
                 Capability::ManageRetention,
                 Capability::RestoreDeletedDocuments,
                 Capability::ManageIntegrations,
+                Capability::ManageSharePoint,
             ]
             .into_iter()
             .any(|c| user.can(c)),
@@ -235,6 +242,7 @@ impl Layout {
             can_audit: user.can(Capability::ViewAudit),
             can_settings: user.can(Capability::ManageSettings),
             can_integrations: user.can(Capability::ManageIntegrations),
+            can_sharepoint: user.can(Capability::ManageSharePoint),
             can_exports: user.can(Capability::BuildExportPackages)
                 || user.can(Capability::ViewAudit),
             unread: user.unread,

@@ -60,7 +60,7 @@ pub fn router(state: AppState) -> Router {
     }
     use routes::{
         admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
-        integrations, ops, schedule, workflow,
+        integrations, ops, schedule, sharepoint_admin, workflow,
     };
 
     let admin_routes = Router::new()
@@ -220,6 +220,25 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/webhooks/deliveries/{id}/redeliver",
             post(integrations::redeliver),
+        )
+        .route("/sharepoint", get(sharepoint_admin::page))
+        .route("/sharepoint/check", post(sharepoint_admin::check_now))
+        .route("/sharepoint/access", post(sharepoint_admin::update_access))
+        .route(
+            "/sharepoint/files/{version}/restore",
+            post(sharepoint_admin::restore),
+        )
+        .route(
+            "/sharepoint/files/{version}/accept",
+            post(sharepoint_admin::accept),
+        )
+        .route(
+            "/sharepoint/files/{version}/recheck",
+            post(sharepoint_admin::recheck),
+        )
+        .route(
+            "/sharepoint/unexpected/{item}/dismiss",
+            post(sharepoint_admin::dismiss),
         );
 
     let document_routes = Router::new()

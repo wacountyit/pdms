@@ -13,4 +13,5 @@ pub mod exports;
 pub mod integrations;
 pub mod ops;
 pub mod schedule;
+pub mod sharepoint_admin;
 pub mod workflow;

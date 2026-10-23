@@ -605,6 +605,14 @@ stay in `local_path`.
   stops with an error, the file is marked as changed, and
   `sharepoint.changed_outside` is written to the audit log. Restoring an
   earlier version copies its file into a new file.
+- **Administration → SharePoint** (administrators only) shows when the
+  change check and the folder-access run last ran and any problem, files
+  changed outside PDMS with their actions (**Restore original**, **Accept as
+  new version**, **Re-check**), files PDMS does not track (**Dismiss** takes
+  one off the list; PDMS never deletes it), and access on department folders
+  that PDMS did not grant. A document you cannot open is listed only as "A
+  Restricted document" and its version. People who can see a flagged
+  document see a notice on its page.
 - **Integrity check.** `verify-integrity` checks every SharePoint file
   through Microsoft Graph: present, the right size, and the QuickXorHash
   recorded at upload (`--skip-files` checks presence and size only). Add

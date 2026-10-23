@@ -3453,7 +3453,13 @@ git commit -m "integrity: check SharePoint files (metadata by default, --rehash-
   - routes: `GET /admin/sharepoint`, `POST /admin/sharepoint/check`, `POST /admin/sharepoint/access`, `POST /admin/sharepoint/files/{version}/{restore|accept|recheck}`, `POST /admin/sharepoint/unexpected/{item}/dismiss`. Each handler checks `ManageSharePoint` itself (they sit in `doc_admin_routes`);
   - `Layout.can_sharepoint`.
 
-- [ ] **Step 1: Write the failing web test.** Create `crates/pdms-web/tests/sharepoint_admin.rs`:
+> **As built (2026-10-23):**
+> - The page follows R2's admin page pattern (as the pre-flight says): `page-head` with the two buttons in `page-actions` ("Check for changes now" the only primary one), every section a `panel` with a `panel-head` and count, run status as a table with `status` badges, `table-wrap` tables with hidden captions, `p.empty` for empty lists, "not turned on" as `flash-info role="status"`, and a `flash-error role="alert"` when files need a decision. The handler calls `.admin_tab("sharepoint")`; the menu item is in the *Integrations* group of `Layout::admin_groups()`, not `base.html`. The Entra page section is a `panel`.
+> - Owner answer 5: `FlaggedFile.external_id` is `None` too for a document the viewer cannot open, and the page shows "A Restricted document (you cannot open it)" and the version only.
+> - Owner answer 6: the notice is a `p.flash.flash-info role="status"` inside `header.doc-head`, after `.doc-title-row`: "A file of this document was changed outside PDMS. Downloads of it are paused until an administrator checks it.", with a link to Administration → SharePoint for people who hold `ManageSharePoint`. `ShowPage` carries a `sp_flagged: bool`, not the list.
+> - `/admin/sharepoint` is added to `every_admin_page_uses_the_admin_pattern` and to `tools/ui-screenshots/shoot.py`; the page and the document page were checked in dark and light (no overflow, one `<h1>`, no console errors). ADMIN_GUIDE's "SharePoint storage" section describes the page.
+
+- [x] **Step 1: Write the failing web test.** Create `crates/pdms-web/tests/sharepoint_admin.rs`:
 
 ```rust
 #![allow(
@@ -3569,7 +3575,7 @@ async fn sharepoint_panel_is_for_administrators() {
 Run: `cargo test -p pdms-web --test sharepoint_admin`
 Expected: FAIL. `/admin/sharepoint` returns 404, and the document page has no notice.
 
-- [ ] **Step 2: The panel query.** Append to `crates/pdms-core/src/sharepoint/status.rs`, and change its `pdms_authz` import to `use pdms_authz::{Capability, Permission, role_keys};`:
+- [x] **Step 2: The panel query.** Append to `crates/pdms-core/src/sharepoint/status.rs`, and change its `pdms_authz` import to `use pdms_authz::{Capability, Permission, role_keys};`:
 
 ```rust
 #[derive(Clone, Debug, Serialize)]
@@ -3687,7 +3693,7 @@ pub async fn panel(core: &Core, ctx: &Ctx) -> CoreResult<Panel> {
 }
 ```
 
-- [ ] **Step 3: The page.** Create `crates/pdms-web/src/routes/sharepoint_admin.rs`:
+- [x] **Step 3: The page.** Create `crates/pdms-web/src/routes/sharepoint_admin.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -3957,7 +3963,7 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
 {% endblock %}
 ```
 
-- [ ] **Step 4: Wire it in.**
+- [x] **Step 4: Wire it in.**
 
 (a) `crates/pdms-web/src/routes/mod.rs`: add `pub mod sharepoint_admin;`.
 
@@ -4011,7 +4017,7 @@ In `crates/pdms-web/templates/documents/show.html`, directly before the line `  
   {% endif %}
 ```
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 ```bash
 cargo test -p pdms-web --test sharepoint_admin
@@ -4020,7 +4026,7 @@ cargo test -p pdms-web
 
 Expected: `sharepoint_panel_is_for_administrators ... ok`, and every `pdms-web` binary reports `test result: ok.`
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
