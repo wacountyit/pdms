@@ -10,6 +10,7 @@
 //! change is saved (spec §7.3).
 
 pub mod access;
+pub mod changes;
 mod files;
 mod folders;
 pub mod layout;
@@ -28,6 +29,7 @@ use crate::error::{CoreError, CoreResult};
 use crate::graph::GraphClient;
 
 pub use access::RECONCILE_JOB;
+pub use changes::DELTA_JOB;
 pub use files::{UploadTarget, UploadedFile};
 pub(crate) use files::{open, record_upload, spool_copy, upload_staged};
 pub use folders::{DocumentFolder, department_folder_id};

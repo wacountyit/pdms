@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "caveman@anthropic-plugin-directory": true,
+    "superpowers@anthropic-plugin-directory": true
+  }
+}

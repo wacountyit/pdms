@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT document_id AS \"document_id!\" FROM sharepoint_document_folders WHERE item_id = $1\n           UNION\n           SELECT f.document_id FROM sharepoint_document_folders f\n             JOIN sharepoint_department_folders d ON d.item_id = f.parent_item_id\n            WHERE d.item_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f8e4c31035771c23724d4a252cc44117e44ee844aa662d4ab0eff4917b511b89"
+}

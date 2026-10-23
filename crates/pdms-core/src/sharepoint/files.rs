@@ -12,7 +12,7 @@ use pdms_storage::{BlobHash, ByteStream};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::{PgConnection, PgPool};
+use sqlx::PgConnection;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
@@ -280,7 +280,7 @@ pub(crate) async fn open(
         .map_err(|e| unavailable(READ_UNAVAILABLE, e))?;
     Ok(verified(
         stream,
-        core.db.clone(),
+        core.clone(),
         document_id,
         f.item_id,
         expected,
@@ -294,7 +294,7 @@ struct Check {
     seen: u64,
     expected: BlobHash,
     size: u64,
-    db: PgPool,
+    core: Core,
     document_id: Uuid,
     item_id: String,
     done: bool,
@@ -302,7 +302,7 @@ struct Check {
 
 fn verified(
     inner: ByteStream,
-    db: PgPool,
+    core: Core,
     document_id: Uuid,
     item_id: String,
     expected: BlobHash,
@@ -314,7 +314,7 @@ fn verified(
         seen: 0,
         expected,
         size,
-        db,
+        core,
         document_id,
         item_id,
         done: false,
@@ -346,7 +346,14 @@ fn verified(
                     s.size,
                     s.expected.hex()
                 );
-                flag_changed(&s.db, s.document_id, &s.item_id, "download_check", &detail).await;
+                flag_changed(
+                    &s.core,
+                    s.document_id,
+                    &s.item_id,
+                    "download_check",
+                    &detail,
+                )
+                .await;
                 Some((
                     Err(std::io::Error::other(
                         "the file in SharePoint was changed outside PDMS; the download was stopped and an administrator was alerted",
@@ -358,11 +365,35 @@ fn verified(
     }))
 }
 
-/// Mark a SharePoint file as changed outside PDMS and audit it, in one
-/// transaction. Failures to record are logged; the caller has already refused
-/// the content.
+/// The `sharepoint.changed_outside` event, one shape for the download check
+/// and the change check (D-102; the owner's answer for P4): who changed the
+/// file goes into `detail`, never into the event's actor.
+pub(crate) fn changed_outside_event(
+    document_id: Uuid,
+    item_id: &str,
+    source: &str,
+    detail: &str,
+) -> AuditEvent {
+    AuditEvent::new(
+        Category::System,
+        "sharepoint.changed_outside",
+        Actor::system("sharepoint"),
+        "document",
+    )
+    .object(document_id, None)
+    .document(document_id)
+    .outcome(Outcome::Failure)
+    .context("source", source)
+    .context("item_id", item_id)
+    .context("detail", detail)
+}
+
+/// Mark a SharePoint file as changed outside PDMS, audit it and tell the
+/// administrators, in one transaction. Only the first time: a file already
+/// flagged is left as it is. Failures to record are logged; the caller has
+/// already refused the content.
 pub(crate) async fn flag_changed(
-    db: &PgPool,
+    core: &Core,
     document_id: Uuid,
     item_id: &str,
     source: &str,
@@ -370,31 +401,25 @@ pub(crate) async fn flag_changed(
 ) {
     tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PDMS's record");
     let r = async {
-        let mut tx = db.begin().await?;
-        sqlx::query!(
-            "UPDATE sharepoint_files SET state = 'changed_outside', checked_at = now() WHERE item_id = $1",
+        let mut tx = core.db.begin().await?;
+        let flagged = sqlx::query!(
+            "UPDATE sharepoint_files
+                SET state = 'changed_outside', checked_at = now(), changed_at = coalesce(changed_at, now())
+              WHERE item_id = $1 AND state <> 'changed_outside'",
             item_id
         )
         .execute(&mut *tx)
-        .await?;
-        pdms_audit::append(
-            &mut tx,
-            vec![
-                AuditEvent::new(
-                    Category::System,
-                    "sharepoint.changed_outside",
-                    Actor::system("sharepoint"),
-                    "document",
-                )
-                .object(document_id, None)
-                .document(document_id)
-                .outcome(Outcome::Failure)
-                .context("source", source)
-                .context("item_id", item_id)
-                .context("detail", detail),
-            ],
-        )
-        .await?;
+        .await?
+        .rows_affected();
+        if flagged > 0 {
+            super::status::notify_admins(&mut tx, core, super::status::outside_changes_notice(1))
+                .await?;
+            pdms_audit::append(
+                &mut tx,
+                vec![changed_outside_event(document_id, item_id, source, detail)],
+            )
+            .await?;
+        }
         tx.commit().await?;
         Ok::<(), CoreError>(())
     }

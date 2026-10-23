@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sharepoint_unexpected_items u USING sharepoint_files f WHERE f.item_id = u.item_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "9205747ddeeec516d01e2ec77ee4adc136714222afe54dc4a2d58fb50766b9de"
+}

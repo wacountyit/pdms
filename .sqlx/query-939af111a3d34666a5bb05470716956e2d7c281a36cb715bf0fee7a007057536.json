@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_files f\n                          SET state = 'ok', changed_by = NULL, changed_at = NULL, checked_at = now()\n                         FROM document_versions v, documents d\n                        WHERE f.document_version_id = $1 AND v.id = f.document_version_id AND d.id = v.document_id\n                    RETURNING v.version_no AS \"version_no!\", d.external_id AS \"external_id!\", d.title AS \"title!\",\n                              d.department_id AS \"department_id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version_no!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "external_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "department_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "department_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "939af111a3d34666a5bb05470716956e2d7c281a36cb715bf0fee7a007057536"
+}

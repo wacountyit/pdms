@@ -1,0 +1,86 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT item_id, name, path, created_by, by_pdms, first_seen FROM sharepoint_unexpected_items\n          WHERE dismissed_at IS NULL AND first_seen < now() - interval '10 minutes'\n          ORDER BY first_seen DESC LIMIT 500",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "item_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "by_pdms",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "by_pdms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "first_seen",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_unexpected_items",
+            "name": "first_seen"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "85232849217ab108e18fd1f1d08b24e2533d981b2ac7b1103fa7ff1cf3fbbfd0"
+}

@@ -126,7 +126,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110; the owner's answers recorded at the top of the plan). Phase A (Task 1: migration `0014`, `ManageSharePoint`, run records and admin notices): **Done**. Phase B (Tasks 2–3: department staff get read access on their `Departments/` folder; updated after membership changes, the Entra sync, and nightly): **Done**. Phases C (Task 4), D (Tasks 5–6), E (Task 7), F (Tasks 8–9): **Not started** | Phase C next (change detection) | 2026-10-23 |
+| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110; the owner's answers recorded at the top of the plan). Phase A (Task 1: migration `0014`, `ManageSharePoint`, run records and admin notices): **Done**. Phase B (Tasks 2–3: department staff get read access on their `Departments/` folder; updated after membership changes, the Entra sync, and nightly): **Done**. Phase C (Task 4: the change check reads SharePoint's change feed every few minutes, flags files edited or deleted there, lists files PDMS doesn't track, and tells administrators; a change first found by a download also reaches them): **Done**. Phases D (Tasks 5–6), E (Task 7), F (Tasks 8–9): **Not started** | Phase D next (resolving findings; `verify-integrity`) | 2026-10-23 |
 
 §0.5 lists what can start next.
 

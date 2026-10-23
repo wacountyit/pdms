@@ -7,9 +7,10 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use pdms_audit::{AuditEvent, Category};
 use pdms_authz::role_keys;
+use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
@@ -186,4 +187,56 @@ pub async fn report_failure(core: &Core, name: &str, err: &RunError) -> CoreResu
         tx.commit().await?;
     }
     Ok(())
+}
+
+/// The notice administrators get when files were changed or deleted
+/// directly in SharePoint. It names no document.
+pub(crate) fn outside_changes_notice(count: u32) -> Notice {
+    Notice {
+        subject: format!("SharePoint: {count} file(s) changed outside PDMS"),
+        body: "Someone edited or deleted files directly in the PDMS SharePoint site. \
+               Review them under Administration → SharePoint."
+            .into(),
+        link: "/admin/sharepoint".into(),
+        document_id: None,
+        appointment_id: None,
+        dedupe_key: format!("sharepoint-changes:{}", Uuid::now_v7()),
+    }
+}
+
+/// Unresolved SharePoint flags on one document's files: (version number, state).
+pub async fn document_flags(db: &PgPool, document_id: Uuid) -> CoreResult<Vec<(i32, String)>> {
+    Ok(sqlx::query!(
+        "SELECT v.version_no, f.state FROM sharepoint_files f
+           JOIN document_versions v ON v.id = f.document_version_id
+          WHERE f.document_id = $1 AND f.state <> 'ok' ORDER BY v.version_no",
+        document_id
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|r| (r.version_no, r.state))
+    .collect())
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UnexpectedFile {
+    pub item_id: String,
+    pub name: String,
+    pub path: String,
+    pub created_by: String,
+    pub by_pdms: bool,
+    pub first_seen: DateTime<Utc>,
+}
+
+/// Files nobody tracks, seen more than ten minutes ago and not dismissed.
+pub async fn unexpected_files(db: &PgPool) -> CoreResult<Vec<UnexpectedFile>> {
+    Ok(sqlx::query_as!(
+        UnexpectedFile,
+        "SELECT item_id, name, path, created_by, by_pdms, first_seen FROM sharepoint_unexpected_items
+          WHERE dismissed_at IS NULL AND first_seen < now() - interval '10 minutes'
+          ORDER BY first_seen DESC LIMIT 500"
+    )
+    .fetch_all(db)
+    .await?)
 }

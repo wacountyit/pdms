@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_files\n                SET state = 'changed_outside', checked_at = now(), changed_at = coalesce(changed_at, now())\n              WHERE item_id = $1 AND state <> 'changed_outside'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "24ea15d0303179d8bd9cbeff398b6050786c9bca44b3d04d3c49e65c25b232b3"
+}

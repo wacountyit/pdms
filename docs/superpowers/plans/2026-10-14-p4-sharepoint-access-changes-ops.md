@@ -1738,7 +1738,13 @@ git commit -m "sharepoint: update folder access after membership changes, the En
   - `status::{document_flags(db, document_id) -> CoreResult<Vec<(i32, String)>>, unexpected_files(db) -> CoreResult<Vec<UnexpectedFile>>, UnexpectedFile}`;
   - re-export `pdms_core::sharepoint::DELTA_JOB`.
 
-- [ ] **Step 1: Write the failing integration tests.** Append to `crates/pdms-core/tests/sharepoint_ops.rs`, and extend its imports with:
+> **As built (2026-10-23), following the owner's answer 3:**
+> - One audit shape: `files::changed_outside_event(document_id, item_id, source, detail)` (P3's: category system, outcome failure) is used by the download check (`source = "download_check"`) and by the change check (`"change_check"`, with "modified/deleted in SharePoint by …, version, path" in `detail`). The event names no title.
+> - `files::flag_changed` now takes `&Core` (the download stream carries a `Core`), flags a file only the first time (`state <> 'changed_outside'`), sets `changed_at`, and in the same transaction sends administrators the same notice as the change check (`status::outside_changes_notice`). Repeated downloads of a changed file are no longer audited each time.
+> - `Tracked` gains `changed_by`, and `observe` returns a new `Observation::Attribute` for a file a download already flagged: the change check records who changed it, with no second event or notice.
+> - Extra tests: the unit test `a_file_a_download_flagged_gets_its_author_without_a_second_alarm`, and `a_change_found_by_a_download_reaches_admins_once` in `tests/sharepoint_ops.rs`.
+
+- [x] **Step 1: Write the failing integration tests.** Append to `crates/pdms-core/tests/sharepoint_ops.rs`, and extend its imports with:
 
 ```rust
 use pdms_authz::Visibility;
@@ -1951,7 +1957,7 @@ async fn renamed_files_and_folders_get_pdms_layout_back() {
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: compile error `could not find changes in sharepoint`.
 
-- [ ] **Step 2: Implement `changes.rs` with its unit tests.** Create `crates/pdms-core/src/sharepoint/changes.rs`:
+- [x] **Step 2: Implement `changes.rs` with its unit tests.** Create `crates/pdms-core/src/sharepoint/changes.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2560,7 +2566,7 @@ mod tests {
 
 In `sharepoint/mod.rs`, add `pub mod changes;` and `pub use changes::DELTA_JOB;`.
 
-- [ ] **Step 3: Add the two status queries.** Append to `crates/pdms-core/src/sharepoint/status.rs` (and add `use chrono::DateTime;` and `use serde::Serialize;` to its imports):
+- [x] **Step 3: Add the two status queries.** Append to `crates/pdms-core/src/sharepoint/status.rs` (and add `use chrono::DateTime;` and `use serde::Serialize;` to its imports):
 
 ```rust
 /// Unresolved SharePoint flags on one document's files: (version number, state).
@@ -2601,7 +2607,7 @@ pub async fn unexpected_files(db: &PgPool) -> CoreResult<Vec<UnexpectedFile>> {
 }
 ```
 
-- [ ] **Step 4: Schedule the check.** Replace `crates/pdms-core/src/sharepoint/ops.rs` from `use super::access::{self, RECONCILE_JOB};` to the end with:
+- [x] **Step 4: Schedule the check.** Replace `crates/pdms-core/src/sharepoint/ops.rs` from `use super::access::{self, RECONCILE_JOB};` to the end with:
 
 ```rust
 use super::access::{self, RECONCILE_JOB};
@@ -2646,7 +2652,7 @@ pub fn register_ops_jobs(worker: Worker, core: &Core) -> Worker {
 }
 ```
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 ```bash
 cargo test -p pdms-core --lib sharepoint::changes
@@ -2655,7 +2661,7 @@ cargo test -p pdms-core --test sharepoint_ops
 
 Expected: six unit tests and every integration test `... ok`.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets

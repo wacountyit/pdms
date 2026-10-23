@@ -14,11 +14,12 @@ mod mock_graph;
 
 use common::*;
 use mock_graph::{MockGraph, certificate};
-use pdms_authz::{Permission, Scope, Subject};
+use pdms_authz::{Permission, Scope, Subject, Visibility};
 use pdms_core::config::StorageBackend;
+use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
 use pdms_core::graph::GraphError;
 use pdms_core::model::UserStatus;
-use pdms_core::sharepoint::{access, status};
+use pdms_core::sharepoint::{access, changes, status};
 use pdms_core::{Core, CoreError, acl, directory};
 use uuid::Uuid;
 
@@ -316,4 +317,325 @@ async fn membership_changes_queue_one_folder_access_run() {
         access::reconcile(&core).await.unwrap(),
         access::ReconcileReport::default()
     );
+}
+
+/// A document with one file in the mock SharePoint: (document, file version id, SharePoint item id).
+async fn stored_document(
+    core: &Core,
+    owner: Uuid,
+    dept: Uuid,
+    title: &str,
+    bytes: &[u8],
+) -> (Uuid, Uuid, String) {
+    let t = types::type_by_key(&core.db, "contract").await.unwrap().id;
+    let id = documents::create(
+        core,
+        &system(),
+        NewDocument {
+            metadata: MetadataInput {
+                title: title.into(),
+                document_type_id: t,
+                department_id: dept,
+                ..Default::default()
+            },
+            owner_id: owner,
+            status: DocumentStatus::Active,
+            tags: vec![],
+            file: Some(upload(core, "agreement.pdf", bytes).await),
+            note: String::new(),
+            visibility: Visibility::Department,
+        },
+    )
+    .await
+    .unwrap();
+    let (version, item): (Uuid, String) = sqlx::query_as(
+        "SELECT document_version_id, item_id FROM sharepoint_files WHERE document_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&core.db)
+    .await
+    .unwrap();
+    (id, version, item)
+}
+
+async fn file_state(core: &Core, version: Uuid) -> (String, Option<String>) {
+    sqlx::query_as("SELECT state, changed_by FROM sharepoint_files WHERE document_version_id = $1")
+        .bind(version)
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn outside_changes_are_flagged_and_admins_told() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let boss = admin(&core, "admin@county.example", None).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    let (fuel, fuel_v1, fuel_item) =
+        stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    let (_lease, lease_v1, lease_item) =
+        stored_document(&core, alice, roads, "Office Lease", &pdf("lease")).await;
+
+    // The first run reads everything; PDMS's own files and folders are not changes.
+    let first = changes::detect_changes(&core).await.unwrap();
+    assert_eq!(
+        (first.modified, first.missing, first.unexpected),
+        (0, 0, 0),
+        "{first:?}"
+    );
+
+    sp.human_edit(&fuel_item, &pdf("fuel, edited by hand"), "Pat Clerk");
+    sp.human_delete(&lease_item, "Pat Clerk");
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert_eq!((r.modified, r.missing), (1, 1), "{r:?}");
+    assert_eq!(
+        file_state(&core, fuel_v1).await,
+        (
+            "changed_outside".to_owned(),
+            Some("Pat Clerk <pat.clerk@county.example>".to_owned())
+        )
+    );
+    assert_eq!(file_state(&core, lease_v1).await.0, "missing");
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"sharepoint.changed_outside".to_owned())
+    );
+    assert_eq!(
+        in_app_notices(&core).await,
+        vec![(
+            boss,
+            "SharePoint: 2 file(s) changed outside PDMS".to_owned()
+        )]
+    );
+    assert_eq!(
+        status::document_flags(&core.db, fuel).await.unwrap(),
+        vec![(1, "changed_outside".to_owned())]
+    );
+
+    // Nothing new happened: no new flags, no new notice.
+    let quiet = changes::detect_changes(&core).await.unwrap();
+    assert_eq!((quiet.modified, quiet.missing), (0, 0));
+    assert_eq!(in_app_notices(&core).await.len(), 1);
+    assert_eq!(last_error(&core, status::DELTA_CURSOR).await, None);
+}
+
+#[tokio::test]
+async fn untracked_files_are_listed_after_ten_minutes_and_never_deleted() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+
+    let stray = sp.human_upload(
+        "Departments/Road and Bridge",
+        "notes.docx",
+        b"hand-made notes",
+        "Pat Clerk",
+    );
+    sp.app_upload(
+        "Departments/Road and Bridge",
+        "unfinished.pdf",
+        &pdf("orphan"),
+    );
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert_eq!(r.unexpected, 2, "{r:?}");
+    assert!(
+        status::unexpected_files(&core.db).await.unwrap().is_empty(),
+        "not shown for ten minutes"
+    );
+
+    sqlx::query(
+        "UPDATE sharepoint_unexpected_items SET first_seen = now() - interval '11 minutes'",
+    )
+    .execute(&core.db)
+    .await
+    .unwrap();
+    let mut seen: Vec<(String, String, bool)> = status::unexpected_files(&core.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|u| (u.path, u.created_by, u.by_pdms))
+        .collect();
+    seen.sort();
+    assert_eq!(
+        seen,
+        vec![
+            (
+                "Departments/Road and Bridge/notes.docx".into(),
+                "Pat Clerk <pat.clerk@county.example>".into(),
+                false
+            ),
+            (
+                "Departments/Road and Bridge/unfinished.pdf".into(),
+                "PDMS".into(),
+                true
+            ),
+        ]
+    );
+    assert!(
+        sp.item("Departments/Road and Bridge/notes.docx").is_some(),
+        "PDMS never deletes it"
+    );
+
+    // Deleted in SharePoint: forgotten.
+    sp.human_delete(&stray, "Pat Clerk");
+    changes::detect_changes(&core).await.unwrap();
+    assert_eq!(status::unexpected_files(&core.db).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn an_upload_in_progress_is_not_reported() {
+    let sp = MockGraph::start().await;
+    let (core, db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    let (_doc, _v, item) = stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    // The feed sees the file before its upload's transaction commits.
+    sqlx::query("UPDATE sharepoint_files SET item_id = 'not-yet-' || item_id WHERE item_id = $1")
+        .bind(&item)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    assert_eq!(changes::detect_changes(&core).await.unwrap().unexpected, 1);
+    // The transaction commits.
+    sqlx::query("UPDATE sharepoint_files SET item_id = $1 WHERE item_id = 'not-yet-' || $1")
+        .bind(&item)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    changes::detect_changes(&core).await.unwrap();
+    sqlx::query(
+        "UPDATE sharepoint_unexpected_items SET first_seen = now() - interval '11 minutes'",
+    )
+    .execute(&core.db)
+    .await
+    .unwrap();
+    assert!(status::unexpected_files(&core.db).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_expired_change_token_rereads_without_false_alarms() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+    sp.expire_delta();
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert!(r.resynced);
+    assert_eq!((r.modified, r.missing, r.unexpected), (0, 0, 0), "{r:?}");
+    assert_eq!(last_error(&core, status::DELTA_CURSOR).await, None);
+}
+
+#[tokio::test]
+async fn renamed_files_and_folders_get_pdms_layout_back() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    let (doc, _v, item) = stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+    sp.human_rename(&item, "renamed by hand.pdf", "Pat Clerk");
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert_eq!(
+        (r.mirrors, r.modified),
+        (1, 0),
+        "a rename is not a content change: {r:?}"
+    );
+    let folder: String = sqlx::query_scalar(
+        "SELECT item_id FROM sharepoint_document_folders WHERE document_id = $1",
+    )
+    .bind(doc)
+    .fetch_one(&core.db)
+    .await
+    .unwrap();
+    sp.human_rename(&folder, "Fuel (old)", "Pat Clerk");
+    assert_eq!(changes::detect_changes(&core).await.unwrap().mirrors, 1);
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM jobs WHERE kind = 'sharepoint.mirror_document' AND status = 'pending'
+           AND payload->>'document_id' = $1",
+    )
+    .bind(doc.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1, "one pending mirror job for the document");
+
+    // An area folder in the feed is not a change unless it was renamed.
+    let area = sp.item("Departments").unwrap().id;
+    sp.human_rename(&area, "Departments", "Pat Clerk");
+    assert_eq!(changes::detect_changes(&core).await.unwrap().mirrors, 0);
+    sp.human_rename(&area, "Departments (old)", "Pat Clerk");
+    assert_eq!(
+        changes::detect_changes(&core).await.unwrap().mirrors,
+        1,
+        "a renamed area folder queues a sweep"
+    );
+}
+
+async fn read_all(mut s: pdms_storage::ByteStream) -> Result<Vec<u8>, std::io::Error> {
+    use futures_util::StreamExt;
+    let mut out = Vec::new();
+    while let Some(c) = s.next().await {
+        out.extend_from_slice(&c?);
+    }
+    Ok(out)
+}
+
+#[tokio::test]
+async fn a_change_found_by_a_download_reaches_admins_once() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let boss = admin(&core, "admin@county.example", None).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    let (fuel, fuel_v1, fuel_item) =
+        stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+    sp.human_edit(&fuel_item, &pdf("fuel, edited by hand"), "Pat Clerk");
+
+    // A download finds it first: stopped, flagged, administrators told once.
+    let ctx = as_user(&core, alice).await;
+    for _ in 0..2 {
+        let dl = documents::open_file(&core, &ctx, fuel, None).await.unwrap();
+        assert!(
+            read_all(dl.stream).await.is_err(),
+            "the download must not complete"
+        );
+    }
+    assert_eq!(
+        file_state(&core, fuel_v1).await,
+        ("changed_outside".to_owned(), None)
+    );
+    assert_eq!(
+        in_app_notices(&core).await,
+        vec![(
+            boss,
+            "SharePoint: 1 file(s) changed outside PDMS".to_owned()
+        )]
+    );
+    let flagged = audit_actions(&core)
+        .await
+        .iter()
+        .filter(|a| *a == "sharepoint.changed_outside")
+        .count();
+    assert_eq!(flagged, 1, "audited once, not on every download");
+
+    // The change check then records who did it, without a second alarm.
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert_eq!((r.modified, r.missing), (0, 0), "{r:?}");
+    assert_eq!(
+        file_state(&core, fuel_v1).await,
+        (
+            "changed_outside".to_owned(),
+            Some("Pat Clerk <pat.clerk@county.example>".to_owned())
+        )
+    );
+    assert_eq!(in_app_notices(&core).await.len(), 1);
 }
