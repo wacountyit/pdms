@@ -423,7 +423,7 @@ pub async fn calendar_page(
     Query(q): Query<CalQuery>,
 ) -> AppResult<Html<String>> {
     let core = &state.core;
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let filter = q.filter(user.session.user_id);
     let agenda = q.view == "agenda";
     let first = NaiveDate::parse_from_str(&format!("{}-01", q.month), "%Y-%m-%d")
@@ -617,7 +617,7 @@ pub async fn create_feed(
         Ok((_, token)) => {
             let url = state
                 .core
-                .config
+                .config()
                 .server
                 .public_url
                 .join(&format!("ics/{token}.ics"))
@@ -1250,7 +1250,7 @@ pub async fn doc_schedule(
             )
         })
         .collect();
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let interval = doc
         .review_interval_months
         .or(doc.type_review_interval_months);

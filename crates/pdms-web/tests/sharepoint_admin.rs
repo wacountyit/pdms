@@ -24,9 +24,10 @@ async fn flagged_document(
     title: &str,
 ) -> (Uuid, Uuid) {
     let core = &app.core;
-    let mut w = pdms_storage::spool::SpoolWriter::create(&core.config.storage.spool_path, 1 << 20)
-        .await
-        .unwrap();
+    let mut w =
+        pdms_storage::spool::SpoolWriter::create(&core.config().storage.spool_path, 1 << 20)
+            .await
+            .unwrap();
     w.write(b"%PDF-1.4\n% agreement\n%%EOF\n").await.unwrap();
     let file = documents::files::Upload {
         file: w.finish().await.unwrap(),

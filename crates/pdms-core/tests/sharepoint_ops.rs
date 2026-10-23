@@ -93,7 +93,7 @@ async fn graph_sign_in_failures_reach_admins_once_an_hour() {
 /// A `Core` that stores document files in the mock SharePoint (as in P3's tests).
 async fn sp_core(sp: &MockGraph) -> (Core, pdms_testkit::TestDb) {
     let (core, db) = core().await;
-    let mut c = (*core.config).clone();
+    let mut c = (*core.config()).clone();
     c.graph = sp.config(certificate());
     c.storage.backend = StorageBackend::SharePoint;
     c.sharepoint.site_url = mock_graph::SITE_URL.into();

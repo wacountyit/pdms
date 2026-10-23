@@ -318,7 +318,7 @@ pub async fn enqueue_now(db: &PgPool) -> CoreResult<()> {
 /// Read the change feed since the last run and act on it (one run at a
 /// time). A no-op when SharePoint storage is off.
 pub async fn detect_changes(core: &Core) -> CoreResult<DeltaReport> {
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         return Ok(DeltaReport::default());
     }
     match run(core).await {
@@ -348,7 +348,7 @@ async fn documents_in_folder(db: &PgPool, item_id: &str) -> CoreResult<Vec<Uuid>
 async fn run(core: &Core) -> Result<DeltaReport, RunError> {
     let (graph, resolved) = status::parts(core).await?;
     let drive = resolved.drive_id.clone();
-    let client_id = core.config.graph.client_id.clone();
+    let client_id = core.config().graph.client_id.clone();
     let mut lock = core.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('pdms.sharepoint_delta'))")
         .execute(&mut *lock)

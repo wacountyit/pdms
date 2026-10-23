@@ -150,7 +150,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phases 1 (foundation) to 7 (records): **Not started** | Phase 1 next | 2026-10-23 |
+| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phase 1 (foundation: settings storage, the configuration file wins, encryption, live apply, worker rebuild, `pdms settings show`; migration `0015`): **Done**. Phases 2 (Microsoft 365 connection) to 7: **Not started** | Phase 2 next | 2026-10-23 |
 
 §0.5 lists what can start next.
 

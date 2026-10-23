@@ -114,7 +114,7 @@ type ApiResult<T> = Result<T, ApiError>;
 /// Authenticate every `/api/v1` request (except the OpenAPI document), rate
 /// limit it, and log it.
 pub async fn guard(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
-    if !state.core.config.api.enabled {
+    if !state.core.config().api.enabled {
         return ApiError(
             StatusCode::NOT_FOUND,
             "not_found",
@@ -521,7 +521,7 @@ pub struct AuditQuery {
 fn doc_url(state: &AppState, id: Uuid) -> String {
     state
         .core
-        .config
+        .config()
         .server
         .public_url
         .join(&format!("documents/{id}"))
@@ -1212,7 +1212,7 @@ pub async fn openapi_json(State(state): State<AppState>) -> Response {
     doc.servers = Some(vec![utoipa::openapi::Server::new(
         state
             .core
-            .config
+            .config()
             .server
             .public_url
             .as_str()
@@ -1276,12 +1276,12 @@ pub async fn docs_page(State(state): State<AppState>) -> Html<String> {
         org = esc(&state.org_name()),
         base = esc(state
             .core
-            .config
+            .config()
             .server
             .public_url
             .as_str()
             .trim_end_matches('/')),
-        rpm = state.core.config.api.requests_per_minute,
+        rpm = state.core.config().api.requests_per_minute,
     ))
 }
 

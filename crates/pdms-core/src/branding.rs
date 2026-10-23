@@ -159,7 +159,7 @@ pub async fn org_name(core: &Core) -> String {
     };
     match stored {
         Some(s) if !s.trim().is_empty() => s,
-        _ => core.config.org.name.clone(),
+        _ => core.config().org.name.clone(),
     }
 }
 

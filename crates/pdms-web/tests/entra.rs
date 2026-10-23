@@ -81,7 +81,7 @@ async fn the_status_panel_shows_the_certificate_thumbprint_and_last_run() {
             .pem,
     );
     let app = app_with(cfg).await;
-    let thumbprint = app.core.graph.as_ref().unwrap().thumbprint().to_owned();
+    let thumbprint = app.core.graph().as_ref().unwrap().thumbprint().to_owned();
     let summary = serde_json::json!({ "created": 3, "updated": 1, "departed": 0, "unmapped": 2 });
     sqlx::query(
         "INSERT INTO sync_cursors (name, last_run, last_summary) VALUES ('entra.users', now(), $1)",

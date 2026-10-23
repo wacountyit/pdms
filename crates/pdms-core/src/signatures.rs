@@ -292,7 +292,7 @@ pub async fn request(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()> {
     }
     let provider = &core.signatures;
     let url = core
-        .config
+        .config()
         .server
         .public_url
         .join(&format!("documents/{}", doc.id()))
@@ -379,7 +379,7 @@ pub async fn record_signed(core: &Core, ctx: &Ctx, id: Uuid, r: SignedRecord) ->
     if s.status == SignatureStatus::Signed {
         return Err(CoreError::validation("this signature is already recorded"));
     }
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let signed_on = r.signed_on.unwrap_or(today);
     if signed_on > today {
         return Err(CoreError::validation(

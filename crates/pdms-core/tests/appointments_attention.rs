@@ -24,7 +24,7 @@ async fn attention_lists_worst_first_and_respects_visibility() {
         .await
         .unwrap();
     let clerk = as_user(&core, clerk_id).await;
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
 
     let make = async |name: &str, seats: i32| {
         appointments::create_position(
@@ -123,7 +123,7 @@ async fn attention_boundaries_and_one_classification() {
         .await
         .unwrap();
     let clerk = as_user(&core, clerk_id).await;
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let d = |n: i64| today + Duration::days(n);
 
     // (name, term end, decision date)

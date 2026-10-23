@@ -27,7 +27,7 @@ use pdms_core::{Core, CoreError, Ctx, acl, directory, schedule};
 use uuid::Uuid;
 
 fn today(core: &Core) -> NaiveDate {
-    schedule::local_today(Utc::now(), core.config.timezone())
+    schedule::local_today(Utc::now(), core.config().timezone())
 }
 
 /// Mid-morning today in the organization's zone (inside the send window).
@@ -41,7 +41,7 @@ fn date(s: &str) -> Option<NaiveDate> {
 
 fn with_memory_mailer(core: &mut Core) -> MemoryMailer {
     let m = MemoryMailer::default();
-    core.mailer = Arc::new(m.clone());
+    core.set_mailer(Arc::new(m.clone()));
     m
 }
 
@@ -301,17 +301,17 @@ async fn due_docs(core: &Core, n: usize) -> (Uuid, Vec<Uuid>) {
 #[tokio::test]
 async fn notification_delivery_survives_a_worker_crash() {
     let (mut core, _db) = core().await;
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.worker.lease_seconds = 1;
     cfg.worker.poll_interval_ms = 20;
-    core.config = Arc::new(cfg);
+    core = Core::new(core.db.clone(), cfg).unwrap();
     // The first worker's mailer hangs, so it dies with sends in flight.
     let shared = MemoryMailer::default();
     let hanging = MemoryMailer {
         delay: Some(Duration::from_secs(30)),
         ..shared.clone()
     };
-    core.mailer = Arc::new(hanging);
+    core.set_mailer(Arc::new(hanging));
     let (_owner, ids) = due_docs(&core, 12).await;
 
     // Two planners at once must not duplicate anything.
@@ -338,7 +338,7 @@ async fn notification_delivery_survives_a_worker_crash() {
     );
 
     // Restart with a working mailer (sharing the record of sent mail).
-    core.mailer = Arc::new(shared.clone());
+    core.set_mailer(Arc::new(shared.clone()));
     tokio::time::sleep(Duration::from_millis(1100)).await; // leases expire
     let (tx2, rx2) = tokio::sync::watch::channel(false);
     let w2 = tokio::spawn(pdms_core::maintenance::worker(&core).run(rx2));

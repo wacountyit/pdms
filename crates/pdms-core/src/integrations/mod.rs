@@ -151,7 +151,7 @@ impl IntegrationProvider for LogProvider {
 
 /// The providers enabled in configuration.
 pub fn providers(core: &Core) -> Vec<Arc<dyn IntegrationProvider>> {
-    core.config
+    core.config()
         .integrations
         .providers
         .iter()
@@ -235,7 +235,7 @@ async fn document_summary(core: &Core, id: Uuid) -> CoreResult<Option<EventDocum
     .await?;
     Ok(r.map(|r| EventDocument {
         url: core
-            .config
+            .config()
             .server
             .public_url
             .join(&format!("documents/{}", r.id))
@@ -281,7 +281,7 @@ pub async fn dispatch(core: &Core) -> CoreResult<DispatchReport> {
     report.entries_read = rows.len();
 
     let mut targets = Vec::new();
-    if core.config.integrations.webhooks_enabled {
+    if core.config().integrations.webhooks_enabled {
         let hooks = sqlx::query!(
             "SELECT w.id, w.name, w.events, w.acts_as_user_id FROM webhooks w
                JOIN users u ON u.id = w.acts_as_user_id
@@ -299,7 +299,7 @@ pub async fn dispatch(core: &Core) -> CoreResult<DispatchReport> {
         }
     }
     let providers = providers(core);
-    let attempts = core.config.integrations.webhook_max_attempts.max(1);
+    let attempts = core.config().integrations.webhook_max_attempts.max(1);
     let org = crate::branding::org_name(core).await;
 
     for r in rows

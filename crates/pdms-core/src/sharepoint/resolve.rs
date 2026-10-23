@@ -34,7 +34,7 @@ fn graph_err(e: impl std::fmt::Display) -> CoreError {
 }
 
 /// `status::parts`, with a SharePoint outage shown as "unavailable".
-async fn parts(core: &Core) -> CoreResult<&GraphClient> {
+async fn parts(core: &Core) -> CoreResult<GraphClient> {
     match status::parts(core).await {
         Ok((graph, _)) => Ok(graph),
         Err(e @ CoreError::Conflict(_)) => Err(e),
@@ -228,7 +228,7 @@ pub async fn restore_original(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreR
         "missing" => return Err(CoreError::Conflict(MISSING_HELP.into())),
         _ => return Err(CoreError::Conflict(ALREADY_OK.into())),
     }
-    let vid = put_back(graph, &f)
+    let vid = put_back(&graph, &f)
         .await?
         .ok_or_else(|| CoreError::Conflict(NO_ORIGINAL.into()))?;
     mark_ok(core, ctx, &f, "restored_original", Some(&vid), None).await
@@ -247,8 +247,8 @@ pub async fn accept_as_new_version(core: &Core, ctx: &Ctx, version_id: Uuid) -> 
         _ => return Err(CoreError::Conflict(ALREADY_OK.into())),
     }
     let mut w = SpoolWriter::create(
-        &core.config.storage.spool_path,
-        core.config.storage.max_upload_bytes,
+        &core.config().storage.spool_path,
+        core.config().storage.max_upload_bytes,
     )
     .await
     .map_err(CoreError::internal)?;
@@ -288,7 +288,7 @@ pub async fn accept_as_new_version(core: &Core, ctx: &Ctx, version_id: Uuid) -> 
     )
     .await?;
     // The earlier file is part of the record too: put it back if SharePoint still has it.
-    match put_back(graph, &f).await? {
+    match put_back(&graph, &f).await? {
         Some(vid) => {
             mark_ok(
                 core,
@@ -319,7 +319,7 @@ pub async fn recheck(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreResult<boo
     ctx.require(Capability::ManageSharePoint)?;
     let graph = parts(core).await?;
     let f = load(core, version_id).await?;
-    let item = current(graph, &f).await?;
+    let item = current(&graph, &f).await?;
     let ok = item.as_ref().is_some_and(|i| matches_record(&f, i));
     if ok && f.state != "ok" {
         mark_ok(core, ctx, &f, "matches_on_recheck", None, None).await?;

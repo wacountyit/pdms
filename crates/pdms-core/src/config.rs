@@ -77,6 +77,10 @@ pub struct Config {
     /// Entra user sync and, later, SharePoint storage.
     pub graph: GraphConfig,
     pub entra_sync: EntraSyncConfig,
+    /// Settings (S1 registry keys) set in the file or the environment: they
+    /// win over values stored in the database, and show read-only.
+    #[serde(skip)]
+    pub locked: std::collections::BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -706,6 +710,37 @@ pub enum ConfigError {
     Invalid(String),
 }
 
+/// The S1 settings set in the TOML file or the environment. A `PDMS_*_FILE`
+/// variable counts only when its file isn't empty, so the always-mounted,
+/// empty Docker secrets don't lock anything.
+fn locked_settings(
+    path: Option<&Path>,
+    env: &[(String, String)],
+) -> std::collections::BTreeSet<String> {
+    let file = path
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            Path::new(DEFAULT_CONFIG_PATH)
+                .exists()
+                .then(|| PathBuf::from(DEFAULT_CONFIG_PATH))
+        })
+        .map(|p| Figment::from(Toml::file_exact(p)));
+    crate::settings::SETTINGS
+        .iter()
+        .filter(|d| {
+            let in_file = file.as_ref().is_some_and(|f| f.find_value(d.key).is_ok());
+            let var = crate::settings::env_name(d.key);
+            let in_env = env.iter().any(|(k, v)| {
+                (k == &var && !v.is_empty())
+                    || (k == &format!("{var}_FILE")
+                        && std::fs::read_to_string(v).is_ok_and(|t| !t.trim().is_empty()))
+            });
+            in_file || in_env
+        })
+        .map(|d| d.key.to_owned())
+        .collect()
+}
+
 impl Config {
     /// Load from `path` (or `PDMS_CONFIG`, or `config/pdms.toml` if present) and the environment.
     pub fn load(path: Option<&Path>) -> Result<Config, ConfigError> {
@@ -753,7 +788,8 @@ impl Config {
             fig = fig.merge(Serialized::default(&key, value));
         }
 
-        let config: Config = fig.extract().map_err(|e| ConfigError::Load(Box::new(e)))?;
+        let mut config: Config = fig.extract().map_err(|e| ConfigError::Load(Box::new(e)))?;
+        config.locked = locked_settings(path.as_deref(), env);
         config.validate()?;
         Ok(config)
     }
@@ -951,6 +987,39 @@ mod tests {
         std::fs::write(&f, "[org]\nname = \"Example Org PDMS\"\n").unwrap();
         let c = Config::load_from(Some(&f), &[]).unwrap();
         assert_eq!(c.org.name, "Example Org PDMS");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn settings_set_in_the_file_or_environment_are_locked() {
+        let dir = std::env::temp_dir().join(format!("pdms-cfg-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("pdms.toml");
+        std::fs::write(&f, "[email]\nsmtp_host = \"mail.example.org\"\n").unwrap();
+        let empty = dir.join("empty");
+        std::fs::write(&empty, "\n").unwrap();
+        let full = dir.join("full");
+        std::fs::write(&full, "secret\n").unwrap();
+        let c = Config::load_from(
+            Some(&f),
+            &env(&[
+                ("PDMS_EMAIL__FROM", "pdms@example.org"),
+                ("PDMS_EMAIL__SMTP_PASSWORD_FILE", full.to_str().unwrap()),
+                (
+                    "PDMS_AUTH__OIDC__CLIENT_SECRET_FILE",
+                    empty.to_str().unwrap(),
+                ),
+            ]),
+        )
+        .unwrap();
+        for key in ["email.smtp_host", "email.from", "email.smtp_password"] {
+            assert!(c.locked.contains(key), "{key} should be locked");
+        }
+        assert!(
+            !c.locked.contains("auth.oidc.client_secret"),
+            "an empty secret file locks nothing"
+        );
+        assert!(!c.locked.contains("email.smtp_port"), "not set anywhere");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

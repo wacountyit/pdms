@@ -242,7 +242,7 @@ pub async fn dashboard(
     filter: &DocumentFilter,
     days: i64,
 ) -> CoreResult<Dashboard> {
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let docs = search::all(core, ctx, filter, Permission::View, MAX_DOCUMENTS).await?;
     let end = today + Duration::days(days.clamp(1, 3660));
     let mut upcoming = expand(&docs, today, end, false);
@@ -420,7 +420,7 @@ pub async fn render_feed(
     let principal = crate::auth::principal::load(&core.db, f.user_id).await?;
     let ctx = Ctx::user(principal, &f.display_name, AuthMethod::IcsToken, client);
     let now = Utc::now();
-    let today = schedule::local_today(now, core.config.timezone());
+    let today = schedule::local_today(now, core.config().timezone());
     let filter = DocumentFilter {
         department_id: f.department_id,
         owner_id: f.only_owned.then_some(f.user_id),
@@ -444,7 +444,7 @@ pub async fn render_feed(
         "-//PDMS//Document dates//EN",
     ));
     let host = core
-        .config
+        .config()
         .server
         .public_url
         .host_str()
@@ -453,7 +453,7 @@ pub async fn render_feed(
     let window_start = today - Duration::days(365);
     for d in &docs {
         let url = core
-            .config
+            .config()
             .server
             .public_url
             .join(&format!("documents/{}", d.id))
@@ -511,7 +511,7 @@ pub async fn render_feed(
     .await?;
     for e in &appts {
         let url = core
-            .config
+            .config()
             .server
             .public_url
             .join(&format!("positions/{}", e.position_id))

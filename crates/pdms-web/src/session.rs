@@ -92,7 +92,7 @@ impl FromRequestParts<AppState> for CurrentUser {
             .get(state.cookies.session)
             .map(|c| c.value().to_owned())
             .ok_or_else(login)?;
-        let s = session::lookup(&state.core.db, &state.core.config.auth, &token)
+        let s = session::lookup(&state.core.db, &state.core.config().auth, &token)
             .await?
             .ok_or_else(login)?;
         let principal = principal::load(&state.core.db, s.user_id).await?;

@@ -36,9 +36,9 @@ struct World {
 }
 
 async fn world() -> World {
-    let (mut core, db) = core().await;
+    let (core, db) = core().await;
     let mail = MemoryMailer::default();
-    core.mailer = Arc::new(mail.clone());
+    core.set_mailer(Arc::new(mail.clone()));
     let (owner, dept) = user_in_new_department(&core, "OPS", "owner@x.org").await;
     let mk = |email: &'static str, dept: Option<Uuid>| {
         let core = core.clone();

@@ -123,8 +123,8 @@ pub async fn refresh_document(
 }
 
 async fn plan_inner(core: &Core, now: DateTime<Utc>, only: Option<Uuid>) -> CoreResult<PlanReport> {
-    let cfg = &core.config.notifications;
-    let tz = core.config.timezone();
+    let cfg = &core.config().notifications;
+    let tz = core.config().timezone();
     let today = schedule::local_today(now, tz);
     let mut report = PlanReport::default();
     let ctx = scheduler();
@@ -234,12 +234,12 @@ pub async fn refresh_appointment(
     let mut report = PlanReport::default();
     if !schedule::send_window_open(
         now,
-        core.config.timezone(),
-        core.config.notifications.send_hour,
+        core.config().timezone(),
+        core.config().notifications.send_hour,
     ) {
         return Ok(report);
     }
-    let today = schedule::local_today(now, core.config.timezone());
+    let today = schedule::local_today(now, core.config().timezone());
     let all_rules = rules::load_all(&core.db).await?;
     plan_appointments(core, &all_rules, today, Some(appointment_id), &mut report).await?;
     Ok(report)
@@ -276,7 +276,7 @@ async fn plan_appointments(
     )
     .fetch_all(&core.db)
     .await?;
-    let stale = core.config.notifications.stale_after_days;
+    let stale = core.config().notifications.stale_after_days;
     for a in &appts {
         let target = Target {
             document_id: None,

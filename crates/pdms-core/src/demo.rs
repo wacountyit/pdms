@@ -184,10 +184,10 @@ pub async fn seed(core: &Core) -> CoreResult<DemoSummary> {
 
     // Apply date-driven statuses and create reminders now rather than at the
     // worker's next run (as if it were 10:00 locally, inside the send window).
-    let today = crate::schedule::local_today(chrono::Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(chrono::Utc::now(), core.config().timezone());
     let morning = today
         .and_hms_opt(10, 0, 0)
-        .and_then(|t| t.and_local_timezone(core.config.timezone()).earliest())
+        .and_then(|t| t.and_local_timezone(core.config().timezone()).earliest())
         .map_or_else(chrono::Utc::now, |t| t.with_timezone(&chrono::Utc));
     crate::notifications::plan(core, morning).await?;
 
@@ -242,9 +242,10 @@ async fn spool(
     name: &str,
     bytes: &[u8],
 ) -> CoreResult<crate::documents::files::Upload> {
-    let mut w = pdms_storage::spool::SpoolWriter::create(&core.config.storage.spool_path, u64::MAX)
-        .await
-        .map_err(crate::CoreError::internal)?;
+    let mut w =
+        pdms_storage::spool::SpoolWriter::create(&core.config().storage.spool_path, u64::MAX)
+            .await
+            .map_err(crate::CoreError::internal)?;
     w.write(bytes).await.map_err(crate::CoreError::internal)?;
     Ok(crate::documents::files::Upload {
         file: w.finish().await.map_err(crate::CoreError::internal)?,
@@ -270,7 +271,7 @@ async fn seed_documents(
     };
 
     let db = &core.db;
-    let today = crate::schedule::local_today(chrono::Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(chrono::Utc::now(), core.config().timezone());
     let rel = |days: i64| Some(today + chrono::Duration::days(days));
     let ty = |key: &'static str| async move { types::type_by_key(db, key).await.map(|t| t.id) };
     let (contract, agreement, policy, other) = (
@@ -534,7 +535,7 @@ async fn seed_workflow(
         .get("OPS")
         .copied()
         .ok_or(crate::CoreError::NotFound)?;
-    let today = crate::schedule::local_today(chrono::Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(chrono::Utc::now(), core.config().timezone());
     let alice = as_demo(core, users, "alice@example.org").await?;
     let gus = as_demo(core, users, "gus@example.org").await?;
 
@@ -666,7 +667,7 @@ async fn seed_appointments(
 
     let dept = |c: &str| depts.get(c).copied().ok_or(crate::CoreError::NotFound);
     let user = |e: &str| users.get(e).copied().ok_or(crate::CoreError::NotFound);
-    let today = crate::schedule::local_today(chrono::Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(chrono::Utc::now(), core.config().timezone());
     let rel = |days: i64| today + chrono::Duration::days(days);
     let frank = user("frank@example.org")?;
 

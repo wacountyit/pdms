@@ -66,7 +66,7 @@ async fn update_validates_normalizes_and_audits() {
     assert_eq!(branding::org_name(&core).await, "[County Name]");
 
     branding::update(&core, &sys, "", "").await.unwrap();
-    assert_eq!(branding::org_name(&core).await, core.config.org.name);
+    assert_eq!(branding::org_name(&core).await, core.config().org.name);
     assert_eq!(branding::load(&core.db).await.unwrap().accent, None);
 
     let long = "x".repeat(121);
@@ -168,7 +168,7 @@ async fn reset_clears_everything() {
     let b = branding::load(&core.db).await.unwrap();
     assert_eq!(b, branding::Branding::default());
     assert_eq!(b.accent_or_default(), branding::DEFAULT_ACCENT);
-    assert_eq!(branding::org_name(&core).await, core.config.org.name);
+    assert_eq!(branding::org_name(&core).await, core.config().org.name);
     assert_eq!(
         audit_actions(&core).await.last().map(String::as_str),
         Some("branding.reset")

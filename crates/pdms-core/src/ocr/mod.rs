@@ -188,7 +188,7 @@ impl Extracted {
 }
 
 async fn read_text(core: &Core, path: &Path, media_type: &str) -> CoreResult<Extracted> {
-    let ocr = core.ocr.clone();
+    let ocr = core.ocr().clone();
     let run_ocr = |ocr: Arc<dyn OcrProvider>| async move {
         match ocr.ocr(path, media_type).await {
             Ok(t) => Ok(Extracted::text("ocr", t)),
@@ -198,7 +198,7 @@ async fn read_text(core: &Core, path: &Path, media_type: &str) -> CoreResult<Ext
     };
     Ok(match text::kind(media_type) {
         text::Kind::Pdf => match text::pdf(path).await {
-            Ok(t) if text::meaningful_chars(&t) >= core.config.ocr.min_text_chars => {
+            Ok(t) if text::meaningful_chars(&t) >= core.config().ocr.min_text_chars => {
                 Extracted::text("pdf_text", t)
             }
             Ok(t) => match ocr {
@@ -234,7 +234,7 @@ pub async fn extract(
     version_no: i32,
     force: bool,
 ) -> CoreResult<()> {
-    if !core.config.ocr.text_extraction {
+    if !core.config().ocr.text_extraction {
         return Ok(());
     }
     if !force {
@@ -296,12 +296,12 @@ pub async fn extract(
             },
             true,
         ),
-        _ if u64::try_from(v.size_bytes).unwrap_or(u64::MAX) > core.config.ocr.max_bytes => (
+        _ if u64::try_from(v.size_bytes).unwrap_or(u64::MAX) > core.config().ocr.max_bytes => (
             Extracted::unsupported("the file is larger than the text extraction limit"),
             false,
         ),
         _ => {
-            let dir = core.config.storage.spool_path.clone();
+            let dir = core.config().storage.spool_path.clone();
             tokio::fs::create_dir_all(&dir)
                 .await
                 .map_err(CoreError::internal)?;
@@ -333,7 +333,7 @@ pub async fn extract(
     };
 
     let mut suggestions = Vec::new();
-    if result.status == "done" && core.config.ocr.suggest_dates && !reused {
+    if result.status == "done" && core.config().ocr.suggest_dates && !reused {
         let current = sqlx::query!(
             "SELECT execution_date, effective_date, renewal_date, expiration_date, next_review_date,
                     review_interval_months FROM documents WHERE id = $1",

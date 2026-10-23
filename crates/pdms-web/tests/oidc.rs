@@ -58,7 +58,7 @@ async fn mock_idp(claims: serde_json::Value) -> (ContainerAsync<GenericImage>, S
 async fn serve(core: Core, issuer: &str) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let mut config = (*core.config).clone();
+    let mut config = (*core.config()).clone();
     config.server.public_url = format!("http://{addr}").parse().unwrap();
     config.auth.oidc.enabled = true;
     config.auth.oidc.issuer_url = issuer.to_owned();

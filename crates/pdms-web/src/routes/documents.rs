@@ -504,7 +504,7 @@ pub async fn list(
             current: true,
         });
     }
-    let today = pdms_core::schedule::local_today(Utc::now(), state.core.config.timezone());
+    let today = pdms_core::schedule::local_today(Utc::now(), state.core.config().timezone());
     let first = (results.page - 1) * results.per_page + 1;
     let showing = if results.total == 0 {
         "Showing 0 of 0".to_owned()
@@ -633,7 +633,7 @@ async fn tag_choices(
     state: &AppState,
     user: &CurrentUser,
 ) -> AppResult<(bool, Vec<(Uuid, String, String)>)> {
-    let free = state.core.config.documents.free_form_tags || user.can(Capability::ManageTags);
+    let free = state.core.config().documents.free_form_tags || user.can(Capability::ManageTags);
     let curated = tags::list(&state.core.db)
         .await?
         .into_iter()
@@ -705,7 +705,7 @@ async fn render_new(
         departments,
         form,
         error,
-        max_upload_mb: state.core.config.storage.max_upload_bytes / (1024 * 1024),
+        max_upload_mb: state.core.config().storage.max_upload_bytes / (1024 * 1024),
         visibility_options: visibility_options(),
         free_tags,
         curated: curated.into_iter().map(|t| (t.1, t.2)).collect(),
@@ -1421,7 +1421,7 @@ pub async fn show(
             d.created_by_name.clone().unwrap_or_else(|| "System".into())
         ),
         updated: fmt_time(state.tz, d.updated_at),
-        max_upload_mb: core.config.storage.max_upload_bytes / (1024 * 1024),
+        max_upload_mb: core.config().storage.max_upload_bytes / (1024 * 1024),
         open_tasks: sched.open_tasks.iter().map(&task_row).collect(),
         task_history: sched.history.iter().map(&task_row).collect(),
         missed_count: sched.missed.len(),

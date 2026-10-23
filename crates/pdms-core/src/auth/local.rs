@@ -74,7 +74,7 @@ pub async fn login(
     totp_code: &str,
     client: &ClientInfo,
 ) -> Result<LoginSuccess, LoginError> {
-    let cfg = &core.config.auth.local;
+    let cfg = &core.config().auth.local;
     let identifier = identifier.trim();
     let failed = |user_id: Option<Uuid>, display: Option<String>, reason: LoginFailure| {
         AuditEvent::new(
@@ -243,7 +243,7 @@ pub async fn login(
     .map_err(CoreError::from)?;
     let token = session::create(
         &mut tx,
-        &core.config.auth,
+        &core.config().auth,
         user.id,
         AuthMethod::Local,
         client,

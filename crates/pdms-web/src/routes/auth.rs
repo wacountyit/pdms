@@ -66,7 +66,7 @@ pub fn session_cookie(state: &AppState, token: String) -> Cookie<'static> {
         .secure(state.secure())
         .same_site(SameSite::Lax)
         .max_age(time_duration(
-            state.core.config.auth.session_absolute_hours * 3600,
+            state.core.config().auth.session_absolute_hours * 3600,
         ))
         .build()
 }
@@ -131,8 +131,8 @@ fn render_login(
         csrf: &cookie.csrf,
         next: &next,
         next_encoded: url::form_urlencoded::byte_serialize(next.as_bytes()).collect(),
-        local_enabled: state.core.config.auth.local.enabled,
-        totp_required: state.core.config.auth.local.require_totp,
+        local_enabled: state.core.config().auth.local.enabled,
+        totp_required: state.core.config().auth.local.require_totp,
         error,
         notice,
     };
@@ -150,7 +150,7 @@ pub async fn login_page(
     let next = q.next.unwrap_or_else(|| "/".into());
     // Already signed in? Go straight on.
     if let Some(token) = plain.get(state.cookies.session)
-        && session::lookup(&state.core.db, &state.core.config.auth, token.value())
+        && session::lookup(&state.core.db, &state.core.config().auth, token.value())
             .await?
             .is_some()
     {
@@ -207,7 +207,7 @@ pub async fn login_local(
             // One message for every reason, so nothing reveals which part was wrong.
             let msg = if reason == LoginFailure::Disabled {
                 "Emergency sign-in is disabled."
-            } else if state.core.config.auth.local.require_totp {
+            } else if state.core.config().auth.local.require_totp {
                 "Username, password, or authenticator code is incorrect."
             } else {
                 "Username or password is incorrect."

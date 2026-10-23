@@ -78,7 +78,7 @@ pub async fn ingest(
             return Err(reject(core, ctx, document, upload, "file_type", e.to_string()).await);
         }
     };
-    let scan = match &core.scanner {
+    let scan = match &core.scanner() {
         None => "not_scanned",
         Some(s) => match s.scan(&upload.file.path).await {
             Ok(ScanVerdict::Clean) => "clean",
@@ -89,7 +89,7 @@ pub async fn ingest(
             }
             Err(e @ (ScanError::Unavailable(_) | ScanError::Scanner(_))) => {
                 tracing::error!(error = %e, "virus scan failed");
-                if core.config.storage.clamav_required {
+                if core.config().storage.clamav_required {
                     let msg = "Virus scanning is unavailable, so the file was not accepted. Try again later.".to_owned();
                     return Err(
                         reject(core, ctx, document, upload, "scanner_unavailable", msg).await,

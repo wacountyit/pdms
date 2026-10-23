@@ -105,7 +105,7 @@ fn cursor_key(select: &str, include_guests: bool) -> String {
 }
 
 fn require_enabled(core: &Core) -> CoreResult<()> {
-    if core.config.entra_sync.enabled {
+    if core.config().entra_sync.enabled {
         Ok(())
     } else {
         Err(CoreError::validation(
@@ -125,8 +125,8 @@ fn entra_issuer(config: &Config) -> CoreResult<String> {
     Ok(issuer.to_owned())
 }
 
-fn graph(core: &Core) -> CoreResult<&GraphClient> {
-    core.graph.as_ref().ok_or_else(|| {
+fn graph(core: &Core) -> CoreResult<GraphClient> {
+    core.graph().ok_or_else(|| {
         CoreError::validation(
             "Microsoft Graph is not configured ([graph] tenant_id, client_id, certificate)",
         )
@@ -186,7 +186,7 @@ async fn run_inner(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<SyncReport>
     // depart SSO accounts.
     require_enabled(core)?;
     let graph = graph(core)?;
-    let issuer = entra_issuer(&core.config)?;
+    let issuer = entra_issuer(&core.config())?;
     let mut lock = core.db.begin().await?;
     let got = sqlx::query_scalar!(
         r#"SELECT pg_try_advisory_xact_lock($1) AS "got!""#,
@@ -199,7 +199,7 @@ async fn run_inner(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<SyncReport>
             "a directory sync is already running".into(),
         ));
     }
-    let result = sync_all(core, ctx, graph, &issuer, full).await;
+    let result = sync_all(core, ctx, &graph, &issuer, full).await;
     if let Err(e) = &result {
         record_failure(&core.db, &e.to_string()).await?;
     }
@@ -219,9 +219,10 @@ async fn sync_all(
     let started = sqlx::query_scalar!(r#"SELECT now() AS "now!""#)
         .fetch_one(&core.db)
         .await?;
-    let attribute = core.config.entra_sync.attribute.as_str();
+    let config = core.config();
+    let attribute = config.entra_sync.attribute.as_str();
     let select = select_list(attribute);
-    let key = cursor_key(&select, core.config.entra_sync.include_guests);
+    let key = cursor_key(&select, config.entra_sync.include_guests);
     let initial = format!("/users/delta?$select={select}");
     let saved = if full {
         None
@@ -483,8 +484,9 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
         .hyphenated()
         .to_string();
     let graph = graph(core)?;
-    let issuer = entra_issuer(&core.config)?;
-    let attribute = core.config.entra_sync.attribute.as_str();
+    let config = core.config();
+    let issuer = entra_issuer(&config)?;
+    let attribute = config.entra_sync.attribute.as_str();
     let path = format!("/users/{oid}?$select={}", select_list(attribute));
     let v: Value = match graph.get(&path).await {
         Ok(v) => v,
@@ -527,7 +529,7 @@ async fn apply(
     .fetch_optional(&core.db)
     .await?;
 
-    let leaving = u.removed || !u.enabled || (u.guest && !core.config.entra_sync.include_guests);
+    let leaving = u.removed || !u.enabled || (u.guest && !core.config().entra_sync.include_guests);
     if leaving {
         if let Some(e) = existing.as_ref()
             && e.status == UserStatus::Active
@@ -818,14 +820,14 @@ pub async fn request_sync(core: &Core, ctx: &Ctx, full: bool) -> CoreResult<()> 
 /// Queue today's run once the local time is past `[entra_sync] run_at`.
 /// The idempotency key makes it once per local date, across workers.
 pub async fn schedule_daily(core: &Core, now: DateTime<Utc>) -> CoreResult<bool> {
-    let cfg = &core.config.entra_sync;
+    let cfg = &core.config().entra_sync;
     let Some(at) = cfg.run_at_time() else {
         return Ok(false);
     };
     if !cfg.enabled {
         return Ok(false);
     }
-    let local = now.with_timezone(&core.config.timezone());
+    let local = now.with_timezone(&core.config().timezone());
     if local.time() < at {
         return Ok(false);
     }
@@ -842,7 +844,7 @@ pub async fn schedule_daily(core: &Core, now: DateTime<Utc>) -> CoreResult<bool>
 /// Worker handler for [`SYNC_JOB`]. A run already in progress is not an
 /// error, nor is a run queued before the sync was turned off (not retried).
 pub async fn run_job(core: &Core, payload: &Value) -> Result<(), String> {
-    if !core.config.entra_sync.enabled {
+    if !core.config().entra_sync.enabled {
         tracing::info!("Entra sync is turned off; the queued run was skipped");
         return Ok(());
     }

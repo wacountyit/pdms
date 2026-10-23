@@ -133,7 +133,7 @@ async fn check_sharepoint(
     if rows.is_empty() {
         return Ok(0);
     }
-    let Some(graph) = core.graph.as_ref() else {
+    let Some(graph) = core.graph() else {
         out.push(Problem {
             kind: "sharepoint_file",
             subject: "SharePoint".into(),

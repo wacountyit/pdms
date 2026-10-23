@@ -89,8 +89,7 @@ pub(crate) async fn upload_staged(
     ext: &str,
 ) -> CoreResult<UploadedFile> {
     let sp = core
-        .sharepoint
-        .as_ref()
+        .sharepoint()
         .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
     let run = async {
         let r = sp.resolved().await?;
@@ -252,8 +251,7 @@ pub(crate) async fn open(
     size: u64,
 ) -> CoreResult<ByteStream> {
     let sp = core
-        .sharepoint
-        .as_ref()
+        .sharepoint()
         .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
     let f = sqlx::query!(
         "SELECT sf.drive_id, sf.item_id FROM sharepoint_files sf
@@ -439,7 +437,7 @@ pub(crate) async fn spool_copy(
     size: u64,
 ) -> CoreResult<SpooledFile> {
     let mut stream = open(core, document_id, version_no, expected, size).await?;
-    let mut w = SpoolWriter::create(&core.config.storage.spool_path, size.max(1))
+    let mut w = SpoolWriter::create(&core.config().storage.spool_path, size.max(1))
         .await
         .map_err(CoreError::internal)?;
     while let Some(chunk) = stream.next().await {

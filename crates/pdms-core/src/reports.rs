@@ -210,7 +210,7 @@ pub async fn run(core: &Core, ctx: &Ctx, key: &str, p: &ReportParams) -> CoreRes
     if let Some(cap) = info.requires {
         ctx.require(cap)?;
     }
-    let tz = core.config.timezone();
+    let tz = core.config().timezone();
     let today = schedule::local_today(Utc::now(), tz);
     let days = p.days.unwrap_or(90).clamp(1, 3660);
     let from = p.from.unwrap_or(today - Duration::days(30));

@@ -94,13 +94,12 @@ impl From<RunError> for CoreError {
 }
 
 /// The Graph client and the resolved library, when SharePoint storage is on.
-pub(crate) async fn parts(core: &Core) -> CoreResult<(&GraphClient, &Resolved)> {
-    let sp: &SharePoint = core
-        .sharepoint
-        .as_ref()
+pub(crate) async fn parts(core: &Core) -> CoreResult<(GraphClient, Resolved)> {
+    let sp: SharePoint = core
+        .sharepoint()
         .ok_or_else(|| CoreError::Conflict("SharePoint storage is not turned on.".into()))?;
-    let resolved = sp.resolved().await?;
-    Ok((sp.graph(), resolved))
+    let resolved = sp.resolved().await?.clone();
+    Ok((sp.graph().clone(), resolved))
 }
 
 /// Record a successful run; `delta_link` replaces the stored link when given.
@@ -352,9 +351,9 @@ pub async fn panel(core: &Core, ctx: &Ctx) -> CoreResult<Panel> {
     .fetch_all(&core.db)
     .await?;
     Ok(Panel {
-        enabled: core.sharepoint.is_some(),
-        site_url: core.config.sharepoint.site_url.clone(),
-        client_id: core.config.graph.client_id.clone(),
+        enabled: core.sharepoint().is_some(),
+        site_url: core.config().sharepoint.site_url.clone(),
+        client_id: core.config().graph.client_id.clone(),
         runs,
         dead_jobs,
         flagged,

@@ -30,6 +30,17 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum SettingsCommand {
+    /// Every setting, its effective value (secrets only as set or not set),
+    /// and where it comes from: the configuration file, Administration (the
+    /// database), or the default.
+    Show {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Run the web server.
     Serve {
@@ -109,6 +120,11 @@ enum Command {
     },
     /// Validate configuration and print it with secrets redacted.
     CheckConfig,
+    /// The settings managed in Administration (S1).
+    Settings {
+        #[command(subcommand)]
+        command: SettingsCommand,
+    },
     /// Exit 0 if the local server answers /healthz (for container health checks).
     Healthcheck {
         #[arg(long, default_value = "127.0.0.1:8080")]
@@ -167,6 +183,12 @@ async fn main() -> ExitCode {
 async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
     match command {
         Command::GenSecret | Command::Healthcheck { .. } | Command::GenGraphCert { .. } => {}
+        Command::Settings {
+            command: SettingsCommand::Show { json },
+        } => {
+            let core = connect(config).await?;
+            settings_show(&core, json).await?;
+        }
         Command::CheckConfig => {
             config.master_key().context("secret_key")?;
             println!("{config:#?}");
@@ -187,7 +209,8 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
             let core = connect(config).await?;
             let (tx, rx) = watch::channel(false);
             tokio::spawn(shutdown_signal(tx));
-            pdms_core::maintenance::worker(&core).run(rx).await;
+            let settings = pdms_core::settings::watch(core.clone());
+            pdms_core::maintenance::run_worker(core, rx, settings).await;
         }
         Command::CreateAdmin {
             email,
@@ -350,7 +373,7 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
             for (email, note) in summary.users {
                 println!("  {email:<22} {note}");
             }
-            if core.config.auth.local.require_totp {
+            if core.config().auth.local.require_totp {
                 println!(
                     "\nNote: auth.local.require_totp is on, so demo users cannot sign in with a password alone."
                 );
@@ -377,6 +400,36 @@ async fn healthcheck(addr: SocketAddr) -> ExitCode {
     }
 }
 
+async fn settings_show(core: &Core, json: bool) -> anyhow::Result<()> {
+    use pdms_core::settings::{self, Kind};
+    let sources = settings::sources(core).await?;
+    let config = core.config();
+    let mut rows = Vec::new();
+    for d in settings::SETTINGS {
+        let value = settings::get(&config, d.key)?;
+        let shown = if d.kind == Kind::Secret {
+            let set = value.as_str().is_some_and(|s| !s.is_empty());
+            serde_json::Value::String(if set { "set" } else { "not set" }.into())
+        } else {
+            value
+        };
+        let source = sources.get(d.key).map_or("default", |s| s.as_str());
+        rows.push((d.key, shown, source));
+    }
+    if json {
+        let out: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|(k, v, s)| serde_json::json!({"key": k, "value": v, "source": s}))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        for (k, v, s) in rows {
+            println!("{k:<36} {:<40} {s}", v.to_string());
+        }
+    }
+    Ok(())
+}
+
 async fn connect(config: Config) -> anyhow::Result<Core> {
     let core = Core::connect(config).await?;
     let pending = pdms_core::db::pending_migrations(&core.db).await?;
@@ -384,6 +437,11 @@ async fn connect(config: Config) -> anyhow::Result<Core> {
         bail!(
             "database schema is out of date (pending migrations {pending:?}); run `pdms migrate` first"
         );
+    }
+    // The settings stored in Administration (S1). If they can't be applied,
+    // start with the configuration file's and say why.
+    if let Err(e) = core.reload().await {
+        tracing::error!(error = %e, "the settings stored in Administration can't be applied; using the configuration file's");
     }
     Ok(core)
 }
@@ -399,7 +457,7 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
         None
     };
     let core = connect(config).await?;
-    let cfg = core.config.clone();
+    let cfg = core.config().clone();
     if cfg.org.source_url.trim().is_empty() {
         tracing::warn!(
             "org.source_url is not set: the AGPL-3.0 requires offering users the source code; \
@@ -437,8 +495,15 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
     };
 
     let (tx, rx) = watch::channel(false);
-    let worker =
-        with_worker.then(|| tokio::spawn(pdms_core::maintenance::worker(&core).run(rx.clone())));
+    // Settings changed in Administration apply to this process at once (S1).
+    let settings = pdms_core::settings::watch(core.clone());
+    let worker = with_worker.then(|| {
+        tokio::spawn(pdms_core::maintenance::run_worker(
+            core.clone(),
+            rx.clone(),
+            settings.clone(),
+        ))
+    });
 
     let state = pdms_web::AppState::new(core, oidc, metrics);
     state.reload_branding().await;
@@ -617,7 +682,7 @@ async fn create_admin(
         directory::assign_role(&core.db, &ctx, user_id, admin_role, None).await?;
     }
 
-    let uri = totp::provisioning_uri(&secret, &core.config.org.name, email)?;
+    let uri = totp::provisioning_uri(&secret, &core.config().org.name, email)?;
     println!("\nAdministrator ready: {email}");
     if let Some(username) = username {
         println!("Sign in with username {username} (or the email address).");

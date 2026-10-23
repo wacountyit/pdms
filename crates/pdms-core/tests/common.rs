@@ -64,9 +64,10 @@ pub async fn as_user(core: &Core, user: Uuid) -> Ctx {
 
 /// Spool bytes as if they had been uploaded.
 pub async fn upload(core: &Core, name: &str, bytes: &[u8]) -> pdms_core::documents::files::Upload {
-    let mut w = pdms_storage::spool::SpoolWriter::create(&core.config.storage.spool_path, 1 << 30)
-        .await
-        .unwrap();
+    let mut w =
+        pdms_storage::spool::SpoolWriter::create(&core.config().storage.spool_path, 1 << 30)
+            .await
+            .unwrap();
     w.write(bytes).await.unwrap();
     pdms_core::documents::files::Upload {
         file: w.finish().await.unwrap(),

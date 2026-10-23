@@ -56,7 +56,7 @@ pub async fn client_info(State(state): State<AppState>, mut req: Request, next: 
     let headers = req.headers();
     let xff = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok());
     let info = ClientInfo {
-        ip: resolve_client_ip(peer, xff, &state.core.config.server.trusted_proxies),
+        ip: resolve_client_ip(peer, xff, &state.core.config().server.trusted_proxies),
         user_agent: headers
             .get(header::USER_AGENT)
             .and_then(|v| v.to_str().ok())
@@ -204,7 +204,7 @@ pub async fn csrf_guard(State(state): State<AppState>, req: Request, next: Next)
             if !is_form {
                 return AppError::Csrf.into_response();
             }
-            let limit = state.core.config.server.max_body_bytes;
+            let limit = state.core.config().server.max_body_bytes;
             let (parts, body) = req.into_parts();
             let Ok(collected) = http_body_util::Limited::new(body, limit).collect().await else {
                 return StatusCode::PAYLOAD_TOO_LARGE.into_response();

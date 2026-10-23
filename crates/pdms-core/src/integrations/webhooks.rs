@@ -78,7 +78,7 @@ fn check(core: &Core, s: &mut WebhookSpec) -> CoreResult<()> {
         url::Url::parse(s.url.trim()).map_err(|_| CoreError::validation("enter a valid URL"))?;
     match url.scheme() {
         "https" => {}
-        "http" if core.config.integrations.allow_http_webhooks => {}
+        "http" if core.config().integrations.allow_http_webhooks => {}
         _ => {
             return Err(CoreError::validation(
                 "webhook URLs must use https (plain http only when allow_http_webhooks is set)",
@@ -286,7 +286,7 @@ pub async fn redeliver(core: &Core, ctx: &Ctx, delivery_id: Uuid) -> CoreResult<
             serde_json::json!({ "delivery_id": delivery_id }),
         )
         .idempotency_key(format!("outbound:{delivery_id}:{}", Uuid::now_v7()))
-        .max_attempts(core.config.integrations.webhook_max_attempts),
+        .max_attempts(core.config().integrations.webhook_max_attempts),
     )
     .await?;
     pdms_audit::append(
@@ -442,7 +442,7 @@ async fn deliver_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResu
         )
         .await;
     };
-    if !active || !core.config.integrations.webhooks_enabled {
+    if !active || !core.config().integrations.webhooks_enabled {
         return finish(
             core,
             delivery_id,
@@ -461,7 +461,7 @@ async fn deliver_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResu
     let ts = Utc::now().timestamp();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(
-            core.config.integrations.webhook_timeout_seconds,
+            core.config().integrations.webhook_timeout_seconds,
         ))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("PDMS-Webhooks/1")

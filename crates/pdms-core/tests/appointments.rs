@@ -27,7 +27,7 @@ use pdms_core::{Core, CoreError, directory, schedule};
 use uuid::Uuid;
 
 fn today(core: &Core) -> NaiveDate {
-    schedule::local_today(Utc::now(), core.config.timezone())
+    schedule::local_today(Utc::now(), core.config().timezone())
 }
 
 fn morning(core: &Core) -> DateTime<Utc> {
@@ -46,9 +46,9 @@ struct World {
 }
 
 async fn world() -> World {
-    let (mut core, db) = core().await;
+    let (core, db) = core().await;
     let mail = MemoryMailer::default();
-    core.mailer = Arc::new(mail.clone());
+    core.set_mailer(Arc::new(mail.clone()));
     let (manager, dept) = user_in_new_department(&core, "BOARDS", "manager@x.org").await;
     let member = directory::create_user(&core.db, &system(), "Member", "member@x.org", Some(dept))
         .await

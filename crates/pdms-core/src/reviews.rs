@@ -187,7 +187,7 @@ pub async fn complete(core: &Core, ctx: &Ctx, task_id: Uuid, c: Completion) -> C
         return Err(CoreError::validation("this task is already finished"));
     }
     let now = Utc::now();
-    let today = schedule::local_today(now, core.config.timezone());
+    let today = schedule::local_today(now, core.config().timezone());
     let completed_on = c.completed_on.unwrap_or(today);
     if completed_on > today {
         return Err(CoreError::validation(

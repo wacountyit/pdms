@@ -77,7 +77,7 @@ pub fn syslog_line(app: &str, host: &str, action: &str, denied: bool, body: &str
 
 /// Forward everything new. Returns how many entries were sent.
 pub async fn forward(core: &Core) -> CoreResult<usize> {
-    let cfg = &core.config.audit_forward;
+    let cfg = &core.config().audit_forward;
     if cfg.target == AuditForwardTarget::None {
         return Ok(0);
     }
@@ -111,7 +111,7 @@ pub async fn forward(core: &Core) -> CoreResult<usize> {
                     .await
                     .map_err(|e| CoreError::internal(format!("syslog socket: {e}")))?;
                 let host = core
-                    .config
+                    .config()
                     .server
                     .public_url
                     .host_str()

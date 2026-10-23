@@ -20,6 +20,7 @@ pub struct Keys {
     cookie: [u8; 64],
     totp: [u8; 32],
     integrations: [u8; 32],
+    settings: [u8; 32],
 }
 
 impl std::fmt::Debug for Keys {
@@ -43,16 +44,19 @@ impl Keys {
         let mut cookie = [0u8; 64];
         let mut totp = [0u8; 32];
         let mut integrations = [0u8; 32];
+        let mut settings = [0u8; 32];
         // Output lengths are far below the HKDF limit, so expand cannot fail.
         let _ = hk.expand(b"csrf", &mut csrf);
         let _ = hk.expand(b"cookie", &mut cookie);
         let _ = hk.expand(b"totp-secret-encryption", &mut totp);
         let _ = hk.expand(b"integration-secret-encryption", &mut integrations);
+        let _ = hk.expand(b"settings-secret-encryption", &mut settings);
         Keys {
             csrf,
             cookie,
             totp,
             integrations,
+            settings,
         }
     }
 
@@ -106,6 +110,16 @@ impl Keys {
         secret: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
         encrypt(&self.integrations, secret, id.as_bytes())
+    }
+
+    /// Encrypt a secret setting (S1), bound to its key so a ciphertext can't
+    /// be moved to another setting.
+    pub fn encrypt_setting(&self, key: &str, secret: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        encrypt(&self.settings, secret, key.as_bytes())
+    }
+
+    pub fn decrypt_setting(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        decrypt(&self.settings, data, key.as_bytes())
     }
 
     pub fn decrypt_integration_secret(

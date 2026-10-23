@@ -328,7 +328,7 @@ async fn build_overview(
         Some(12) => 12,
         _ => 6,
     };
-    let today = pdms_core::schedule::local_today(Utc::now(), core.config.timezone());
+    let today = pdms_core::schedule::local_today(Utc::now(), core.config().timezone());
 
     // Everything the viewer can see: the source of the department options and
     // of the type and department counts.

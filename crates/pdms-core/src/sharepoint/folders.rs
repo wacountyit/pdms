@@ -55,8 +55,7 @@ pub async fn department_folder_id(
     department_id: Uuid,
 ) -> CoreResult<String> {
     let sp = core
-        .sharepoint
-        .as_ref()
+        .sharepoint()
         .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
     let r = sp.resolved().await?;
     let dept = sqlx::query!(
@@ -242,8 +241,7 @@ pub(super) async fn document_folder(
         }
     }
     let sp = core
-        .sharepoint
-        .as_ref()
+        .sharepoint()
         .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
     let r = sp.resolved().await?;
     let parent = department_folder_id(core, spot.area, spot.department_id).await?;

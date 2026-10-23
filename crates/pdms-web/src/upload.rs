@@ -71,8 +71,8 @@ pub async fn read(
             if form.file.is_some() {
                 return Err(AppError::BadRequest("only one file per upload".into()));
             }
-            let limit = state.core.config.storage.max_upload_bytes;
-            let mut w = SpoolWriter::create(&state.core.config.storage.spool_path, limit)
+            let limit = state.core.config().storage.max_upload_bytes;
+            let mut w = SpoolWriter::create(&state.core.config().storage.spool_path, limit)
                 .await
                 .map_err(|e| AppError::Core(CoreError::internal(e)))?;
             let mut any = false;

@@ -139,7 +139,7 @@ fn clean(body: &str) -> CoreResult<String> {
 }
 
 fn base_permission(core: &Core) -> Permission {
-    if core.config.comments.viewers_can_comment {
+    if core.config().comments.viewers_can_comment {
         Permission::View
     } else {
         Permission::Edit

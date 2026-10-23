@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
     let (core, db) = core().await;
-    let mut config = (*core.config).clone();
+    let mut config = (*core.config()).clone();
     f(&mut config);
     (Core::new(core.db.clone(), config).unwrap(), db)
 }
@@ -52,7 +52,7 @@ async fn new_department(core: &Core, code: &str, name: &str) -> Uuid {
 async fn first_use_creates_the_area_folders_and_columns() {
     let sp = MockGraph::start().await;
     let (core, _db) = sp_core(&sp).await;
-    let handle = core.sharepoint.clone().expect("sharepoint backend");
+    let handle = core.sharepoint().clone().expect("sharepoint backend");
     let r = handle.resolved().await.unwrap();
     assert_eq!(
         sp.names(""),
@@ -72,7 +72,8 @@ async fn first_use_creates_the_area_folders_and_columns() {
     }
     // Another process finds everything instead of creating duplicates.
     let other =
-        sharepoint::SharePoint::new(core.graph.clone().unwrap(), &core.config.sharepoint).unwrap();
+        sharepoint::SharePoint::new(core.graph().clone().unwrap(), &core.config().sharepoint)
+            .unwrap();
     let r2 = other.resolved().await.unwrap();
     assert_eq!(r2.departments_id, r.departments_id);
     assert!(!r2.county_wide_created);
@@ -82,7 +83,7 @@ async fn first_use_creates_the_area_folders_and_columns() {
 #[tokio::test]
 async fn the_sharepoint_backend_needs_the_graph_section() {
     let (core, _db) = core().await;
-    let mut config = (*core.config).clone();
+    let mut config = (*core.config()).clone();
     config.storage.backend = StorageBackend::SharePoint;
     config.sharepoint.site_url = mock_graph::SITE_URL.into();
     let Err(err) = Core::new(core.db.clone(), config) else {
@@ -407,7 +408,7 @@ async fn upload_failure_saves_nothing() {
     let (core, _db) = sp_core(&sp).await;
     let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
     let ctx = as_user(&core, alice).await;
-    core.sharepoint.clone().unwrap().resolved().await.unwrap();
+    core.sharepoint().clone().unwrap().resolved().await.unwrap();
     let before = document_count(&core).await;
     sp.fail("POST /drives/drive-1/items/");
     let err = try_new_doc(

@@ -812,7 +812,7 @@ async fn next_date_column_shows_overdue_and_labels() {
 // ---------------------------------------------------------------------------
 
 fn local_today(app: &App) -> chrono::NaiveDate {
-    pdms_core::schedule::local_today(chrono::Utc::now(), app.core.config.timezone())
+    pdms_core::schedule::local_today(chrono::Utc::now(), app.core.config().timezone())
 }
 
 /// Run the planner as of this morning: date-driven statuses and review tasks.

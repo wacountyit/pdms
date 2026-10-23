@@ -77,8 +77,8 @@ pub async fn my_tokens(
         l: Layout::new(&state, &user, flash, "Your account", "account"),
         tokens: tokens.into_iter().map(|t| token_row(&state, t)).collect(),
         scopes: api_tokens::SCOPES.to_vec(),
-        max_days: state.core.config.api.max_token_days,
-        enabled: state.core.config.api.enabled,
+        max_days: state.core.config().api.max_token_days,
+        enabled: state.core.config().api.enabled,
         departments: me
             .memberships
             .iter()
@@ -178,7 +178,7 @@ pub async fn admin_api(
             .map(|r| fmt_time(state.tz, r.created_at))
             .collect(),
         requests,
-        enabled: state.core.config.api.enabled,
+        enabled: state.core.config().api.enabled,
     };
     Ok(Html(page.render()?))
 }
@@ -253,8 +253,8 @@ pub async fn webhooks_page(
             .map(|d| delivery_row(&state, d))
             .collect(),
         users: active_users(&state).await?,
-        enabled: state.core.config.integrations.webhooks_enabled,
-        providers: state.core.config.integrations.providers.join(", "),
+        enabled: state.core.config().integrations.webhooks_enabled,
+        providers: state.core.config().integrations.providers.join(", "),
         back_to: "/admin/webhooks".into(),
     };
     Ok(Html(page.render()?))

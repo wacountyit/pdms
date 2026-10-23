@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-23
 - **Spec:** [2026-10-23-admin-settings-design.md](../specs/2026-10-23-admin-settings-design.md), approved by the owner on 2026-10-23.
-- **Status:** not started.
+- **Status:** in progress. Phase 1 done (2026-10-23).
 - **How it is built:** directly on `main`, one phase at a time. Each phase ends with the checks below, its ROADMAP §0.1a state, and commit and push commands for the owner. Commit messages start with `S1:`.
 - **Numbers:** migration `0015_settings.sql`; decisions from D-111 (both the next free on `main` on 2026-10-23).
 - **Checks after every phase:** `cargo fmt --all`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace`; `cargo sqlx prepare --workspace --check -- --all-targets` when queries changed; `bash -n install.sh` when the installer changed; the screenshot tool for every page a phase adds or changes (dark and light).
@@ -19,9 +19,18 @@
 
 ## Phase 1: Foundation
 
+> **As built (2026-10-23):**
+> - Task 1.1 was the planned pure refactor (485 tests unchanged). Tests that replaced `core.mailer` or `core.ocr` now call `Core::set_mailer` / `Core::set_ocr`; `Live` is `Clone`; `status::parts` returns owned `(GraphClient, Resolved)`. It is in the same commit as the rest of the phase.
+> - `app_secrets` has no `nonce` column: PDMS's `encrypt` stores `nonce || ciphertext` in one value, bound to the setting's key (associated data). The key check allows `-` too.
+> - `settings::get` / `set` work on the configuration's JSON form (one path per key), so the configuration's own types check every value; no per-key match.
+> - Locked keys are found with figment's `find_value` on the TOML file (no new `toml` dependency) and by the `PDMS_*` / non-empty `PDMS_*_FILE` variables.
+> - **The worker is rebuilt in the same process** (`maintenance::run_worker`), not by exiting it: the same in Docker, under systemd and with `serve --with-worker` (D-112).
+> - `Core::reload` runs once at start (in `pdms`'s `connect`, after the migration check) and from `settings::watch`; a failure keeps the running settings.
+> - Tests: `tests/settings.rs` (8), unit tests in `settings` and `config` (lock rule).
+
 **Goal:** settings can be stored, merged, validated, audited and applied live; the worker restarts on a change; `pdms settings show` lists them. No admin page yet, and behaviour is unchanged while the database holds no settings.
 
-### Task 1.1: The live snapshot (pure refactor, its own commit)
+### ✓ Task 1.1: The live snapshot (pure refactor, its own commit)
 
 - **Files:** `crates/pdms-core/src/lib.rs`; every crate that reads `core.config`, `core.sharepoint`, `core.graph`, `core.mailer`, `core.ocr` or `core.scanner` (about 220 uses).
 - **Change:**
@@ -31,14 +40,14 @@
   - Mechanical rewrite of the call sites (`core.config.` → `core.config().`, `core.sharepoint` → `core.sharepoint()`, and so on). In tests, `(*core.config).clone()` becomes `(*core.config()).clone()`.
 - **Tests:** none new. All existing tests must pass unchanged, which is the point of this commit.
 
-### Task 1.2: Migration 0015
+### ✓ Task 1.2: Migration 0015
 
 `migrations/0015_settings.sql`:
 - `app_secrets (key text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_.]{1,127}$'), ciphertext bytea NOT NULL, nonce bytea NOT NULL, updated_by uuid REFERENCES users (id), updated_at timestamptz NOT NULL DEFAULT now())`; app role: SELECT, INSERT, UPDATE, DELETE.
 - `graph_certificates (id uuid PRIMARY KEY, thumbprint_sha256 text NOT NULL, thumbprint_sha1 text NOT NULL, not_after timestamptz NOT NULL, state text NOT NULL CHECK (state IN ('pending','active','retired')), created_by uuid REFERENCES users (id), created_at timestamptz NOT NULL DEFAULT now())`, and a partial unique index so at most one row is `active`; app role: SELECT, INSERT, UPDATE.
 - `settings_version (id boolean PRIMARY KEY DEFAULT true CHECK (id), version bigint NOT NULL)` with one row `(true, 0)`; app role: SELECT, UPDATE.
 
-### Task 1.3: The registry, precedence and encryption
+### ✓ Task 1.3: The registry, precedence and encryption
 
 - **New module `pdms-core::settings`:**
   - `pub struct SettingDef { key: &'static str, kind: Kind, area: Area }` with `Kind::{Bool, Text, Port, Enum(&[&str]), Time, Secret}` and `Area::{Microsoft365, SignIn, EntraSync, SharePoint, Email, Ocr, VirusScanning}`. `SETTINGS: &[SettingDef]` lists every in-scope key from spec §2: `graph.tenant_id`, `graph.client_id`, `sharepoint.site_url`, `sharepoint.library`, `sharepoint.delta_interval_minutes`, `storage.backend` (local or sharepoint only), `entra_sync.enabled`, `entra_sync.run_at`, `entra_sync.attribute`, `entra_sync.include_guests`, `auth.oidc.enabled`, `auth.oidc.issuer_url`, `auth.oidc.client_id`, `auth.oidc.client_secret`, `auth.oidc.display_name`, `auth.oidc.auto_provision`, `email.transport`, `email.smtp_host`, `email.smtp_port`, `email.smtp_security`, `email.smtp_username`, `email.smtp_password`, `email.from`, `email.reply_to`, `ocr.text_extraction`, `ocr.sidecar_url`, `ocr.suggest_dates`, `storage.clamav_addr`, `storage.clamav_required`. The Graph certificate is not a key: it comes from `graph_certificates` (Phase 2).
@@ -47,7 +56,7 @@
 - **Encryption:** `Keys::derive` gains a key for settings secrets (its own HKDF label, `settings`), with `encrypt_setting(key, plaintext)` and `decrypt_setting(key, ciphertext, nonce)`. The setting's key is the associated data, so a ciphertext can't be moved to another key.
 - **Loading:** `settings::load_overrides(db, keys) -> CoreResult<BTreeMap<String, Value>>` reads `app_settings` (the in-scope keys only; branding keys stay Branding's) and decrypts `app_secrets`. `settings::effective(file: &Config, overrides) -> CoreResult<Config>` applies the overrides to the keys that aren't locked, then runs `Config::validate`.
 
-### Task 1.4: Saving and applying
+### ✓ Task 1.4: Saving and applying
 
 - `pub async fn save(core, ctx, changes: Vec<Change>) -> CoreResult<()>` where `Change { key, value: NewValue::{Set(Value), Clear, KeepSecret} }`:
   - needs `ManageSettings`; refuses locked keys and unknown keys;
@@ -59,7 +68,7 @@
 - **Worker restart:** `maintenance::worker(&core).run(rx)` already stops on its shutdown channel. `pdms worker` also stops when the settings version changes, and exits 0, so Docker restarts it with the new settings. `serve --with-worker` restarts its in-process worker instead.
 - **Tests:** precedence (a file value beats the database, which beats the default); a save of a locked key is refused; an invalid combination is refused and nothing is stored; a secret is stored encrypted, decrypts, and is never in the audit event; `settings.changed` is in the save's transaction; a second `Core` on the same database sees the change through `reload`; a failed build keeps the old snapshot.
 
-### Task 1.5: `pdms settings show`
+### ✓ Task 1.5: `pdms settings show`
 
 Prints every registry key: the effective value (secrets as `set` or `not set`) and where it came from (`file`, `database` or `default`). `--json` too.
 

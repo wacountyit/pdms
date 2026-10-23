@@ -109,9 +109,9 @@ pub fn router(state: AppState) -> Router {
         .route("/entra/sync", post(admin::entra_sync_now))
         .route_layer(from_fn_with_state(state.clone(), require_admin));
 
-    let max_body = state.core.config.server.max_body_bytes;
+    let max_body = state.core.config().server.max_body_bytes;
     let upload_limit = DefaultBodyLimit::max(
-        usize::try_from(state.core.config.storage.max_upload_bytes)
+        usize::try_from(state.core.config().storage.max_upload_bytes)
             .unwrap_or(usize::MAX)
             .saturating_add(1024 * 1024),
     );

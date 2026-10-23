@@ -192,7 +192,7 @@ impl OidcProvider {
             request_id: client_info.request_id.clone(),
         };
         let mut events = Vec::new();
-        let syncing = core.config.entra_sync.enabled;
+        let syncing = core.config().entra_sync.enabled;
         if syncing {
             // Departments come from the Entra Department field through the
             // directory sync (D-086), never from token group claims.
@@ -232,7 +232,7 @@ impl OidcProvider {
         .await?;
         let token = session::create(
             &mut tx,
-            &core.config.auth,
+            &core.config().auth,
             user.0,
             AuthMethod::Oidc,
             client_info,
@@ -356,7 +356,7 @@ pub async fn resolve_identity(
     if let Some(found) = find_identity(core, issuer, subject).await? {
         return Ok(found);
     }
-    if core.config.entra_sync.enabled && core.graph.is_some() {
+    if core.config().entra_sync.enabled && core.graph().is_some() {
         // Entra decides: enabled member or not, and the department.
         return Ok(
             match crate::directory::entra_sync::sync_one(core, subject).await {
@@ -392,7 +392,7 @@ pub async fn resolve_identity(
             },
         );
     }
-    if !core.config.auth.oidc.auto_provision {
+    if !core.config().auth.oidc.auto_provision {
         return Ok(Err("not_provisioned"));
     }
     let Some(email) = email else {

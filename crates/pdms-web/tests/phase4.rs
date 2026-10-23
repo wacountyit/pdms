@@ -48,10 +48,12 @@ fn json(r: &Resp) -> serde_json::Value {
 async fn doc(app: &App, dept: Uuid, owner: Uuid, title: &str, file: bool) -> Uuid {
     let t = types::type_by_key(&app.core.db, "policy").await.unwrap().id;
     let file = if file {
-        let mut w =
-            pdms_storage::spool::SpoolWriter::create(&app.core.config.storage.spool_path, 1 << 20)
-                .await
-                .unwrap();
+        let mut w = pdms_storage::spool::SpoolWriter::create(
+            &app.core.config().storage.spool_path,
+            1 << 20,
+        )
+        .await
+        .unwrap();
         w.write(b"%PDF-1.4\n% hello\n%%EOF\n").await.unwrap();
         Some(pdms_core::documents::files::Upload {
             file: w.finish().await.unwrap(),

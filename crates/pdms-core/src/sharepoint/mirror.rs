@@ -47,7 +47,7 @@ pub(crate) async fn mirror_later(
     conn: &mut PgConnection,
     document_id: Uuid,
 ) -> CoreResult<()> {
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         enqueue_mirror(&mut *conn, document_id).await?;
     }
     Ok(())
@@ -56,7 +56,7 @@ pub(crate) async fn mirror_later(
 /// Queue a mirror run for every document with files in SharePoint. Picks up
 /// renamed departments, types, tags, and people. Returns how many were queued.
 pub async fn mirror_sweep(core: &Core) -> CoreResult<u64> {
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         return Ok(0);
     }
     let r = sqlx::query!(
@@ -78,7 +78,7 @@ fn short(id: Uuid) -> String {
 
 /// Bring one document's folder and files in SharePoint in line with PDMS.
 pub async fn mirror_document(core: &Core, document_id: Uuid) -> CoreResult<()> {
-    let Some(sp) = core.sharepoint.as_ref() else {
+    let Some(sp) = core.sharepoint() else {
         return Ok(());
     };
     let mut conn = core.db.acquire().await?;
@@ -137,7 +137,11 @@ pub async fn mirror_document(core: &Core, document_id: Uuid) -> CoreResult<()> {
     let tags: Vec<String> = doc.tags.iter().map(|t| t.name.clone()).collect();
     let link = format!(
         "{}/documents/{}",
-        core.config.server.public_url.as_str().trim_end_matches('/'),
+        core.config()
+            .server
+            .public_url
+            .as_str()
+            .trim_end_matches('/'),
         doc.id
     );
     let placement = PlacementDoc {
@@ -206,7 +210,7 @@ pub async fn mirror_document(core: &Core, document_id: Uuid) -> CoreResult<()> {
 
 /// Add the SharePoint jobs to the worker (only when SharePoint is the backend).
 pub fn register_jobs(worker: Worker, core: &Core) -> Worker {
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         return worker;
     }
     let (c1, c2) = (core.clone(), core.clone());
@@ -307,7 +311,7 @@ pub async fn apply_placement_now(
     to: Spot,
     reason: &str,
 ) -> CoreResult<()> {
-    let Some(sp) = core.sharepoint.as_ref() else {
+    let Some(sp) = core.sharepoint() else {
         return Ok(());
     };
     let Some(folder) = sqlx::query!(

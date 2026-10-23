@@ -757,7 +757,7 @@ pub async fn idp(
         departments: directory::list_departments(db).await?,
         groups: directory::list_groups(db).await?,
         roles: directory::list_roles(db).await?,
-        entra_sync: state.core.config.entra_sync.enabled,
+        entra_sync: state.core.config().entra_sync.enabled,
     };
     Ok(Html(page.render()?))
 }
@@ -850,10 +850,10 @@ pub async fn entra(
         .unwrap_or_default();
     let page = EntraPage {
         l: Layout::new(&state, &user, flash, "Entra ID sync", "admin").admin_tab("entra"),
-        configured: core.graph.is_some(),
-        thumbprint: core.graph.as_ref().map(|g| g.thumbprint().to_owned()),
-        enabled: core.config.entra_sync.enabled,
-        attribute: core.config.entra_sync.attribute.clone(),
+        configured: core.graph().is_some(),
+        thumbprint: core.graph().as_ref().map(|g| g.thumbprint().to_owned()),
+        enabled: core.config().entra_sync.enabled,
+        attribute: core.config().entra_sync.attribute.clone(),
         last_run: fmt_time_opt(state.tz, status.last_run),
         summary,
         last_error,

@@ -16,7 +16,7 @@ pub const API_LOG_PURGE: &str = "maintenance.api_log_purge";
 
 /// A worker with the built-in handlers and schedule registered.
 pub fn worker(core: &Core) -> Worker {
-    let w = &core.config.worker;
+    let w = &core.config().worker;
     let (db1, db2, db3) = (core.db.clone(), core.db.clone(), core.db.clone());
     let worker = Worker::new(
         core.db.clone(),
@@ -145,7 +145,7 @@ pub fn worker(core: &Core) -> Worker {
                 async move {
                     let n = crate::api_tokens::purge_request_log(
                         &core.db,
-                        core.config.api.request_log_days,
+                        core.config().api.request_log_days,
                     )
                     .await
                     .map_err(|e| e.to_string())?;
@@ -209,10 +209,50 @@ pub fn worker(core: &Core) -> Worker {
                 }
             }
         });
-    let worker = if core.config.entra_sync.enabled {
+    let worker = if core.config().entra_sync.enabled {
         worker.every(entra_sync::TICK_JOB, Duration::from_secs(15 * 60))
     } else {
         worker
     };
     crate::sharepoint::register_ops_jobs(crate::sharepoint::register_jobs(worker, core), core)
+}
+
+/// Run the worker until `shutdown`, building it again whenever the settings
+/// change (S1): which jobs it runs, and how, depends on them. Each round
+/// stops cleanly (running jobs finish first) before the next starts.
+pub async fn run_worker(
+    core: Core,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+    mut settings: tokio::sync::watch::Receiver<i64>,
+) {
+    let mut watching = true;
+    loop {
+        let (stop, stopped) = tokio::sync::watch::channel(false);
+        let round = tokio::spawn(worker(&core).run(stopped));
+        let restart = loop {
+            if *shutdown.borrow() {
+                break false;
+            }
+            tokio::select! {
+                r = shutdown.changed() => {
+                    if r.is_err() || *shutdown.borrow() {
+                        break false;
+                    }
+                }
+                r = settings.changed(), if watching => {
+                    if r.is_ok() {
+                        break true;
+                    }
+                    // The settings watcher ended: keep running as we are.
+                    watching = false;
+                }
+            }
+        };
+        let _ = stop.send(true);
+        let _ = round.await;
+        if !restart {
+            break;
+        }
+        tracing::info!("settings changed; the worker restarted with them");
+    }
 }

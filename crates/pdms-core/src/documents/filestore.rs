@@ -42,7 +42,7 @@ pub async fn put_version_file(
     file: &StoredFile,
     src: &Path,
 ) -> CoreResult<FileLocation> {
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         core.storage
             .put_file(file.sha256, src, file.size)
             .await
@@ -87,7 +87,7 @@ pub(crate) async fn record_location(
 
 /// Recorded in `blobs.storage_backend`.
 pub fn backend_name(core: &Core) -> &'static str {
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         "sharepoint"
     } else {
         core.storage.backend()
@@ -102,7 +102,7 @@ pub async fn open(
     hash: BlobHash,
     size: u64,
 ) -> CoreResult<ByteStream> {
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         return sharepoint::open(core, document_id, version_no, hash, size).await;
     }
     core.storage

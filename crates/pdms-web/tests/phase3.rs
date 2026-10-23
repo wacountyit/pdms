@@ -234,7 +234,7 @@ async fn documents_are_submitted_approved_and_signed_through_the_page() {
             .body
             .contains("Signature requested")
     );
-    let today = schedule::local_today(Utc::now(), app.core.config.timezone()).to_string();
+    let today = schedule::local_today(Utc::now(), app.core.config().timezone()).to_string();
     let r = o
         .multipart(
             &format!("/documents/{doc}/signatories/{sig}/signed"),
@@ -332,7 +332,7 @@ async fn positions_and_appointments_through_the_pages() {
         ],
     )
     .await;
-    let start = (schedule::local_today(Utc::now(), app.core.config.timezone())
+    let start = (schedule::local_today(Utc::now(), app.core.config().timezone())
         - Duration::days(700))
     .to_string();
     let r = c

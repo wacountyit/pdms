@@ -178,7 +178,9 @@ pub(crate) async fn deliver(
             let (status, reason) = match (can_view, ch) {
                 (false, _) => (DeliveryStatus::Skipped, Some(visibility.denied_reason())),
                 (true, Channel::InApp) => (DeliveryStatus::Sent, None),
-                (true, Channel::Email) if core.mailer.enabled() => (DeliveryStatus::Pending, None),
+                (true, Channel::Email) if core.mailer().enabled() => {
+                    (DeliveryStatus::Pending, None)
+                }
                 (true, Channel::Email) => {
                     (DeliveryStatus::Skipped, Some("email is not configured"))
                 }

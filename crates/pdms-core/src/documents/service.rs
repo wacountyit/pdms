@@ -770,7 +770,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         .fetch_one(&core.db)
         .await?;
     let year = Utc::now()
-        .with_timezone(&core.config.timezone())
+        .with_timezone(&core.config().timezone())
         .format("%Y");
     let external_id = format!("{prefix}-{year}-{seq:06}");
     let location = match (&new.file, &stored) {
@@ -831,7 +831,7 @@ pub async fn create(core: &Core, ctx: &Ctx, new: NewDocument) -> CoreResult<Uuid
         if tag.trim().is_empty() {
             continue;
         }
-        let allow = core.config.documents.free_form_tags || ctx.can(Capability::ManageTags);
+        let allow = core.config().documents.free_form_tags || ctx.can(Capability::ManageTags);
         let (t, created) = tags::find_or_create(&mut tx, ctx, tag, allow).await?;
         events.extend(created);
         sqlx::query!(
@@ -939,7 +939,7 @@ pub async fn update(
     )
     .await?;
 
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         let v = before_doc.visibility;
         let target = Spot::of(v, meta.department_id, false);
         if narrows(Spot::of(v, before_doc.department_id, false), target) {
@@ -1171,7 +1171,7 @@ pub async fn set_visibility(core: &Core, ctx: &Ctx, id: Uuid, to: Visibility) ->
     if from == to {
         return Ok(());
     }
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         let dept = doc_ref.attrs.department_id;
         let target = Spot::of(to, dept, false);
         if narrows(Spot::of(from, dept, false), target) {
@@ -1278,7 +1278,7 @@ pub async fn deletion_eligibility(core: &Core, id: Uuid) -> CoreResult<Eligibili
         _ => None,
     };
     let today = Utc::now()
-        .with_timezone(&core.config.timezone())
+        .with_timezone(&core.config().timezone())
         .date_naive();
     Ok(retention::eligibility(
         rule.as_ref(),
@@ -1306,7 +1306,7 @@ pub async fn delete(core: &Core, ctx: &Ctx, id: Uuid, reason: &str) -> CoreResul
     if let Some(why) = deletion_eligibility(core, id).await?.reason() {
         return Err(CoreError::Conflict(why));
     }
-    if core.sharepoint.is_some() {
+    if core.sharepoint().is_some() {
         let a = &doc_ref.attrs;
         let target = Spot::of(a.visibility, a.department_id, true);
         if narrows(Spot::of(a.visibility, a.department_id, false), target) {
@@ -1406,7 +1406,7 @@ pub async fn restore_deleted(core: &Core, ctx: &Ctx, id: Uuid) -> CoreResult<()>
 
 pub async fn add_tag(core: &Core, ctx: &Ctx, id: Uuid, name: &str) -> CoreResult<()> {
     let doc_ref = access::authorize(core, ctx, id, Permission::Edit).await?;
-    let allow = core.config.documents.free_form_tags || ctx.can(Capability::ManageTags);
+    let allow = core.config().documents.free_form_tags || ctx.can(Capability::ManageTags);
     let mut tx = core.db.begin().await?;
     let before = fetch_live(&mut tx, id).await?.tags;
     let (tag, created) = tags::find_or_create(&mut tx, ctx, name, allow).await?;
@@ -1598,7 +1598,7 @@ pub async fn restore_version(
     // folder: copy the earlier one out (verified) and upload it again.
     let restored = match (
         part,
-        core.sharepoint.is_some(),
+        core.sharepoint().is_some(),
         old.blob_sha256.as_deref(),
         old.file_name.as_deref(),
     ) {

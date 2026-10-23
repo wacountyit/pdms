@@ -386,6 +386,30 @@ the UI title, email subject prefix, ICS `X-WR-CALNAME`, and export manifests.
 Role display names (for example `legal_counsel` → "General Counsel's Office")
 are edited in the admin UI, so nothing organization-specific is compiled in.
 
+**Settings in Administration (S1).** The settings listed in
+`pdms-core::settings::SETTINGS` (sign-in, email, the Microsoft 365
+connection, SharePoint, the Entra sync, OCR, virus scanning) can also be
+stored in the database: `app_settings` for plain values, `app_secrets` for
+secrets (AES-256-GCM with a key derived from the master key, bound to the
+setting's name). A value set in the file or the environment is *locked*: it
+wins, and the admin page shows it read-only (D-111). The effective
+configuration is the file's with the stored values applied, checked by
+`Config::validate` as a whole.
+
+`Core` holds the effective configuration and the services built from it
+(Graph client, SharePoint, mailer, OCR, virus scanner) in one swappable
+`Live` snapshot, read through `core.config()`, `core.sharepoint()` and the
+other accessors. A save checks the result and builds its services first,
+stores the values and the `settings.changed` audit event in one transaction,
+bumps `settings_version`, and sends `NOTIFY pdms_settings`.
+`settings::watch` in every process (also checking every 60 seconds) then
+calls `Core::reload`, which swaps the snapshot in; if the new settings can't
+be built, the running ones stay. The web server applies them live. The
+worker is rebuilt (`maintenance::run_worker`): it stops cleanly, letting
+running jobs finish, and starts again with the new settings, because which
+jobs it registers depends on them (D-112). `pdms settings show` lists every
+setting, its value (secrets only as set or not set), and where it comes from.
+
 ## 11. Non-Rust components
 
 | Component | Why | Interface |
@@ -409,6 +433,7 @@ are edited in the admin UI, so nothing organization-specific is compiled in.
 | 7 (`0011_small_changes`, R2 with sub-project 3) | Renames the seeded `partnership_agreement` type to `interlocal_agreement` ("Interlocal Agreement (ILA)", prefix `ILA`), keeping a name or prefix an administrator changed (D-088); deletes queued Outlook sync jobs and drops `graph_calendar_links` (D-087). |
 | 8 (`0013_sharepoint_files`, P3) | sharepoint_department_folders (one folder per department and area), sharepoint_document_folders (one per document), sharepoint_files (one per version that introduced a file: drive and item IDs, list item ID, name, QuickXorHash, size, last known path, hash of the column values last written, state `ok` / `changed_outside` / `missing`) |
 | 9 (`0014_sharepoint_access`, P4) | sharepoint_folder_access (read access PDMS granted, per department and person, with the Graph permission ID), sharepoint_foreign_grants (other access found on department folders), sharepoint_unexpected_items (files PDMS does not track, with dismissals), `sharepoint_files.changed_by`, `changed_at` |
+| 10 (`0015_settings`, S1) | app_secrets (encrypted secret settings), graph_certificates (the "PDMS Service" certificates made in PDMS: thumbprints, expiry, `pending` / `active` / `retired`), settings_version (bumped by every settings change) |
 
 ## 13. Phase 0 deliverables and tests (done)
 

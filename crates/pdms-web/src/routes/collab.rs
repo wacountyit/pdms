@@ -318,9 +318,9 @@ pub async fn ocr_page(
         .await?;
     let page = OcrPage {
         l: Layout::new(&state, &user, flash, "Text extraction (OCR)", "admin").admin_tab("ocr"),
-        enabled: state.core.ocr.is_some(),
-        url: state.core.config.ocr.sidecar_url.clone(),
-        suggest_dates: state.core.config.ocr.suggest_dates,
+        enabled: state.core.ocr().is_some(),
+        url: state.core.config().ocr.sidecar_url.clone(),
+        suggest_dates: state.core.config().ocr.suggest_dates,
     };
     Ok(Html(page.render()?))
 }

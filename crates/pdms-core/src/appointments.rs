@@ -1139,7 +1139,7 @@ async fn active_appointment(
 /// before the new term starts; the checklist starts over.
 pub async fn reappoint(core: &Core, ctx: &Ctx, id: Uuid, t: Term) -> CoreResult<Uuid> {
     let (p, old) = active_appointment(core, ctx, id).await?;
-    let today = schedule::local_today(Utc::now(), core.config.timezone());
+    let today = schedule::local_today(Utc::now(), core.config().timezone());
     let start = t
         .start_date
         .or_else(|| old.end_date.map(|e| e + Duration::days(1)))

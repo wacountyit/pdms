@@ -30,7 +30,7 @@ use uuid::Uuid;
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
     let (core, db) = core().await;
-    let mut config = (*core.config).clone();
+    let mut config = (*core.config()).clone();
     f(&mut config);
     (Core::new(core.db.clone(), config).unwrap(), db)
 }
@@ -1021,7 +1021,7 @@ async fn verify_integrity_finds_missing_and_altered_files() {
         .await
         .unwrap();
     let path = |h: &[u8]| {
-        core.config.storage.local_path.join(
+        core.config().storage.local_path.join(
             pdms_storage::BlobHash::from_slice(h)
                 .unwrap()
                 .relative_path(),

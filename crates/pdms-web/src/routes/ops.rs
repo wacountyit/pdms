@@ -169,7 +169,8 @@ pub async fn license() -> Response {
 
 /// Where to get this installation's source code (AGPL-3.0 section 13).
 pub async fn source(State(state): State<AppState>) -> Response {
-    let url = state.core.config.org.source_url.trim();
+    let config = state.core.config();
+    let url = config.org.source_url.trim();
     if url.starts_with("https://") || url.starts_with("http://") {
         return axum::response::Redirect::to(url).into_response();
     }

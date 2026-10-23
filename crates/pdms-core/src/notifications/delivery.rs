@@ -307,7 +307,7 @@ async fn recheck(
     document_id: Option<Uuid>,
     appointment_id: Option<Uuid>,
 ) -> CoreResult<Option<&'static str>> {
-    if !core.mailer.enabled() {
+    if !core.mailer().enabled() {
         return Ok(Some("email is not configured"));
     }
     let principal = crate::auth::principal::load(&core.db, user_id).await?;
@@ -380,7 +380,7 @@ async fn send_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResult<
 
     let attempt_no = d.attempts + 1;
     let host = core
-        .config
+        .config()
         .server
         .public_url
         .host_str()
@@ -408,9 +408,9 @@ async fn send_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResult<
     .await?;
     tx.commit().await?;
 
-    let today = crate::schedule::local_today(Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(Utc::now(), core.config().timezone());
     let url = |path: &str| {
-        core.config
+        core.config()
             .server
             .public_url
             .join(path.trim_start_matches('/'))
@@ -512,7 +512,7 @@ async fn send_inner(core: &Core, delivery_id: Uuid, worker: &str) -> CoreResult<
             }
         }
     };
-    let result = core.mailer.send(&prepared.email).await;
+    let result = core.mailer().send(&prepared.email).await;
 
     let mut tx = core.db.begin().await?;
     match &result {

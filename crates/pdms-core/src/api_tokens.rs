@@ -114,7 +114,7 @@ pub async fn create(
     days: i64,
 ) -> CoreResult<(Uuid, String)> {
     let user = ctx.user_id().ok_or(CoreError::Unauthenticated)?;
-    if !core.config.api.enabled {
+    if !core.config().api.enabled {
         return Err(CoreError::validation("the API is turned off"));
     }
     let name = name.trim();
@@ -127,7 +127,7 @@ pub async fn create(
     if scopes.is_empty() || !scopes.iter().all(|s| is_scope(s)) {
         return Err(CoreError::validation("choose one or more valid scopes"));
     }
-    let max = core.config.api.max_token_days;
+    let max = core.config().api.max_token_days;
     if !(1..=max).contains(&days) {
         return Err(CoreError::validation(format!(
             "tokens may last 1–{max} days"
@@ -217,7 +217,7 @@ pub async fn authenticate(
     presented: &str,
     client: &ClientInfo,
 ) -> CoreResult<Option<TokenAuth>> {
-    if !core.config.api.enabled || !presented.starts_with(TOKEN_PREFIX) {
+    if !core.config().api.enabled || !presented.starts_with(TOKEN_PREFIX) {
         return Ok(None);
     }
     let t = sqlx::query!(

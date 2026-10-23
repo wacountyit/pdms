@@ -126,7 +126,7 @@ impl GraphPermission {
 /// a folder already (so access added by hand is still reported). A no-op
 /// when SharePoint storage is off.
 pub async fn reconcile(core: &Core) -> CoreResult<ReconcileReport> {
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         return Ok(ReconcileReport::default());
     }
     match run(core).await {
@@ -170,7 +170,7 @@ async fn run(core: &Core) -> Result<ReconcileReport, RunError> {
     for d in departments {
         report.departments += 1;
         if let Err(e) =
-            department(core, graph, &drive, &inherited, d.id, &d.name, &mut report).await
+            department(core, &graph, &drive, &inherited, d.id, &d.name, &mut report).await
         {
             if e.is_auth() {
                 return Err(e);

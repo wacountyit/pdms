@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
     let (core, db) = core().await;
-    let mut config = (*core.config).clone();
+    let mut config = (*core.config()).clone();
     f(&mut config);
     (Core::new(core.db.clone(), config).unwrap(), db)
 }
@@ -714,13 +714,13 @@ async fn files_are_read_searchable_and_dates_are_suggested_not_applied() {
 
 #[tokio::test]
 async fn scanned_files_use_the_ocr_provider_and_retry_when_it_is_down() {
-    let (mut core, _db) = core().await;
+    let (core, _db) = core().await;
     let (owner, dept) = user_in_new_department(&core, "IT", "o@x.org").await;
     let o = as_user(&core, owner).await;
-    core.ocr = Some(Arc::new(FakeOcr {
+    core.set_ocr(Some(Arc::new(FakeOcr {
         text: String::new(),
         up: false,
-    }));
+    })));
     let scanned = std::fs::read("tests/fixtures/scan.pdf").unwrap();
     let doc = new_doc(
         &core,
@@ -740,12 +740,12 @@ async fn scanned_files_use_the_ocr_provider_and_retry_when_it_is_down() {
         "nothing stored; the job retries"
     );
 
-    core.ocr = Some(Arc::new(FakeOcr {
+    core.set_ocr(Some(Arc::new(FakeOcr {
         text:
             "This Agreement shall be effective March 1, 2013 and shall expire on February 28, 2018."
                 .into(),
         up: true,
-    }));
+    })));
     ocr::reprocess(&core, &o, doc).await.unwrap();
     let r = run_extraction(&core).await;
     assert_eq!(r, vec![Ok(())]);

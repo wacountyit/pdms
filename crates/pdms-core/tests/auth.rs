@@ -51,7 +51,7 @@ async fn local_login_succeeds_with_password_and_totp() {
     .await
     .unwrap();
     assert_eq!(ok.user_id, user);
-    let s = session::lookup(&core.db, &core.config.auth, &ok.token)
+    let s = session::lookup(&core.db, &core.config().auth, &ok.token)
         .await
         .unwrap()
         .unwrap();
@@ -149,7 +149,7 @@ async fn deactivation_revokes_sessions_immediately() {
         .await
         .unwrap();
     assert!(
-        session::lookup(&core.db, &core.config.auth, &ok.token)
+        session::lookup(&core.db, &core.config().auth, &ok.token)
             .await
             .unwrap()
             .is_none()

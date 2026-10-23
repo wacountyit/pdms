@@ -13,7 +13,8 @@ D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
 D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built,
 and D-103 while building it. D-104 to D-110 were decided on 2026-10-23 for plan
 P4 (SharePoint access, change detection, and operations), with the owner's
-answers to its pre-flight questions.
+answers to its pre-flight questions. D-111 onward were decided on 2026-10-23
+for S1 (settings in Administration).
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -996,6 +997,41 @@ HTTP 401/403 from Microsoft Graph means the certificate, consent, or site
 grant is broken, and every run fails the same way. Administrators get one
 in-app (and email) notice per hour, and the status page shows the latest
 error. The notice names no document.
+
+### D-111 Settings move into Administration; the configuration file wins — Accepted (2026-10-23)
+The owner wants the installer to be for the first installation only, and
+everything else set up, changed, tested and checked in Administration (S1,
+[spec](superpowers/specs/2026-10-23-admin-settings-design.md)). The owner's
+choices:
+1. **The configuration file wins.** A setting in `config/pdms.toml` or a
+   `PDMS_*` variable is used and shown read-only ("set in the configuration
+   file"); a `PDMS_*_FILE` counts only when its file isn't empty, so the
+   always-mounted, empty Docker secrets lock nothing. Everything else is set
+   on the page. Nothing written by hand changes behind anyone's back.
+2. **Changes apply without a manual restart** (D-112).
+3. **Secrets are stored in the database, encrypted** with a key derived from
+   the master key and bound to the setting's name, and never shown again once
+   saved. A database backup then holds them, encrypted, so the master key's
+   backup matters even more.
+4. **Permission:** `ManageSettings` (organisation-wide administrators). Every
+   change is audited (`settings.changed`), secrets only as "replaced" or
+   "cleared".
+5. **The installer** keeps the first installation and `--configure network`,
+   `database-port`, `source` and `admin`; `pdms settings` is the fallback for
+   a server whose admin page can't be reached.
+
+### D-112 Settings apply live; the worker rebuilds itself — Accepted (2026-10-23)
+A save checks the merged configuration and builds its services before
+anything is stored, so a setting that can't take effect is refused with the
+reason. The web server swaps one snapshot (`Core::live`) of the effective
+configuration and its services; requests already running finish with the
+old one. The worker's jobs and schedules depend on the settings, so it
+stops cleanly (running jobs finish) and starts again with the new ones,
+inside the same process. That works the same under Docker, systemd and
+`serve --with-worker`, so it is not done by exiting the process, as the spec
+first said. Processes hear of a change through `NOTIFY pdms_settings` and
+check `settings_version` every 60 seconds; if stored settings can't be
+built, the running ones stay and the error is logged.
 
 ## Open questions (configurable defaults; not blocking)
 

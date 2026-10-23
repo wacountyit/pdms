@@ -157,7 +157,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(core: Core, oidc: Option<OidcProvider>, metrics: Option<PrometheusHandle>) -> Self {
-        let cfg = core.config.clone();
+        let cfg = core.config().clone();
         let per_minute =
             NonZeroU32::new(cfg.auth.login_attempts_per_minute.max(1)).unwrap_or(NonZeroU32::MIN);
         AppState {
@@ -206,7 +206,7 @@ impl AppState {
         let seq = self.branding_loads.fetch_add(1, Ordering::Relaxed) + 1;
         match pdms_core::branding::load(&self.core.db).await {
             Ok(b) => {
-                let snapshot = BrandingSnapshot::from(&self.core.config.org.name, &b);
+                let snapshot = BrandingSnapshot::from(&self.core.config().org.name, &b);
                 let mut cache = write_cache(&self.branding);
                 let (name, version) = (snapshot.org_name.clone(), snapshot.version.clone());
                 if cache.apply(seq, snapshot) {
@@ -227,7 +227,7 @@ impl AppState {
     }
 
     pub fn secure(&self) -> bool {
-        self.core.config.server.secure_cookies
+        self.core.config().server.secure_cookies
     }
 }
 

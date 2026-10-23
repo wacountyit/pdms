@@ -406,10 +406,10 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
     if ids.is_empty() {
         return Err(CoreError::validation("choose at least one document"));
     }
-    if ids.len() > core.config.exports.max_documents {
+    if ids.len() > core.config().exports.max_documents {
         return Err(CoreError::validation(format!(
             "a package may hold at most {} documents",
-            core.config.exports.max_documents
+            core.config().exports.max_documents
         )));
     }
     let mut fields: Vec<String> = req
@@ -435,7 +435,7 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
     let id = Uuid::now_v7();
     let created_at = Utc::now();
     let by = ctx.actor.display.clone().unwrap_or_default();
-    let spool = core.config.storage.spool_path.clone();
+    let spool = core.config().storage.spool_path.clone();
     std::fs::create_dir_all(&spool).map_err(CoreError::internal)?;
     let path: PathBuf = spool.join(format!("export-{id}.zip"));
     let result = async {
@@ -444,7 +444,7 @@ pub async fn build(core: &Core, ctx: &Ctx, req: PackageRequest) -> CoreResult<Uu
             zip: ZipWriter::new(file),
             entries: Vec::new(),
             total: 0,
-            limit: core.config.exports.max_bytes,
+            limit: core.config().exports.max_bytes,
         };
         let org = crate::branding::org_name(core).await;
         let defs = fields::list(&core.db).await?;

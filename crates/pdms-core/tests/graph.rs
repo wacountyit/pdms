@@ -283,12 +283,12 @@ async fn post_patch_and_delete_send_json() {
 #[tokio::test]
 async fn core_has_a_graph_client_only_when_configured() {
     let (core, _db) = common::core().await;
-    assert!(core.graph.is_none());
+    assert!(core.graph().is_none());
     let m = MockGraph::start().await;
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.graph = m.config(certificate());
     let configured = Core::new(core.db.clone(), cfg.clone()).unwrap();
-    assert!(configured.graph.is_some());
+    assert!(configured.graph().is_some());
     cfg.graph.certificate =
         Secret::new("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n");
     let err = Core::new(core.db.clone(), cfg).unwrap_err().to_string();

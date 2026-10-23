@@ -32,7 +32,7 @@ const OID_G: &str = "90000000-0000-4000-8000-000000000009";
 /// A core whose Graph is the mock, with the sync on.
 async fn synced(m: &MockGraph) -> (Core, pdms_testkit::TestDb) {
     let (core, db) = core().await;
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.graph = m.config(certificate());
     cfg.entra_sync.enabled = true;
     cfg.auth.oidc.issuer_url = ISSUER.into();
@@ -1029,7 +1029,7 @@ async fn the_last_administrator_does_not_count_toward_the_sweep_limit() {
 async fn the_sync_refuses_to_run_while_turned_off() {
     let m = MockGraph::start().await;
     let (core, _db) = synced(&m).await;
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.entra_sync.enabled = false;
     let off = Core::new(core.db.clone(), cfg).unwrap();
     m.add_user(member(OID_A, "Alice", "alice@county.example", None));
@@ -1059,7 +1059,7 @@ async fn changing_include_guests_starts_a_full_round() {
     let m = MockGraph::start().await;
     let (core, _db) = synced(&m).await;
     let with_guests = |on: bool| {
-        let mut cfg = (*core.config).clone();
+        let mut cfg = (*core.config()).clone();
         cfg.entra_sync.include_guests = on;
         Core::new(core.db.clone(), cfg).unwrap()
     };
@@ -1117,7 +1117,7 @@ async fn changing_the_attribute_starts_a_full_read() {
     let a = id_of(&core, OID_A).await.unwrap();
     assert_eq!(idp_departments(&core, a).await, vec![rb]);
 
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.entra_sync.attribute = "officeLocation".into();
     let core = Core::new(core.db.clone(), cfg).unwrap();
     let r = entra_sync::run(&core, &system()).await.unwrap();
@@ -1145,7 +1145,7 @@ async fn changing_the_attribute_starts_a_full_read() {
 async fn the_daily_run_is_queued_once_after_run_at_local_time() {
     let m = MockGraph::start().await;
     let (core, _db) = synced(&m).await;
-    let mut cfg = (*core.config).clone();
+    let mut cfg = (*core.config()).clone();
     cfg.org.timezone = "America/Chicago".into();
     cfg.entra_sync.run_at = "02:30".into();
     let core = Core::new(core.db.clone(), cfg).unwrap();

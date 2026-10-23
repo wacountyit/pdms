@@ -73,7 +73,7 @@ pub async fn list(
     )
     .fetch_all(&core.db)
     .await?;
-    let today = crate::schedule::local_today(Utc::now(), core.config.timezone());
+    let today = crate::schedule::local_today(Utc::now(), core.config().timezone());
     let mut out = Vec::new();
     for r in rows {
         if let Some(doc) = r.document_id

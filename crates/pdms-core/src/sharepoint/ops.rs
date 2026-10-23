@@ -39,10 +39,10 @@ pub fn register_ops_jobs(worker: Worker, core: &Core) -> Worker {
                 Ok(())
             }
         });
-    if core.sharepoint.is_none() {
+    if core.sharepoint().is_none() {
         return worker;
     }
-    let every = Duration::from_secs(core.config.sharepoint.delta_interval_minutes.max(1) * 60);
+    let every = Duration::from_secs(core.config().sharepoint.delta_interval_minutes.max(1) * 60);
     worker
         .every(RECONCILE_JOB, Duration::from_secs(24 * 3600))
         .every(DELTA_JOB, every)

@@ -18,7 +18,7 @@ use support::*;
 use uuid::Uuid;
 
 fn today(app: &App) -> NaiveDate {
-    schedule::local_today(Utc::now(), app.core.config.timezone())
+    schedule::local_today(Utc::now(), app.core.config().timezone())
 }
 
 async fn plan(app: &App) {
@@ -614,7 +614,7 @@ fn panel<'a>(body: &'a str, heading_id: &str) -> &'a str {
 
 async fn spooled_pdf(app: &App) -> pdms_core::documents::files::Upload {
     let mut w =
-        pdms_storage::spool::SpoolWriter::create(&app.core.config.storage.spool_path, 1 << 20)
+        pdms_storage::spool::SpoolWriter::create(&app.core.config().storage.spool_path, 1 << 20)
             .await
             .unwrap();
     w.write(b"%PDF-1.4\n% hello\n%%EOF\n").await.unwrap();
