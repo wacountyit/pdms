@@ -4,7 +4,7 @@ Lightweight decision records. D-001 to D-013 were reviewed with the Phase 0
 plan and accepted on 2026-10-13. D-014 to D-025 were made while building
 Phase 0, D-026 to D-040 while building Phase 1, and D-041 onward while
 building Phases 2–5. D-081 to D-089 were decided on 2026-10-14, when the
-county set PADM's direction (SharePoint storage, Entra sync); see ROADMAP
+county set PDMS's direction (SharePoint storage, Entra sync); see ROADMAP
 §0. D-090 and D-091 were decided on 2026-10-15 (visibility follow-ups).
 D-092 to D-095 were decided on 2026-10-15 for the UI redesign R1 (built and
 finished 2026-10-21; D-092 has a 2026-10-21 update on R2's timing).
@@ -583,42 +583,42 @@ into the binary). Source files carry SPDX identifiers; migrations do not,
 because editing an applied migration changes its checksum and would stop
 existing installations from starting.
 
-### D-081 SharePoint holds the files; PADM keeps everything else — Accepted (built in P3, 2026-10-22)
+### D-081 SharePoint holds the files; PDMS keeps everything else — Accepted (built in P3, 2026-10-22)
 The county wants documents to live in SharePoint and be browsable there,
-while PADM stays the application everyone uses. Three options were
+while PDMS stays the application everyone uses. Three options were
 considered:
 
 - SharePoint stores the files only;
 - SharePoint is the system of record for metadata, permissions, and search
   too;
-- a split by stage (drafts in SharePoint, records in PADM).
+- a split by stage (drafts in SharePoint, records in PDMS).
 
-Files-only was chosen. It keeps everything PADM already does: date-driven
+Files-only was chosen. It keeps everything PDMS already does: date-driven
 reminders, workflow, restricted documents, and the tamper-evident audit
 trail. It is also the smallest change: a new storage backend plus sync.
 Metadata, workflow, reminders, appointments, permissions, audit, and the
 search index stay in PostgreSQL. SharePoint is the file store and a
-read-only browsing mirror, and PADM is authoritative when they disagree.
+read-only browsing mirror, and PDMS is authoritative when they disagree.
 Spec: `docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md`.
 
-### D-082 App-only Graph access to one site; downloads go through PADM — Accepted (certificate sign-in built in P2; downloads through PADM built in P3, 2026-10-22; the site grant is in P4's setup guide)
-PADM authenticates to Microsoft Graph as itself, with a certificate rather
+### D-082 App-only Graph access to one site; downloads go through PDMS — Accepted (certificate sign-in built in P2; downloads through PDMS built in P3, 2026-10-22; the site grant is in P4's setup guide)
+PDMS authenticates to Microsoft Graph as itself, with a certificate rather
 than a client secret, using `Sites.Selected`. It is granted full control on
 one dedicated site only; full control is needed to manage folder
 permissions.
 
-Users never receive SharePoint links from PADM. Every download is
-authorized, streamed, and audited by PADM, whereas a pre-authenticated
+Users never receive SharePoint links from PDMS. Every download is
+authorized, streamed, and audited by PDMS, whereas a pre-authenticated
 SharePoint URL would bypass both checks for its lifetime. Delegated
 (per-user) Graph access was rejected because every user would then need
-SharePoint permissions, which is what PADM's own model replaces.
+SharePoint permissions, which is what PDMS's own model replaces.
 
-### D-083 Search stays in PADM — Accepted (design, not built)
-Text is extracted from each file at upload, while PADM holds the bytes, and
-indexed with the document's details. Results are filtered by PADM
+### D-083 Search stays in PDMS — Accepted (design, not built)
+Text is extracted from each file at upload, while PDMS holds the bytes, and
+indexed with the document's details. Results are filtered by PDMS
 permissions. Microsoft Search would filter by SharePoint permissions, which
-under D-081 are locked to the PADM app, so its results could not match what
-each user may see in PADM.
+under D-081 are locked to the PDMS app, so its results could not match what
+each user may see in PDMS.
 
 ### D-084 SharePoint layout with folder-level permissions only — Accepted (layout and columns built in P3, 2026-10-22; folder permissions pending P4)
 **Layout.** One site and one library, with top-level `Departments/`,
@@ -626,14 +626,14 @@ each user may see in PADM.
 folder per document (`{ID} – {title}`), then one file per version. Files
 are never overwritten.
 
-**Columns.** PADM writes metadata columns (type, tags, status, dates, owner,
-current version, link to PADM), so people browsing read-only can sort and
+**Columns.** PDMS writes metadata columns (type, tags, status, dates, owner,
+current version, link to PDMS), so people browsing read-only can sort and
 filter.
 
 **Permissions.** These are set only on the top-level and department
 folders, and changing a document's visibility moves its folder. Per-file
 permissions were rejected because SharePoint handles large numbers of
-unique permissions poorly. PADM grants each department folder to that
+unique permissions poorly. PDMS grants each department folder to that
 department's people individually, because Entra groups are not available
 (D-086).
 
@@ -662,7 +662,7 @@ The county's AD groups are not synced to Entra, so groups cannot drive
 access. Instead, a nightly and on-demand Microsoft Graph `/users/delta` sync
 creates, updates, and deactivates member accounts.
 
-**Departments.** Each user's Department attribute is mapped to a PADM
+**Departments.** Each user's Department attribute is mapped to a PDMS
 department through an admin-maintained list of values. Several spellings
 can map to one department. Users whose value is blank or unmapped can sign
 in but see only what is shared with them, and they are listed for admins.
@@ -670,18 +670,18 @@ The account-creation procedure must therefore set the Department field.
 
 **Other rules.**
 
-- Roles are assigned in PADM.
+- Roles are assigned in PDMS.
 - Guest (B2B) accounts are excluded.
 - Single sign-on matches users by Entra object ID only. Email-based account
   linking (D-022) is removed, because the sync already knows every object
   ID.
 
 ### D-087 Calendar is internal; the Outlook calendar sync is removed — Accepted (done 2026-10-22, with R2)
-The calendar was always meant to be PADM's own look-ahead at upcoming
+The calendar was always meant to be PDMS's own look-ahead at upcoming
 reviews, renewals, and expirations (month and agenda views, dashboards). The
 optional Outlook calendar sync built in Phase 5 (D-050, D-077) is not wanted.
 It will be removed (code, configuration, installer step, docs), which also
-narrows the Graph permissions PADM needs. ICS feed subscriptions are not
+narrows the Graph permissions PDMS needs. ICS feed subscriptions are not
 affected by this decision. Supersedes D-077 and the Graph part of D-078.
 
 ### D-088 ILA document type; admin-curated tags — Accepted (done 2026-10-22, with R2)
@@ -706,15 +706,15 @@ are deleted and `graph_calendar_links` is dropped. Events already created in
 Outlook stay until someone deletes them.
 
 ### D-089 Changes made directly in SharePoint are detected, not prevented — Accepted (design, not built)
-One or two named site owners keep edit rights for emergencies, so PADM
-cannot rely on SharePoint permissions alone. Every few minutes PADM reads
+One or two named site owners keep edit rights for emergencies, so PDMS
+cannot rely on SharePoint permissions alone. Every few minutes PDMS reads
 the site's change feed (Graph delta). If a file is edited, added, or deleted
-by anyone other than PADM, the document is flagged, the change is audited,
+by anyone other than PDMS, the document is flagged, the change is audited,
 and admins are alerted. An admin then does one of two things:
 
 - restores the original, from SharePoint version history or the recycle
   bin;
-- accepts the change as a new PADM version, which goes through the normal
+- accepts the change as a new PDMS version, which goes through the normal
   upload checks.
 
 A Purview retention policy on the site is recommended, so files cannot be
@@ -725,7 +725,7 @@ A person's calendar, dashboard, and ICS feeds include every document they
 may view, County-wide ones included. Decided by the owner.
 
 ### D-091 County-wide comments are owner/admin only; only authors delete comments — Accepted (2026-10-15)
-On a County-wide document only the owner and PADM administrators (the
+On a County-wide document only the owner and PDMS administrators (the
 org-wide `admin` role) may comment or reply; everyone who can view still
 reads the comments. On every document only a comment's author may delete it
 (not administrators, owners, or `manage_permissions` holders), and the author
@@ -760,9 +760,9 @@ Administration → Branding (the settings permission); no developer or config
 edit is needed. The accent must give white text a contrast ratio of at least
 4.5:1 or it is refused; hover, link, and tint shades are derived. The seal is
 a PNG or JPEG of at most 512 KB, 16–2048 px per side, checked by its real
-file type (SVG is refused), and is stored in PADM's database. The seal and
+file type (SVG is refused), and is stored in PDMS's database. The seal and
 name appear on the sign-in page, so they are public to anyone who can reach
-PADM. One organization-name resolver supplies the name to page titles, the
+PDMS. One organization-name resolver supplies the name to page titles, the
 sidebar, notification emails, calendar feeds, webhooks, and records-request
 packages; a blank name falls back to `[org] name` in the config file.
 Changes apply at once in the saving process and within 60 seconds elsewhere.
@@ -782,14 +782,14 @@ The dashboard lists recently updated documents (only ones the viewer can
 see) instead of an activity feed, because a feed built from the audit log
 would expose it. "Needs your attention" holds only the viewer's own tasks and
 approvals; "Coming up" and the tiles cover everything the viewer can see.
-There is no "Share" button: PADM has no sharing model apart from access
+There is no "Share" button: PDMS has no sharing model apart from access
 grants. "Your access" moved to the account page.
 
 **Amended 2026-10-22 by D-099:** the dashboard now has an activity feed,
 built so that it cannot expose the audit log.
 
 ### D-096 Graph app-only authentication with a certificate (PS256) — Accepted (2026-10-21)
-PADM signs a client assertion with its own certificate (header `alg` PS256,
+PDMS signs a client assertion with its own certificate (header `alg` PS256,
 `x5t#S256` SHA-256 thumbprint, ten-minute lifetime), as the Microsoft
 identity platform documents; there is no client secret to leak or rotate in
 config. The certificate and key are one PEM file supplied through
@@ -871,9 +871,9 @@ It is on the dashboard only; there is no separate activity page.
 
 ### D-100 Browser-tab icon from the seal — Accepted (2026-10-22)
 Every page links the county seal as its tab icon when one is set (the seal is
-already public, D-093), otherwise a generic PADM icon shipped in the binary
+already public, D-093), otherwise a generic PDMS icon shipped in the binary
 (`/static/icon.svg`). `/favicon.ico` serves the same, for pages that don't
-know the branding and for browsers that ask on their own. PADM does not
+know the branding and for browsers that ask on their own. PDMS does not
 resize the seal.
 
 ### D-101 County overview counts: "Other" excludes superseded; overdue tile says what it counts — Accepted (2026-10-22)
@@ -887,8 +887,8 @@ Overdue status.
 ### D-102 SharePoint storage: the owner's choices before P3 — Accepted (2026-10-22)
 Six questions from P3's pre-flight check, answered by the owner:
 1. **Long text is truncated in SharePoint.** Single-line columns, and the
-   built-in `Title`, hold 255 characters, while PADM titles can be 500.
-   PADM sends at most 255 characters and keeps the full value itself.
+   built-in `Title`, hold 255 characters, while PDMS titles can be 500.
+   PDMS sends at most 255 characters and keeps the full value itself.
 2. **A SharePoint outage keeps the person's form.** "File storage
    (SharePoint) is unavailable" is shown on the new-document and edit forms
    like a validation error, and as a message on other pages, instead of a
@@ -908,7 +908,7 @@ Six questions from P3's pre-flight check, answered by the owner:
 
 ### D-103 SharePoint uploads use a temporary name first — Accepted (2026-10-22)
 The spec (§7.1) says a file is uploaded straight to its final name, which
-includes the version number. PADM only knows that number inside the
+includes the version number. PDMS only knows that number inside the
 database transaction that saves the version, and the upload has to finish
 before that transaction starts, so that a failed upload saves nothing.
 So each file is uploaded into its document's folder as

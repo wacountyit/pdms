@@ -14,7 +14,7 @@ use serde_json::{Map, Value, json};
 
 use super::{MockGraph, MockState, graph_error, json_resp};
 
-pub const SITE_URL: &str = "https://contoso.sharepoint.com/sites/PADMTest";
+pub const SITE_URL: &str = "https://contoso.sharepoint.com/sites/PDMSTest";
 pub const SITE: &str = "site-1";
 pub const DRIVE: &str = "drive-1";
 pub const LIST: &str = "list-1";

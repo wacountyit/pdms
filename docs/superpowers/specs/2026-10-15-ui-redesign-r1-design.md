@@ -1,4 +1,4 @@
-# PADM UI redesign, round 1 (R1): design
+# PDMS UI redesign, round 1 (R1): design
 
 - **Date:** 2026-10-15
 - **Status:** approved by the owner, then built and merged to `main` on
@@ -16,7 +16,7 @@
 
 ## 1. Purpose
 
-Make PADM look like a finished county product, using the real data and
+Make PDMS look like a finished county product, using the real data and
 permissions. The first audience is upper management. After that, R1 is the
 foundation every later screen builds on.
 
@@ -24,7 +24,7 @@ foundation every later screen builds on.
 
 - every page uses the new frame and visual style;
 - the five key screens below match direction D;
-- an administrator can re-brand PADM (county name, accent color, seal)
+- an administrator can re-brand PDMS (county name, accent color, seal)
   without a developer;
 - local accounts can sign in with a plain username such as `sysadmin`;
 - all existing tests still pass, and the new behavior has its own tests.
@@ -84,7 +84,7 @@ foundation every later screen builds on.
   - Nothing in R1 widens access.
 - **Public repository:**
   - Defaults use placeholder branding (`[County Name]` comes from config;
-    there is a generic "PADM" mark).
+    there is a generic "PDMS" mark).
   - No real county seal, internal hostnames or addresses are committed.
 
 ## 4. Visual system
@@ -186,9 +186,9 @@ when the county chooses its branding.
 **Sidebar, top to bottom:**
 
 1. **Brand block:**
-   - the seal (`/branding/seal`, 38px), or the generic "PADM" mark when no
+   - the seal (`/branding/seal`, 38px), or the generic "PDMS" mark when no
      seal is set;
-   - "PADM";
+   - "PDMS";
    - the county name (§6.3).
 2. **Main menu:**
    - Dashboard, Documents, Calendar, Appointments, Reports;
@@ -243,7 +243,7 @@ The page `<title>` stays "{page title} – {county name}".
 |---|---|---|
 | County name | Trimmed, 1–120 characters | Use `[org] name` from the config file (today's behavior) |
 | Accent color | `#RRGGBB` (the color input or typed hex), and **white text on it must reach at least 4.5:1** | Default `#B45309` |
-| Seal | PNG or JPEG, at most 512 KiB, each side 16–2048 px | The generic "PADM" mark |
+| Seal | PNG or JPEG, at most 512 KiB, each side 16–2048 px | The generic "PDMS" mark |
 
 **Actions:**
 
@@ -282,7 +282,7 @@ button) in the saved colors.
       updated_at   timestamptz NOT NULL DEFAULT now()
   );
   ```
-  The seal lives in PADM's database, not SharePoint, so branding works even
+  The seal lives in PDMS's database, not SharePoint, so branding works even
   when SharePoint is unreachable.
 - **One resolver for the organization name:** the setting if set, else the
   config value. Every place that shows the organization name uses it: page
@@ -308,7 +308,7 @@ button) in the saved colors.
   - **404** when no seal is set; the templates then show the generic mark
     instead of linking.
 - The seal and county name appear before sign-in, so they are public to
-  anyone who can reach PADM. The page says so under the upload field.
+  anyone who can reach PDMS. The page says so under the upload field.
 
 ### 6.5 Upload checks
 
@@ -632,7 +632,7 @@ Everything the current page does stays; it is reorganized.
     **Retention** and **Delete**;
   - each part appears only to people allowed to use it;
   - the whole disclosure is omitted when none apply.
-- **The "Share" button from the demo is not built.** PADM has no sharing
+- **The "Share" button from the demo is not built.** PDMS has no sharing
   feature; access comes from visibility and grants.
 
 ## 12. Other pages

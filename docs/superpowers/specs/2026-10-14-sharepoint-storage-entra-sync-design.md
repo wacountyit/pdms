@@ -3,29 +3,29 @@
 | | |
 |---|---|
 | Date | 2026-10-14 |
-| Status | Approved 2026-10-14. Plans: [index](../plans/2026-10-14-padm-sharepoint-entra-index.md) (where the plans refine this spec, the index records it) |
+| Status | Approved 2026-10-14. Plans: [index](../plans/2026-10-14-pdms-sharepoint-entra-index.md) (where the plans refine this spec, the index records it) |
 | Covers | Sub-project 1 (SharePoint document storage) and sub-project 2 (Entra user sync) |
-| Codebase | `pdms` (the product is referred to as PADM below) |
+| Codebase | `pdms` (the product is referred to as PDMS below) |
 
 ## 1. Background
 
-PADM is the county-wide system of record for official documents that carry
+PDMS is the county-wide system of record for official documents that carry
 review, renewal, or expiration dates (policies, contracts, interlocal
 agreements, grant agreements, and similar). It is used by everyone in the
 county. It reminds people before those dates and runs review and approval.
 It also tracks board appointments, enforces per-department access, and keeps
 a tamper-evident audit trail.
 
-Today PADM stores files in its own blob store (local disk or S3) and creates
+Today PDMS stores files in its own blob store (local disk or S3) and creates
 users when they first sign in.
 
 The county wants:
 
 - **Files to live in SharePoint.** People can browse them there read-only,
   organised by department.
-- **PADM to stay the interactive application** everyone uses: upload, search,
+- **PDMS to stay the interactive application** everyone uses: upload, search,
   reminders, approvals, calendar.
-- **Users to come from Entra ID**, signing in to PADM with SSO, with their
+- **Users to come from Entra ID**, signing in to PDMS with SSO, with their
   department taken from the Department field on their Entra account.
 
 ## 2. Decisions
@@ -34,17 +34,17 @@ These were agreed during design discussion on 2026-10-14.
 
 | # | Decision |
 |---|---|
-| D1 | **SharePoint holds the files; PADM holds everything else.** Metadata, workflow, reminders, appointments, permissions, and audit stay in PADM's database. SharePoint is the file store plus a read-only browsing mirror. ("Option A") |
-| D2 | PADM connects to SharePoint **as itself (app-only)** through Microsoft Graph. It uses a certificate credential and the `Sites.Selected` permission, scoped to **one dedicated site**. |
-| D3 | **Users never receive SharePoint links from PADM.** Downloads are streamed through PADM, which checks permissions and audits each one. |
-| D4 | **Search stays in PADM.** It runs over document details plus text extracted from each file at upload, filtered by PADM permissions. It does not use Microsoft Search. |
+| D1 | **SharePoint holds the files; PDMS holds everything else.** Metadata, workflow, reminders, appointments, permissions, and audit stay in PDMS's database. SharePoint is the file store plus a read-only browsing mirror. ("Option A") |
+| D2 | PDMS connects to SharePoint **as itself (app-only)** through Microsoft Graph. It uses a certificate credential and the `Sites.Selected` permission, scoped to **one dedicated site**. |
+| D3 | **Users never receive SharePoint links from PDMS.** Downloads are streamed through PDMS, which checks permissions and audits each one. |
+| D4 | **Search stays in PDMS.** It runs over document details plus text extracted from each file at upload, filtered by PDMS permissions. It does not use Microsoft Search. |
 | D5 | **SharePoint layout:** one site, one library, top-level `Departments/`, `County-wide/`, `Restricted/`. Each has a folder per department, then a folder per document, then one file per version. Files are never overwritten. |
-| D6 | PADM **mirrors key metadata into SharePoint columns** on every file. A default view shows current versions only. |
+| D6 | PDMS **mirrors key metadata into SharePoint columns** on every file. A default view shows current versions only. |
 | D7 | **Three visibility levels** per document, chosen by the owner at upload and changeable later: **Department** (default), **County-wide** (every active county account can view), and **Restricted** (explicit grants only). |
 | D8 | **SharePoint permissions are set only on top-level and department folders**, never per file. Changing visibility moves the document's folder. |
-| D9 | One or two named people may hold edit rights on the site, but editing there "should never happen". PADM **detects any change made outside PADM** and flags it. |
-| D10 | **Departments come from the Entra user `department` attribute**, through a mapping list in PADM. Entra groups are not used, because AD groups are not synced to Entra. |
-| D11 | **Roles** (admin, legal counsel, records officer, auditor, appointments clerk, department head) are **assigned in PADM**, not derived from Entra. |
+| D9 | One or two named people may hold edit rights on the site, but editing there "should never happen". PDMS **detects any change made outside PDMS** and flags it. |
+| D10 | **Departments come from the Entra user `department` attribute**, through a mapping list in PDMS. Entra groups are not used, because AD groups are not synced to Entra. |
+| D11 | **Roles** (admin, legal counsel, records officer, auditor, appointments clerk, department head) are **assigned in PDMS**, not derived from Entra. |
 | D12 | **All enabled Entra member accounts may sign in.** Guest (B2B) accounts are excluded. SSO matches users by Entra object ID only. |
 | D13 | The break-glass local administrator remains. |
 
@@ -52,13 +52,13 @@ These were agreed during design discussion on 2026-10-14.
 
 **Goals**
 
-- G1: Every file uploaded through PADM is stored in the county's SharePoint
+- G1: Every file uploaded through PDMS is stored in the county's SharePoint
   site, in the D5 layout, with D6 columns.
-- G2: Browsing SharePoint directly shows each person what PADM would show
+- G2: Browsing SharePoint directly shows each person what PDMS would show
   them, at folder granularity (D7, D8).
 - G3: People and their departments are kept in step with Entra automatically.
   Departed staff lose access within a day.
-- G4: Searching in PADM covers the contents of the files stored in SharePoint.
+- G4: Searching in PDMS covers the contents of the files stored in SharePoint.
 - G5: Changes made directly in SharePoint are detected and surfaced to admins
   within one polling interval.
 
@@ -70,26 +70,26 @@ These were agreed during design discussion on 2026-10-14.
   (sub-project 3; small, independent).
 - Public-records (FOIA/PIA) request features beyond what exists.
 - Editing documents in Office or SharePoint (co-authoring), Microsoft Search,
-  and Purview retention labels managed by PADM.
+  and Purview retention labels managed by PDMS.
 - Moving the test server's existing local-disk files into SharePoint (the
   test install is reset instead; see §13).
 
 ## 4. Architecture
 
 ```
- Browser ──HTTPS──▶ PADM web (pdms serve) ──▶ PostgreSQL (metadata, permissions, audit, text index)
+ Browser ──HTTPS──▶ PDMS web (pdms serve) ──▶ PostgreSQL (metadata, permissions, audit, text index)
                          │   ▲
                  upload/ │   │ stream
                 download ▼   │
-                    Microsoft Graph ◀──── PADM worker (pdms worker)
+                    Microsoft Graph ◀──── PDMS worker (pdms worker)
                          │                 • mirror columns / move folders
                          ▼                 • department-folder access
                  SharePoint site           • change detection (delta)
-                 "PADM Records"            • Entra user sync
+                 "PDMS Records"            • Entra user sync
                          ▲
- Read-only browsers ─────┘   (permissions set by PADM on top-level and department folders)
+ Read-only browsers ─────┘   (permissions set by PDMS on top-level and department folders)
 
- Entra ID ──OIDC sign-in──▶ PADM web          Entra ID ──Graph /users/delta──▶ PADM worker
+ Entra ID ──OIDC sign-in──▶ PDMS web          Entra ID ──Graph /users/delta──▶ PDMS worker
 ```
 
 **New and changed units:**
@@ -99,7 +99,7 @@ These were agreed during design discussion on 2026-10-14.
 | `pdms-core::graph` (new) | Graph HTTP client: certificate-based app token with cache, JSON calls, Retry-After and backoff handling, paging. Shared by everything below. | `reqwest`, config |
 | `pdms-storage::sharepoint::SharePointStore` (new) | File I/O only: upload (upload session, `conflictBehavior=fail`), download stream, item metadata (size, `quickXorHash`). | `graph` |
 | `pdms-core::sharepoint` (new) | Placement and mirroring. It computes each document's desired folder path, file names, and columns, then applies them. It also manages department-folder access and runs change detection. | `graph`, `SharePointStore`, documents, directory |
-| `pdms-core::directory::entra_sync` (new) | Reads users from Graph (`/users/delta`), maps the Department value to a PADM department, and creates, updates, or disables users. | `graph`, directory |
+| `pdms-core::directory::entra_sync` (new) | Reads users from Graph (`/users/delta`), maps the Department value to a PDMS department, and creates, updates, or disables users. | `graph`, directory |
 | `pdms-authz` (changed) | Adds the County-wide visibility level to `decide` and to the SQL predicate. | — |
 | `pdms-core::documents` (changed) | Uploads and downloads go through the SharePoint placement. Visibility changes trigger folder moves. | `sharepoint` |
 | `pdms-core::auth::oidc` (changed) | Matches users by Entra object ID only. A first sign-in by a not-yet-synced user creates them and looks up their department immediately. | `entra_sync` |
@@ -111,8 +111,8 @@ development and automated tests.
 
 ## 5. SharePoint site and layout
 
-**Site.** A communication site, e.g. `PADM Records`. Use a separate
-`PADM Records – Test` site for the test server. It uses the default
+**Site.** A communication site, e.g. `PDMS Records`. Use a separate
+`PDMS Records – Test` site for the test server. It uses the default
 `Documents` library.
 
 ```
@@ -132,7 +132,7 @@ Documents
 
 **Naming**
 
-- **Department folder:** the PADM department name.
+- **Department folder:** the PDMS department name.
 - **Document folder:** `{document ID} – {title}`.
 - **File:** `{document ID} v{n} – {version label}.{ext}`. The version label is
   "Original", "Revision", "Amendment", or "Signed copy" (the version kind),
@@ -142,7 +142,7 @@ Documents
   shortened to keep the full path within SharePoint's limits. The document ID
   always stays intact, so names remain unique.
 
-**Columns** (site columns on the library; PADM is the only writer):
+**Columns** (site columns on the library; PDMS is the only writer):
 
 | Column | Type |
 |---|---|
@@ -157,14 +157,14 @@ Documents
 | Effective Date / Review Date / Renewal Date / Expiration Date | Date |
 | Version | Number |
 | Current | Yes/No |
-| Open in PADM | Hyperlink |
+| Open in PDMS | Hyperlink |
 
 **Views.** The default view is "Current documents" (Current = Yes), sorted by
 Review Date. A second view, "All versions", has no filter.
 
-**Library versioning** stays on (major versions). PADM never overwrites a
+**Library versioning** stays on (major versions). PDMS never overwrites a
 file, so SharePoint versions accumulate only if someone edits a file outside
-PADM. Those versions are what an admin restores from (§7.6).
+PDMS. Those versions are what an admin restores from (§7.6).
 
 ## 6. Data model (migration `0008_sharepoint_entra.sql`)
 
@@ -207,14 +207,14 @@ CREATE TABLE sharepoint_files (
     checked_at          timestamptz
 );
 
--- Entra Department values → PADM department (many values may map to one department).
+-- Entra Department values → PDMS department (many values may map to one department).
 CREATE TABLE department_entra_values (
     value_normalized text PRIMARY KEY,           -- lower-case, trimmed, '&' → 'and', collapsed spaces
     value_display    text NOT NULL,
     department_id    uuid NOT NULL REFERENCES departments (id)
 );
 
--- Per-person read grants PADM has made on department folders.
+-- Per-person read grants PDMS has made on department folders.
 CREATE TABLE sharepoint_folder_access (
     department_id uuid NOT NULL REFERENCES departments (id),
     user_id       uuid NOT NULL REFERENCES users (id),
@@ -271,14 +271,14 @@ document versions are immutable.
 
 **If the upload fails,** the user sees "File storage is unavailable; nothing
 was saved." **If the database commit fails after a successful upload,** the
-file is an orphan. Change detection (§7.6) lists files the PADM app created
+file is an orphan. Change detection (§7.6) lists files the PDMS app created
 that no row references, and an admin can remove them.
 
 ### 7.2 Download
 
 1. `documents::access::authorize(view)`, unchanged.
 2. Look up `sharepoint_files` for the version.
-3. `GET /drives/{drive}/items/{item}/content`. PADM follows the redirect
+3. `GET /drives/{drive}/items/{item}/content`. PDMS follows the redirect
    server-side and streams the bytes to the user with the existing headers
    (attachment, sniffed content type, `nosniff`). It computes SHA-256 while
    streaming. A mismatch with the recorded hash is logged as an integrity
@@ -305,7 +305,7 @@ change restores the desired state.
 Department) **move the folder synchronously** as part of the request. If the
 move fails, the change is refused. Loosening changes are left to the
 background job. This keeps SharePoint from ever showing a document more
-widely than PADM allows, beyond a failed request.
+widely than PDMS allows, beyond a failed request.
 
 ### 7.4 Department folder access
 
@@ -313,12 +313,12 @@ The `sharepoint.reconcile_access` job runs after each Entra sync, after any
 department membership change, and nightly. For each `Departments/<Dept>/`
 folder:
 
-- **Desired readers:** the active members of that PADM department.
+- **Desired readers:** the active members of that PDMS department.
 - **Add** missing readers with Graph `invite` (`roles: ["read"]`,
   `requireSignIn: true`, `sendInvitation: false`) and record the permission
   ID.
-- **Remove** readers PADM granted who are no longer desired.
-- **Never touch** permissions PADM did not create. These are reported if
+- **Remove** readers PDMS granted who are no longer desired.
+- **Never touch** permissions PDMS did not create. These are reported if
   present.
 
 `County-wide/` carries one grant to *Everyone except external users*, made by
@@ -360,13 +360,13 @@ correct immediately.
 The `sharepoint.delta` job runs every 5 minutes. It calls
 `GET /drives/{drive}/root/delta` with the stored delta link.
 
-- Items last modified by the PADM app are ignored.
+- Items last modified by the PDMS app are ignored.
 - **A tracked file was modified** (hash or size differs): set `state =
   'changed_outside'`, flag the document, audit `sharepoint.changed_outside`
   with who changed it in SharePoint, and notify admins in-app.
 - **A tracked file was deleted:** set `state = 'missing'` and handle it the
   same way.
-- **A file appears that PADM didn't create, or that no row references:** list
+- **A file appears that PDMS didn't create, or that no row references:** list
   it under "Unexpected files".
 - **A folder was moved or renamed by someone:** enqueue the mirror job, which
   puts it back.
@@ -375,10 +375,10 @@ The `sharepoint.delta` job runs every 5 minutes. It calls
 **Admin resolution** for a flagged document:
 
 - **Restore original:** restore the previous SharePoint version through Graph.
-  For a deleted file, restore it from the site recycle bin, after which PADM
+  For a deleted file, restore it from the site recycle bin, after which PDMS
   re-verifies.
 - **Accept as new version:** download the changed file and run it through the
-  normal upload pipeline as a new PADM version, with scan, type check, text
+  normal upload pipeline as a new PDMS version, with scan, type check, text
   extraction, and audit.
 
 ### 7.7 Integrity verification
@@ -389,7 +389,7 @@ and quickXorHash with Graph item metadata, with no download needed. With
 
 ## 8. Search
 
-Search keeps working the same way. Text is extracted from the bytes PADM
+Search keeps working the same way. Text is extracted from the bytes PDMS
 already holds at upload, and the full-text index and permission filter are
 unchanged. When an admin accepts a change as a new version, that version is
 extracted and indexed like any other.
@@ -402,9 +402,9 @@ backend = "sharepoint"            # "local" and "s3" remain for development and 
 
 [sharepoint]
 tenant_id = "…"
-client_id = "…"                   # the "PADM Service" app registration
+client_id = "…"                   # the "PDMS Service" app registration
 certificate_file = "/run/secrets/sharepoint_cert"   # PEM: certificate + private key
-site_url = "https://<tenant>.sharepoint.com/sites/PADMRecords"
+site_url = "https://<tenant>.sharepoint.com/sites/PDMSRecords"
 library = "Documents"
 delta_interval_minutes = 5
 
@@ -448,10 +448,10 @@ certificate as a Docker secret.
   - no Members or Visitors;
   - external sharing off;
   - only owners can share.
-- **PADM is authoritative.** SharePoint permissions are a coarse mirror that
-  PADM converges to. Tightening changes are applied synchronously (§7.3).
+- **PDMS is authoritative.** SharePoint permissions are a coarse mirror that
+  PDMS converges to. Tightening changes are applied synchronously (§7.3).
 - **No SharePoint links reach users.** Every download is authorised and
-  audited by PADM.
+  audited by PDMS.
 - **Guests are excluded** from sync and sign-in, and identities are bound by
   object ID only.
 - **New audit actions:**
@@ -462,7 +462,7 @@ certificate as a Docker secret.
   - `directory.department_mapping_changed`.
 - **Retention:** SharePoint's recycle bin keeps deleted items for 93 days. A
   Purview retention policy on the site is recommended, so files cannot be
-  permanently deleted by the site owners (Appendix A, step 6). PADM's
+  permanently deleted by the site owners (Appendix A, step 6). PDMS's
   database backups remain required.
 
 ## 12. Testing
@@ -488,13 +488,13 @@ certificate as a Docker secret.
     a disabled user, a removed user, and an excluded guest.
 - **Acceptance (automated where possible):**
   - A Department document is visible to its department and not to another
-    one, in both PADM and SharePoint folder permissions.
+    one, in both PDMS and SharePoint folder permissions.
   - A County-wide document is visible to every active account.
   - Changing a document to Restricted moves it before the request returns.
   - An outside edit is flagged within one delta interval.
-  - A disabled Entra user loses PADM sessions and SharePoint folder access
+  - A disabled Entra user loses PDMS sessions and SharePoint folder access
     after the sync.
-- **Live (opt-in, ignored by default):** run against `PADM Records – Test`.
+- **Live (opt-in, ignored by default):** run against `PDMS Records – Test`.
 
 ## 13. Rollout
 
@@ -505,7 +505,7 @@ certificate as a Docker secret.
 3. Reset the test server (`docker compose down -v`, fresh install with
    `backend = "sharepoint"`), seed demo data, and run the live tests and the
    ROADMAP testing plan.
-4. Production: same steps against `PADM Records`.
+4. Production: same steps against `PDMS Records`.
 
 There is no production data yet, so no storage migration tool is built.
 
@@ -520,11 +520,11 @@ There is no production data yet, so no storage migration tool is built.
 
 ## Appendix A: county setup steps
 
-Steps 1–6 can be done now. Step 7 is needed only when PADM is ready to
+Steps 1–6 can be done now. Step 7 is needed only when PDMS is ready to
 connect.
 
-1. **Create a communication site**, `PADM Records – Test` (and later
-   `PADM Records`).
+1. **Create a communication site**, `PDMS Records – Test` (and later
+   `PDMS Records`).
 2. **Permissions:** site owners are one or two named admins. Leave the
    Members and Visitors groups **empty**.
 3. **Sharing:** set external sharing to "Only people in your organization"
@@ -534,17 +534,17 @@ connect.
 5. **Create top-level folders** `Departments`, `County-wide`, `Restricted`.
    On `County-wide`, stop inheriting permissions and grant
    **Everyone except external users: Read**. Leave the other two inheriting
-   (owners only). PADM creates the department and document folders itself.
+   (owners only). PDMS creates the department and document folders itself.
 6. **Optional, recommended:** a Purview retention policy on the site, so
    files can't be permanently deleted.
-7. **When PADM is ready:**
-   1. Register an app, `PADM Service`, with Microsoft Graph *application*
+7. **When PDMS is ready:**
+   1. Register an app, `PDMS Service`, with Microsoft Graph *application*
       permissions `Sites.Selected` and `User.Read.All`, and grant admin
       consent.
-   2. Upload the public certificate PADM generates.
+   2. Upload the public certificate PDMS generates.
    3. Grant the app **full control on this site only.** This is done with a
       Graph `POST /sites/{site-id}/permissions` call or PnP PowerShell; the
       exact commands are in the setup guide produced during implementation.
 8. **Data hygiene (can start now):** make sure every staff account has a
    correct **Department** value, and list the distinct values in use for the
-   PADM mapping list.
+   PDMS mapping list.

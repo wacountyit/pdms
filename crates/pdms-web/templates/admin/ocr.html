@@ -3,7 +3,7 @@
 <header class="page-head">
   <div>
     <h1>{{ l.title }}</h1>
-    <p class="page-lede">PADM reads the text of every uploaded file so it can be searched and so dates can be suggested. Scanned PDFs and images need the OCR service.</p>
+    <p class="page-lede">PDMS reads the text of every uploaded file so it can be searched and so dates can be suggested. Scanned PDFs and images need the OCR service.</p>
   </div>
 </header>
 {% endblock %}
@@ -21,7 +21,7 @@
   <h2 id="turn-on-h">Turn on OCR</h2>
   <ol class="steps-list">
     <li>Start the OCR service: <code>docker compose --profile ocr up -d</code>, or run <code>./install.sh --configure ocr</code>.</li>
-    <li>Set <code>[ocr] sidecar_url = "http://ocr:8080"</code> in the configuration file, then restart PADM.</li>
+    <li>Set <code>[ocr] sidecar_url = "http://ocr:8080"</code> in the configuration file, then restart PDMS.</li>
     <li>Use “Read the file again” on a document page to read a file uploaded before OCR was on.</li>
   </ol>
 </section>

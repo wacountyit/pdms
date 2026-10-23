@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** PADM can read Microsoft Entra ID as itself (certificate, app-only), keeps people and their departments in step with Entra every night (and on demand), and matches SSO sign-ins by Entra object ID only.
+**Goal:** PDMS can read Microsoft Entra ID as itself (certificate, app-only), keeps people and their departments in step with Entra every night (and on demand), and matches SSO sign-ins by Entra object ID only.
 
-**Architecture:** A new `pdms-core::graph` module holds a certificate credential (PS256 client assertion), a token cache, and a small JSON/delta/upload/download client that retries throttling and never sends its bearer token anywhere but `api_url`. `directory::entra_values` maps Entra "Department" values to PADM departments; `directory::entra_sync` reads `/users/delta`, creates/updates/departs people, keeps one `idp` department membership per person, and records a cursor in `sync_cursors`. OIDC sign-in uses the same identity key and, when the sync is on, asks Graph about a first-time user instead of trusting token claims. An admin page shows status, mappings, and unmapped values.
+**Architecture:** A new `pdms-core::graph` module holds a certificate credential (PS256 client assertion), a token cache, and a small JSON/delta/upload/download client that retries throttling and never sends its bearer token anywhere but `api_url`. `directory::entra_values` maps Entra "Department" values to PDMS departments; `directory::entra_sync` reads `/users/delta`, creates/updates/departs people, keeps one `idp` department membership per person, and records a cursor in `sync_cursors`. OIDC sign-in uses the same identity key and, when the sync is on, asks Graph about a first-time user instead of trusting token claims. An admin page shows status, mappings, and unmapped values.
 
 **Tech Stack:** Rust 2024, reqwest 0.12 (rustls, `stream`), ring 0.17 (RSA-PSS signing), rcgen 0.14 + rsa 0.9 (certificate generation), SQLx 0.9, Axum 0.8 (also as an in-process mock Graph in tests), Askama 0.16.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D10–D13, §7.5, §9, §10, §11, §12, Appendix A step 7; decision D-086. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P2"; P1 owns migration 0008, UI redesign R1 owns 0009, this plan owns 0010). **Depends on:** P1 merged (only for migration numbering).
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D10–D13, §7.5, §9, §10, §11, §12, Appendix A step 7; decision D-086. **Index:** [2026-10-14-pdms-sharepoint-entra-index.md](2026-10-14-pdms-sharepoint-entra-index.md) ("Produced by P2"; P1 owns migration 0008, UI redesign R1 owns 0009, this plan owns 0010). **Depends on:** P1 merged (only for migration numbering).
 
 ## Global Constraints
 
@@ -31,8 +31,8 @@
 
 Inputs the spec implies that are most likely to hurt a real county user; each has a test in its owning task.
 
-1. **Someone leaves the county** (account disabled or deleted in Entra): they must be `departed` with sessions revoked after the next sync — but the last PADM administrator is never deactivated automatically; it is reported instead (Task 6 `delta_moves_departments_and_departs_disabled_and_deleted_users`, `last_administrator_is_reported_not_departed`).
-2. **An Entra account whose email equals an existing PADM account** (the break-glass admin, a hand-created user): never linked, never merged; the sync reports it and SSO denies with `email_in_use` (Task 6 `email_already_used_by_an_unlinked_account_is_reported_not_linked`, Task 8 `existing_account_with_the_same_email_is_never_linked`).
+1. **Someone leaves the county** (account disabled or deleted in Entra): they must be `departed` with sessions revoked after the next sync — but the last PDMS administrator is never deactivated automatically; it is reported instead (Task 6 `delta_moves_departments_and_departs_disabled_and_deleted_users`, `last_administrator_is_reported_not_departed`).
+2. **An Entra account whose email equals an existing PDMS account** (the break-glass admin, a hand-created user): never linked, never merged; the sync reports it and SSO denies with `email_in_use` (Task 6 `email_already_used_by_an_unlinked_account_is_reported_not_linked`, Task 8 `existing_account_with_the_same_email_is_never_linked`).
 3. **Graph is busy or the delta token expired**: throttling is retried, an expired token restarts a full sync, and a failed run keeps the previous cursor so no change is lost (Task 3 `throttling_is_retried_then_gives_up`, Task 6 `expired_delta_token_triggers_a_full_resync`, `a_failed_run_keeps_the_saved_cursor`).
 4. **Credentials leaking to the wrong place**: a `nextLink` or `Location` pointing at another host must never receive the bearer token; pre-authenticated URLs must never receive it (Task 3 `links_to_other_hosts_are_refused`, `download_follows_the_redirect_without_the_token`, `upload_chunks_are_sent_without_the_token`).
 5. **Messy Department values**: "Road & Bridge", "road and bridge ", "ROAD  AND BRIDGE" are one mapping; blank or unknown values give a person no department (they can still sign in) and appear on the admin page with counts (Task 5 `normalize_folds_case_ampersands_and_spaces`, Task 6 `first_sync_creates_members_maps_departments_and_skips_guests`).
@@ -143,7 +143,7 @@ Expected: FAIL to compile — `no field graph on type Config`.
 - [ ] **Step 3: Implement.** In `struct Config` add, after `pub graph_calendar: GraphCalendarConfig,`:
 
 ```rust
-    /// Microsoft Graph as PADM itself (app-only, certificate). Used by the
+    /// Microsoft Graph as PDMS itself (app-only, certificate). Used by the
     /// Entra user sync and, later, SharePoint storage.
     pub graph: GraphConfig,
     pub entra_sync: EntraSyncConfig,
@@ -152,7 +152,7 @@ Expected: FAIL to compile — `no field graph on type Config`.
 After `impl Default for GraphCalendarConfig { ... }` add:
 
 ```rust
-/// Microsoft Graph with an app registration ("PADM Service") and a
+/// Microsoft Graph with an app registration ("PDMS Service") and a
 /// certificate credential. All three of `tenant_id`, `client_id`, and
 /// `certificate` are needed; with none of them set, Graph is off.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -327,7 +327,7 @@ opt-level = 3
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Microsoft Graph as PADM itself: app-only tokens from a certificate, and a
+//! Microsoft Graph as PDMS itself: app-only tokens from a certificate, and a
 //! small client for JSON, delta queries, uploads, and downloads.
 
 pub mod cert;
@@ -357,7 +357,7 @@ mod tests {
 
     #[test]
     fn generated_certificate_signs_verifiable_ps256_assertions() {
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         assert!(g.pem.starts_with("-----BEGIN CERTIFICATE-----"));
         assert!(g.pem.contains("-----BEGIN PRIVATE KEY-----"));
         let c = Credential::from_pem(&g.pem).unwrap();
@@ -396,7 +396,7 @@ mod tests {
     fn pkcs1_keys_from_openssl_are_accepted() {
         use rsa::pkcs1::EncodeRsaPrivateKey;
         use rsa::pkcs8::{DecodePrivateKey, LineEnding};
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         let key_pem = &g.pem[g.certificate_pem.len()..];
         let key = rsa::RsaPrivateKey::from_pkcs8_pem(key_pem).unwrap();
         let pkcs1 = key.to_pkcs1_pem(LineEnding::LF).unwrap();
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn missing_or_encrypted_keys_are_rejected() {
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         let e = Credential::from_pem(&g.certificate_pem).unwrap_err().to_string();
         assert!(e.contains("PRIVATE KEY"), "{e}");
         let encrypted = format!(
@@ -658,9 +658,9 @@ pub fn thumbprint(der: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(der))
 }
 
-/// A new self-signed certificate for the "PADM Service" app registration.
+/// A new self-signed certificate for the "PDMS Service" app registration.
 pub struct GeneratedCertificate {
-    /// Certificate followed by its private key: what PADM reads.
+    /// Certificate followed by its private key: what PDMS reads.
     pub pem: String,
     /// The public certificate alone: what you upload to Entra ID.
     pub certificate_pem: String,
@@ -1095,7 +1095,7 @@ use serde_json::{Value, json};
 /// One certificate per test binary (key generation is the slow part).
 fn certificate() -> &'static str {
     static C: OnceLock<String> = OnceLock::new();
-    C.get_or_init(|| cert::generate("PADM test", 30).unwrap().pem)
+    C.get_or_init(|| cert::generate("PDMS test", 30).unwrap().pem)
 }
 
 async fn client() -> (MockGraph, GraphClient) {
@@ -1262,7 +1262,7 @@ const TOKEN_MARGIN: Duration = Duration::from_secs(300);
 /// Loop guard when following `@odata.nextLink`.
 const MAX_PAGES: usize = 10_000;
 
-/// A Graph client acting as the PADM app registration. Cheap to clone.
+/// A Graph client acting as the PDMS app registration. Cheap to clone.
 #[derive(Clone)]
 pub struct GraphClient {
     inner: Arc<Inner>,
@@ -1319,7 +1319,7 @@ impl GraphClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(cfg.timeout_seconds.max(5)))
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("PADM/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("PDMS/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| GraphError::Transport(e.to_string()))?;
         Ok(GraphClient {
@@ -1731,7 +1731,7 @@ Expected: FAIL to compile — `no field graph on type Core`.
 - [ ] **Step 3: Implement.** In `crates/pdms-core/src/lib.rs`, add to `pub struct Core` after `pub ocr: ...`:
 
 ```rust
-    /// Microsoft Graph as PADM itself (`None` unless `[graph]` is configured).
+    /// Microsoft Graph as PDMS itself (`None` unless `[graph]` is configured).
     pub graph: Option<graph::GraphClient>,
 ```
 
@@ -1754,7 +1754,7 @@ In `crates/pdms/src/main.rs`, add to `enum Command` after `GenSecret,`:
 
 ```rust
     /// Create the certificate for the Microsoft Graph app registration
-    /// ("PADM Service"). Writes certificate + private key to OUT (mode 0600)
+    /// ("PDMS Service"). Writes certificate + private key to OUT (mode 0600)
     /// and the public certificate to OUT with the extension .crt, which you
     /// upload in Entra ID. Needs no configuration.
     GenGraphCert {
@@ -1762,7 +1762,7 @@ In `crates/pdms/src/main.rs`, add to `enum Command` after `GenSecret,`:
         out: PathBuf,
         #[arg(long, default_value_t = 730)]
         days: u32,
-        #[arg(long, default_value = "PADM Service")]
+        #[arg(long, default_value = "PDMS Service")]
         name: String,
     },
 ```
@@ -1809,8 +1809,8 @@ fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Res
     let public = out.with_extension("crt");
     std::fs::write(&public, &g.certificate_pem)
         .with_context(|| format!("writing {}", public.display()))?;
-    println!("Certificate and private key: {} (secret: give it to PADM as PDMS_GRAPH__CERTIFICATE_FILE)", out.display());
-    println!("Public certificate for Entra ID (App registrations → PADM Service → Certificates & secrets → Upload): {}", public.display());
+    println!("Certificate and private key: {} (secret: give it to PDMS as PDMS_GRAPH__CERTIFICATE_FILE)", out.display());
+    println!("Public certificate for Entra ID (App registrations → PDMS Service → Certificates & secrets → Upload): {}", public.display());
     println!("SHA-256 thumbprint (x5t#S256): {}", g.thumbprint);
     println!("Expires: {}", g.not_after.format("%Y-%m-%d"));
     Ok(())
@@ -1825,14 +1825,14 @@ Expected: PASS (10 tests).
 Run (in a scratch directory):
 
 ```bash
-cargo run -q -p pdms -- gen-graph-cert --out /tmp/padm-graph-test.pem
-stat -c '%a' /tmp/padm-graph-test.pem
-head -1 /tmp/padm-graph-test.crt
-cargo run -q -p pdms -- gen-graph-cert --out /tmp/padm-graph-test.pem; echo "exit $?"
-rm /tmp/padm-graph-test.pem /tmp/padm-graph-test.crt
+cargo run -q -p pdms -- gen-graph-cert --out /tmp/pdms-graph-test.pem
+stat -c '%a' /tmp/pdms-graph-test.pem
+head -1 /tmp/pdms-graph-test.crt
+cargo run -q -p pdms -- gen-graph-cert --out /tmp/pdms-graph-test.pem; echo "exit $?"
+rm /tmp/pdms-graph-test.pem /tmp/pdms-graph-test.crt
 ```
 
-Expected: four lines printed (key file, public certificate, thumbprint, expiry two years out); `600`; `-----BEGIN CERTIFICATE-----`; the second run prints `error: creating /tmp/padm-graph-test.pem (it must not exist yet): …` and `exit 1`.
+Expected: four lines printed (key file, public certificate, thumbprint, expiry two years out); `600`; `-----BEGIN CERTIFICATE-----`; the second run prints `error: creating /tmp/pdms-graph-test.pem (it must not exist yet): …` and `exit 1`.
 
 - [ ] **Step 5: Commit.**
 
@@ -1860,7 +1860,7 @@ git commit -m "core: Graph client on Core; pdms gen-graph-cert"
 
 ```sql
 -- Entra ID user sync (spec 2026-10-14, §6; D-086): who manages each account,
--- the raw Department value, Department → PADM department mappings, and cursors
+-- the raw Department value, Department → PDMS department mappings, and cursors
 -- for change tracking.
 
 CREATE TYPE user_source AS ENUM ('local', 'entra');
@@ -1958,7 +1958,7 @@ And in `crates/pdms-core/src/directory/entra_values.rs` (created in Step 4) the 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Entra ID "Department" values → PADM departments (D-086).
+//! Entra ID "Department" values → PDMS departments (D-086).
 
 #[cfg(test)]
 mod tests {
@@ -1984,7 +1984,7 @@ Expected: FAIL to compile — `cannot find function normalize`.
 - [ ] **Step 4: Implement.** In `crates/pdms-core/src/model.rs` after `impl MembershipSource { ... }`:
 
 ```rust
-/// Who manages an account: created in PADM, or by the Entra ID sync.
+/// Who manages an account: created in PDMS, or by the Entra ID sync.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "user_source", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
@@ -2198,7 +2198,7 @@ git commit -m "directory: Entra Department value mappings (migration 0010)"
 
 #### Pre-flight corrections (2026-10-21; these override the task text above)
 
-- **Migration number.** The file is `migrations/0010_entra_sync.sql`, because R1's `0009_ui_redesign.sql` exists. In the same commit, update refinement #1 in `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`: `0009_entra_sync.sql` becomes `0010_entra_sync.sql` (P2), P3 becomes `0011_sharepoint_files.sql`, and P4 becomes `0012_sharepoint_access.sql`. Add the index to `git add`.
+- **Migration number.** The file is `migrations/0010_entra_sync.sql`, because R1's `0009_ui_redesign.sql` exists. In the same commit, update refinement #1 in `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`: `0009_entra_sync.sql` becomes `0010_entra_sync.sql` (P2), P3 becomes `0011_sharepoint_files.sql`, and P4 becomes `0012_sharepoint_access.sql`. Add the index to `git add`.
 - **Module order.** In `crates/pdms-core/src/directory/mod.rs`, put `pub mod entra_values;` between `mod admin;` and `pub mod sync;` (rustfmt's order).
 - **No `model::UserSource`.** Do not add it: nothing reads it, and the queries use SQL literals. The SQL type `user_source` stays. In the same commit, remove `model::UserSource` from the index's "Additions" list.
 - **DELETE grant.** The migration's `DELETE` grant on `department_entra_values` stays, because `remove()` needs it. Spec §6 listed only SELECT, INSERT and UPDATE. Record this in the index under "Changes recorded when P2 was written".
@@ -2242,7 +2242,7 @@ const OID_G: &str = "90000000-0000-4000-8000-000000000009";
 
 fn certificate() -> &'static str {
     static C: OnceLock<String> = OnceLock::new();
-    C.get_or_init(|| cert::generate("PADM test", 30).unwrap().pem)
+    C.get_or_init(|| cert::generate("PDMS test", 30).unwrap().pem)
 }
 
 /// A core whose Graph is the mock, with the sync on.
@@ -2566,8 +2566,8 @@ use crate::model::UserStatus;
 pub const SYNC_JOB: &str = "directory.entra_sync";
 /// Runs every 15 minutes; enqueues the daily sync once `run_at` has passed.
 pub const TICK_JOB: &str = "directory.entra_sync_tick";
-/// Postgres advisory lock: one sync at a time ("PADMENTR").
-pub const LOCK_KEY: i64 = 0x5041_444d_454e_5452;
+/// Postgres advisory lock: one sync at a time ("PDMSENTR").
+pub const LOCK_KEY: i64 = 0x5044_4d53_454e_5452;
 const CURSOR: &str = "entra.users";
 const BASE_SELECT: &str = "id,displayName,mail,userPrincipalName,accountEnabled,userType";
 
@@ -2799,7 +2799,7 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
     Ok(id)
 }
 
-/// Apply one account. Returns the PADM user ID when the person is an active member.
+/// Apply one account. Returns the PDMS user ID when the person is an active member.
 async fn apply(
     core: &Core,
     ctx: &Ctx,
@@ -2963,7 +2963,7 @@ fn email_conflict(
     match CoreError::conflict_on_unique(err, "") {
         CoreError::Conflict(_) => {
             report.errors.push(format!(
-                "{email} is already used by a PADM account that is not this Entra account; \
+                "{email} is already used by a PDMS account that is not this Entra account; \
                  rename or remove that account, then run a full sync"
             ));
             Ok(None)
@@ -3824,12 +3824,12 @@ Create `crates/pdms-web/templates/admin/entra.html`:
 ```html
 {% extends "base.html" %}
 {% block content %}
-<p>People and their departments come from Microsoft Entra ID. Each night PADM reads every enabled member account: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PADM department below.</p>
+<p>People and their departments come from Microsoft Entra ID. Each night PDMS reads every enabled member account: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PDMS department below.</p>
 
 <section aria-labelledby="sync-h">
   <h2 id="sync-h">Sync status</h2>
   {% if !configured %}
-  <p class="muted">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
+  <p class="muted">Microsoft Graph is not configured, so PDMS cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
   {% else if !enabled %}
   <p class="muted">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>
   {% endif %}
@@ -3857,7 +3857,7 @@ Create `crates/pdms-web/templates/admin/entra.html`:
 <section aria-labelledby="map-h">
   <h2 id="map-h">Department mapping</h2>
   <table>
-    <thead><tr><th scope="col">Entra {{ attribute }} value</th><th scope="col">PADM department</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <thead><tr><th scope="col">Entra {{ attribute }} value</th><th scope="col">PDMS department</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
     {% for v in values %}
       <tr><td>{{ v.value }}</td><td>{{ v.department_name }}</td>
@@ -3917,7 +3917,7 @@ git commit -m "web: Administration → Entra ID sync page"
   Keep the strings the tests look for: "Microsoft Graph is not configured", "No sync has completed yet." and `Road &amp; Bridge`. Shape:
 
 ```html
-{% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PADM cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
+{% if !configured %}<p class="flash flash-error" role="alert">Microsoft Graph is not configured, so PDMS cannot read Entra ID. Set <code>[graph]</code> (see the administrator guide).</p>
 {% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off (<code>[entra_sync] enabled = false</code>).</p>{% endif %}
 <section class="panel" aria-labelledby="sync-h">
   <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
@@ -3961,7 +3961,7 @@ git commit -m "web: Administration → Entra ID sync page"
 - [ ] **Step 1: Example configuration.** Append to `config/pdms.example.toml`:
 
 ```toml
-[graph]                         # Microsoft Graph as PADM itself (app registration "PADM Service")
+[graph]                         # Microsoft Graph as PDMS itself (app registration "PDMS Service")
 # tenant_id = ""                # Directory (tenant) ID
 # client_id = ""                # Application (client) ID
 # certificate: PEM certificate + private key, from `pdms gen-graph-cert`; give it as a file:
@@ -3985,42 +3985,42 @@ include_guests = false
 
 With the sync on, people and their departments come from Entra ID instead
 of token group claims. Each night (at `[entra_sync] run_at`, default 02:30
-local time) PADM reads every enabled member account:
+local time) PDMS reads every enabled member account:
 
 - new people are created, so they have access before their first sign-in;
 - names, emails, and departments are updated;
 - people whose account is disabled or deleted in Entra are marked
-  **departed** and signed out. PADM never reactivates anyone by itself;
+  **departed** and signed out. PDMS never reactivates anyone by itself;
 - guest (B2B) accounts are skipped.
 
 The department comes from the **Department** field of the Entra account.
 Under **Administration → Entra ID sync**, map each value in use ("Road &
-Bridge", "R&B", …) to a PADM department; case, spacing, and `&`/"and" do
+Bridge", "R&B", …) to a PDMS department; case, spacing, and `&`/"and" do
 not matter. People with a blank or unmapped value can sign in but see only
 what is shared with them; the page lists those values with counts. Make the
 Department field part of account creation.
 
 Roles (administrator, legal counsel, records officer, auditor, appointments
-clerk, department head) are still assigned in PADM. Department memberships
+clerk, department head) are still assigned in PDMS. Department memberships
 you add by hand are never changed by the sync. If the only administrator is
-disabled in Entra, PADM keeps them active and reports it on the page.
+disabled in Entra, PDMS keeps them active and reports it on the page.
 
 Sign-in matches people by their Entra object ID, never by email: an Entra
-account whose email equals an existing PADM account (for example the
+account whose email equals an existing PDMS account (for example the
 break-glass administrator) is not linked; the sync reports it and sign-in
 is refused until you rename or remove the other account.
 
 **Setup.**
 
-1. Create the certificate on the PADM server:
+1. Create the certificate on the PDMS server:
    `docker compose run --rm app gen-graph-cert --out /var/lib/pdms/graph_certificate`
    (or `pdms gen-graph-cert --out secrets/graph_certificate` on a host with
    the binary). It writes the secret certificate + key (mode 0600) and a
    `.crt` file with the public certificate.
-2. In Entra ID, register an app **PADM Service**, add the Microsoft Graph
+2. In Entra ID, register an app **PDMS Service**, add the Microsoft Graph
    **application** permission `User.Read.All`, grant admin consent, and
    upload the `.crt` file under **Certificates & secrets**.
-3. Set `[graph] tenant_id` and `client_id`, give PADM the certificate file
+3. Set `[graph] tenant_id` and `client_id`, give PDMS the certificate file
    as `PDMS_GRAPH__CERTIFICATE_FILE`, set `[entra_sync] enabled = true`
    (`auth.oidc.issuer_url` must be set), restart, and press **Sync now**.
    `pdms sync-directory` runs a sync from the command line;
@@ -4031,7 +4031,7 @@ is refused until you rename or remove the other account.
 
 ```markdown
 ### D-096 Graph app-only authentication with a certificate (PS256) — Accepted
-PADM signs a client assertion with its own certificate (header `alg` PS256,
+PDMS signs a client assertion with its own certificate (header `alg` PS256,
 `x5t#S256` SHA-256 thumbprint, five-to-ten-minute lifetime), as the
 Microsoft identity platform documents; there is no client secret to leak or
 rotate in config. The certificate and key are one PEM file supplied through

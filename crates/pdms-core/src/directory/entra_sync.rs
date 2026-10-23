@@ -44,8 +44,8 @@ use crate::model::{MembershipSource, UserStatus};
 pub const SYNC_JOB: &str = "directory.entra_sync";
 /// Runs every 15 minutes; enqueues the daily sync once `run_at` has passed.
 pub const TICK_JOB: &str = "directory.entra_sync_tick";
-/// Postgres advisory lock: one sync at a time ("PADMENTR").
-pub const LOCK_KEY: i64 = 0x5041_444d_454e_5452;
+/// Postgres advisory lock: one sync at a time ("PDMSENTR").
+pub const LOCK_KEY: i64 = 0x5044_4d53_454e_5452;
 const CURSOR: &str = "entra.users";
 const BASE_SELECT: &str = "id,displayName,mail,userPrincipalName,accountEnabled,userType";
 
@@ -382,13 +382,13 @@ async fn sweep(
         None
     } else if members == 0 {
         Some(format!(
-            "Entra listed no member accounts, so the {} linked PADM account(s) it did not list \
+            "Entra listed no member accounts, so the {} linked PDMS account(s) it did not list \
              were not departed",
             departing.len()
         ))
     } else if departing.len() > limit {
         Some(format!(
-            "{} of {} linked PADM accounts are not in Entra (more than {limit} at once), \
+            "{} of {} linked PDMS accounts are not in Entra (more than {limit} at once), \
              so none was departed",
             departing.len(),
             linked.len()
@@ -425,7 +425,7 @@ async fn sweep(
     Ok(())
 }
 
-/// An active PADM account linked to an Entra account.
+/// An active PDMS account linked to an Entra account.
 struct Linked<'a> {
     id: Uuid,
     name: &'a str,
@@ -508,7 +508,7 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
     Ok(id)
 }
 
-/// Apply one account. Returns the PADM user ID when the person is an active member.
+/// Apply one account. Returns the PDMS user ID when the person is an active member.
 async fn apply(
     core: &Core,
     ctx: &Ctx,
@@ -674,7 +674,7 @@ fn email_conflict(
     match CoreError::conflict_on_unique(err, "") {
         CoreError::Conflict(_) => {
             report.errors.push(format!(
-                "{email} is already used by a PADM account that is not this Entra account; \
+                "{email} is already used by a PDMS account that is not this Entra account; \
                  rename or remove that account, then run a full sync"
             ));
             Ok(None)

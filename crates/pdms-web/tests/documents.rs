@@ -1142,7 +1142,7 @@ async fn a_sharepoint_outage_keeps_the_new_document_form() {
         tenant_id: "tenant-1".into(),
         client_id: "client-1".into(),
         certificate: Secret::new(
-            pdms_core::graph::cert::generate("PADM test", 30)
+            pdms_core::graph::cert::generate("PDMS test", 30)
                 .unwrap()
                 .pem,
         ),
@@ -1152,7 +1152,7 @@ async fn a_sharepoint_outage_keeps_the_new_document_form() {
         max_retries: 0,
     };
     config.storage.backend = StorageBackend::SharePoint;
-    config.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PADMTest".into();
+    config.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PDMSTest".into();
     let app = app_with(config).await;
     let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
     let mut b = Browser::new(&app);

@@ -19,7 +19,7 @@ pub(super) struct Item {
 }
 
 /// A top-level area folder, created if missing. Returns its ID and whether
-/// PADM created it.
+/// PDMS created it.
 pub(super) async fn ensure_area_folder(
     g: &GraphClient,
     drive: &str,
@@ -127,7 +127,7 @@ pub async fn department_folder_id(
 }
 
 /// Create folder `name` under `parent`. If the name is taken by a folder no
-/// PADM record points at (left by an interrupted run), adopt it. If it
+/// PDMS record points at (left by an interrupted run), adopt it. If it
 /// belongs to another record, try `fallback`.
 pub(super) async fn create_folder(
     db: &PgPool,

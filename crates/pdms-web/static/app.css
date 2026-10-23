@@ -1,4 +1,4 @@
-/* PADM styles (direction D). Colors meet WCAG 2.1 AA; see docs/superpowers/specs/2026-10-15-ui-redesign-r1-design.md §4. */
+/* PDMS styles (direction D). Colors meet WCAG 2.1 AA; see docs/superpowers/specs/2026-10-15-ui-redesign-r1-design.md §4. */
 
 /* ==========================================================================
    1. Tokens: fonts and colors
@@ -224,7 +224,7 @@ h3 { font-size: 16px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
 }
 .brand img, .brand .mark { flex: none; width: 38px; height: 38px; border-radius: 8px; }
 .brand img { object-fit: contain; }
-/* The default mark: "PADM" on the accent. No letter-spacing and no wrapping,
+/* The default mark: "PDMS" on the accent. No letter-spacing and no wrapping,
    so it never splits ("PAD M") inside its small box. geometricPrecision
    turns off hinted (rounded) glyph advances, which otherwise open a gap
    before the M at small sizes on high-density screens. */

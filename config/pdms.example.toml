@@ -65,7 +65,7 @@ prefix = ""
 allow_http = false
 
 [sharepoint]                    # used when [storage] backend = "sharepoint"; export packages stay in local_path
-site_url = ""                   # e.g. "https://contoso.sharepoint.com/sites/PADMRecords"
+site_url = ""                   # e.g. "https://contoso.sharepoint.com/sites/PDMSRecords"
 library = "Documents"           # the document library (drive) name
 delta_interval_minutes = 5      # change check interval (P4)
 upload_chunk_bytes = 10485760   # 10 MiB; a multiple of 327680 (320 KiB), at most 62914560
@@ -153,7 +153,7 @@ sidecar_timeout_seconds = 300
 max_bytes = 52428800
 min_text_chars = 100           # PDFs with less embedded text are OCR'd
 
-[graph]                         # Microsoft Graph as PADM itself (app registration "PADM Service")
+[graph]                         # Microsoft Graph as PDMS itself (app registration "PDMS Service")
 # tenant_id = ""                # Directory (tenant) ID
 # client_id = ""                # Application (client) ID
 # certificate: PEM certificate + private key, from `pdms gen-graph-cert`; give it as a file:

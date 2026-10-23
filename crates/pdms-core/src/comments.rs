@@ -5,7 +5,7 @@
 //!
 //! - Reading comments needs `view` on the document; writing needs `view`
 //!   (or `edit` when `[comments] viewers_can_comment = false`).
-//! - On County-wide documents only the document's owner and PADM
+//! - On County-wide documents only the document's owner and PDMS
 //!   administrators may comment or reply (D-091); everyone who can view still
 //!   reads. Refused attempts are audited (`comment.post_denied`).
 //! - Authors edit their own comments (while they may still comment). Only a

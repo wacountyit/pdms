@@ -23,7 +23,7 @@ packaged as a single Docker image.
 | 4 | Records request packages, reports (CSV), REST API with OpenAPI and scoped tokens, webhooks and integration providers, audit forwarding, access review reports, backup/restore with `verify-integrity` | **Done** |
 | 5 | Threaded comments with @mentions and preserved edits; text extraction (PDF, Word) and optional OCR sidecar with date suggestions. (The optional Outlook calendar sync built here was later removed, D-087.) | **Done** |
 
-**What's next:** the PADM plan (SharePoint document storage, Entra user sync, a UI
+**What's next:** the PDMS plan (SharePoint document storage, Entra user sync, a UI
 redesign, and more), with what is done and what remains, is in
 [docs/ROADMAP.md, section 0](docs/ROADMAP.md#0-where-things-stand).
 Start there if you are picking up the work, and read [CLAUDE.md](CLAUDE.md)

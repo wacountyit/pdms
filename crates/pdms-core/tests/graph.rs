@@ -299,7 +299,7 @@ async fn core_has_a_graph_client_only_when_configured() {
 fn certificate_lifetime_outside_1_to_3650_days_is_an_error() {
     for days in [0, 3651, u32::MAX] {
         assert!(
-            pdms_core::graph::cert::generate("PADM test", days).is_err(),
+            pdms_core::graph::cert::generate("PDMS test", days).is_err(),
             "{days} days"
         );
     }

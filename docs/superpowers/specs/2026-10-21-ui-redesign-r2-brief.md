@@ -1,4 +1,4 @@
-# PADM UI redesign, round 2 (R2): brief
+# PDMS UI redesign, round 2 (R2): brief
 
 - **Date:** 2026-10-21
 - **Status:** done. R2 was specified, approved and built on 2026-10-22
@@ -299,7 +299,7 @@ This table was correct on 2026-10-21. For the current state, read ROADMAP
   uses the old markup (`<section aria-labelledby>` without `.panel`, and
   `flash-error` with `role="status"`; P4 Task 7, the `admin/sharepoint.html` template). So when the
   pattern is set, add a line to the plan index
-  (`docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, under
+  (`docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, under
   "Changes recorded when P4 was written") telling P4 to use it.
 - **Don't polish what sub-project 3 removes** (the Outlook part of
   `/admin/outlook`).

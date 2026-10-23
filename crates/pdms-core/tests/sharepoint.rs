@@ -60,13 +60,13 @@ async fn first_use_creates_the_area_folders_and_columns() {
     );
     assert!(
         r.county_wide_created,
-        "PADM had to create County-wide itself"
+        "PDMS had to create County-wide itself"
     );
     for c in [
-        "PadmDocumentId",
-        "PadmVisibility",
-        "PadmCurrent",
-        "PadmLink",
+        "PdmsDocumentId",
+        "PdmsVisibility",
+        "PdmsCurrent",
+        "PdmsLink",
     ] {
         assert!(sp.columns().contains(&c.to_owned()), "{c}");
     }
@@ -308,7 +308,7 @@ async fn large_files_are_sent_in_chunks() {
     let (core, _db) = sp_core(&sp).await;
     let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
     let ctx = as_user(&core, alice).await;
-    let bytes = "PADM chunk test\n".repeat(50_000).into_bytes(); // 800,000 bytes: three 320 KiB chunks
+    let bytes = "PDMS chunk test\n".repeat(50_000).into_bytes(); // 800,000 bytes: three 320 KiB chunks
     let id = new_doc(
         &core,
         &ctx,
@@ -599,7 +599,7 @@ async fn records_packages_read_files_from_sharepoint() {
     )
     .await
     .unwrap();
-    // The package re-hashes every file against PADM's record while writing (D-067).
+    // The package re-hashes every file against PDMS's record while writing (D-067).
     let (_, package) = exports::open(&core, &ctx_o, pkg).await.unwrap();
     assert!(!read_all(package).await.unwrap().is_empty());
 }
@@ -730,13 +730,13 @@ async fn the_mirror_names_files_and_fills_columns() {
     );
     let v1 = sp.fields(&format!("{folder}/{ext} v1 – Original.pdf"));
     let v2 = sp.fields(&format!("{folder}/{ext} v2 – Amendment.pdf"));
-    assert_eq!(v1["PadmCurrent"], serde_json::json!(false));
-    assert_eq!(v2["PadmCurrent"], serde_json::json!(true));
-    assert_eq!(v2["PadmDocumentId"], serde_json::json!(ext));
-    assert_eq!(v2["PadmDepartment"], serde_json::json!("Road and Bridge"));
-    assert_eq!(v2["PadmVisibility"], serde_json::json!("Department"));
+    assert_eq!(v1["PdmsCurrent"], serde_json::json!(false));
+    assert_eq!(v2["PdmsCurrent"], serde_json::json!(true));
+    assert_eq!(v2["PdmsDocumentId"], serde_json::json!(ext));
+    assert_eq!(v2["PdmsDepartment"], serde_json::json!("Road and Bridge"));
+    assert_eq!(v2["PdmsVisibility"], serde_json::json!("Department"));
     assert!(
-        v2["PadmLink"]
+        v2["PdmsLink"]
             .as_str()
             .unwrap()
             .ends_with(&format!("/documents/{id}"))
@@ -961,7 +961,7 @@ async fn tightening_is_refused_when_sharepoint_is_down() {
         "{err:?}"
     );
     let doc = documents::view(&core, &ctx, id).await.unwrap().document;
-    assert_eq!(doc.visibility, Visibility::CountyWide, "PADM unchanged");
+    assert_eq!(doc.visibility, Visibility::CountyWide, "PDMS unchanged");
     assert_eq!(
         sp.names("County-wide/Road and Bridge").len(),
         1,
@@ -1072,7 +1072,7 @@ async fn deleted_documents_leave_the_department_folder() {
 ///
 /// ```text
 /// PDMS_LIVE_TENANT_ID=… PDMS_LIVE_CLIENT_ID=… PDMS_LIVE_CERTIFICATE_FILE=/path/graph.pem \
-/// PDMS_LIVE_SITE_URL=https://<tenant>.sharepoint.com/sites/PADMRecordsTest \
+/// PDMS_LIVE_SITE_URL=https://<tenant>.sharepoint.com/sites/PDMSRecordsTest \
 /// cargo test -p pdms-core --test sharepoint live_sharepoint_round_trip -- --ignored --nocapture
 /// ```
 ///
@@ -1110,12 +1110,12 @@ async fn live_sharepoint_round_trip() {
     let (dept, alice) = editing_department(
         &core,
         &code,
-        &format!("PADM live test {code}"),
+        &format!("PDMS live test {code}"),
         "live@x.org",
     )
     .await;
     let ctx = as_user(&core, alice).await;
-    let bytes = pdf("PADM live SharePoint test");
+    let bytes = pdf("PDMS live SharePoint test");
     let id = new_doc(
         &core,
         &ctx,
@@ -1133,7 +1133,7 @@ async fn live_sharepoint_round_trip() {
         .await
         .unwrap();
     println!(
-        "left in SharePoint: Restricted/PADM live test {code}/{} – Live test",
+        "left in SharePoint: Restricted/PDMS live test {code}/{} – Live test",
         external_id(&core, id).await
     );
 }

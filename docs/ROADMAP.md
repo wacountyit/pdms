@@ -16,9 +16,6 @@ record**. Read it first if you are picking up the work.
 
 Last updated 2026-10-23.
 
-The product is now called **PADM**. The code, crates, binary, and Docker
-images are still named `pdms`.
-
 ### 0.1 Done
 
 - **Original phases 0–5:** built and tested (see the Status table in the
@@ -48,7 +45,7 @@ images are still named `pdms`.
   [2026-10-14-sharepoint-storage-entra-sync-design.md](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md).
   It was approved on 2026-10-14. Step-by-step implementation plans P1–P4 were
   written on 2026-10-15; start with the
-  [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md).
+  [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md).
 
 - **UI redesign R1** (2026-10-21): sidebar shell and visual system on every
   page; redesigned sign-in, dashboard, documents list, document page, and
@@ -111,7 +108,7 @@ images are still named `pdms`.
 
 ### 0.1a Who is working on what
 
-Two people work on PADM, often in turns, each with their own Claude session.
+Two people work on PDMS, often in turns, each with their own Claude session.
 This table shows who has each piece of work and how far it has got, so
 either person can see what is being done before starting anything.
 Everyone works directly on `main` (since 2026-10-23), so this table is the
@@ -129,16 +126,17 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
+| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110). Phases A (Task 1), B (Tasks 2–3), C (Task 4), D (Tasks 5–6), E (Task 7), F (Tasks 8–9): **Not started** | Phase A next. Six owner questions are listed at the top of the P4 plan; Tasks 4, 7 and 8 need their answers | 2026-10-23 |
 
-Nothing is claimed. §0.5 lists what can start next.
+§0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
-- **SharePoint holds the files; PADM is the application.**
+- **SharePoint holds the files; PDMS is the application.**
   - Every file is stored in one dedicated SharePoint site.
   - Files are organised by department and can be browsed read-only there.
   - Document details, workflow, reminders, appointments, permissions, audit,
-    and search stay in PADM (D-081 to D-084, D-089).
+    and search stay in PDMS (D-081 to D-084, D-089).
 - **Three visibility levels per document**, replacing today's "confidential"
   and "inherit permissions" switches (D-085):
   - Department (default);
@@ -147,9 +145,9 @@ Nothing is claimed. §0.5 lists what can start next.
 - **Users come from Entra ID.**
   - Their department is taken from the **Department field** on the Entra
     account; groups are not used, because AD groups are not synced to Entra.
-  - Roles are assigned in PADM.
+  - Roles are assigned in PDMS.
   - Sign-in is SSO (D-086).
-- **The calendar is internal to PADM.** The optional Outlook calendar sync
+- **The calendar is internal to PDMS.** The optional Outlook calendar sync
   (Phase 5) is removed (D-087).
 - **Document types and tags** (D-088):
   - "Partnership Agreement" becomes **Interlocal Agreement (ILA)**;
@@ -165,7 +163,7 @@ taken up.
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
-| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PADM; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **In progress**: spec approved. P1 (visibility) done. P3 (storage) done (2026-10-22: [PR #5](https://github.com/wacountyit/pdms/pull/5) plus a follow-up with the example config, the opt-in live test and the docs; migration `0013`; D-102, D-103). **P4** (access, change detection, operations) is next; it needs the same pre-flight check against `main` (§0.5) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md) |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PDMS; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **In progress**: spec approved. P1 (visibility) done. P3 (storage) done (2026-10-22: [PR #5](https://github.com/wacountyit/pdms/pull/5) plus a follow-up with the example config, the opt-in live test and the docs; migration `0013`; D-102, D-103). **P4** (access, change detection, operations) is next; it needs the same pre-flight check against `main` (§0.5) | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access follows with P4 | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Done** (2026-10-22, built inside R2, [PR #4](https://github.com/wacountyit/pdms/pull/4); migration `0011`). The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088; [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
@@ -178,10 +176,10 @@ taken up.
 **Waiting on the county** (needed before sub-projects 1–2 can be tested live;
 the steps are in Appendix A of the spec):
 
-- a `PADM Records – Test` SharePoint site, set up as described there;
+- a `PDMS Records – Test` SharePoint site, set up as described there;
 - a correct **Department** value on every staff account, plus the list of
   distinct values in use;
-- later, the `PADM Service` app registration and the site grant.
+- later, the `PDMS Service` app registration and the site grant.
 
 ### 0.4 How work moves through this list
 
@@ -283,7 +281,7 @@ turns" in `CLAUDE.md`); this table is for the ones that can wait.
 |---|---|
 | Server | A VM like production: Linux, 4 vCPU, 8 GB RAM (12 GB with OCR and ClamAV), 100 GB disk to start. |
 | Install | `./install.sh`: choose the bundled Caddy proxy with a test DNS name (or your reverse proxy), turn on SMTP, OCR, and ClamAV so they get tested too. |
-| Sign-in | Register a **test** Entra ID app (`./install.sh --configure sso`). Turn on the Entra ID user sync and map the Department values in use to PADM departments (Administration → Entra ID sync; see the admin guide). Assign roles in PADM. |
+| Sign-in | Register a **test** Entra ID app (`./install.sh --configure sso`). Turn on the Entra ID user sync and map the Department values in use to PDMS departments (Administration → Entra ID sync; see the admin guide). Assign roles in PDMS. |
 | Data | Two options, ideally both: `docker compose run --rm app seed-demo` on a throwaway install (sample documents, boards, users), and a copy of real documents from one department on the real test install. |
 | Test accounts | One person per role: administrator, auditor, records officer, legal counsel, department head, appointments clerk, an ordinary staff member in each of two departments, and someone with no department. |
 | Backups | Run `deploy/backup/pdms-backup.sh` nightly on the test server from day one. |
@@ -372,7 +370,7 @@ agreements and contracts plus one appointed board, for 4–6 weeks.
 - [ ] Time synchronization (NTP) on the host: reminders and audit timestamps depend on it.
 
 **Identity and email**
-- [ ] Production Entra app registration with the production redirect URI; the Entra ID user sync on, with every Department value in use mapped to a PADM department; roles assigned in PADM.
+- [ ] Production Entra app registration with the production redirect URI; the Entra ID user sync on, with every Department value in use mapped to a PDMS department; roles assigned in PDMS.
 - [ ] Break-glass administrator password and authenticator secret stored in the IT vault; test it quarterly.
 - [ ] SMTP through Exchange Online (a dedicated mailbox, or a connector) with SPF/DKIM so reminders are not marked as spam.
 
@@ -413,7 +411,7 @@ Things that work but are limited, or were deliberately left for later:
 | Scaling | Login and API rate limits live in memory per app instance; one app instance is assumed. | Fine for a single organization; matters only for multiple app instances. | M |
 | OCR | English only; date suggestions are keyword-based and miss unusual wording. | Spanish documents, odd contract language. | S–M |
 | Settings | Most settings live in `config/pdms.toml` (installer or a text editor), not in an admin screen. | IT staff need shell access for some changes. | M |
-| SharePoint storage | **Orphans.** If a save fails after its file was uploaded, or after a narrowing change already moved the folder, the file or the moved folder stays in SharePoint until the nightly mirror sweep or P4's change check finds it (D-102). | SharePoint can briefly hold a file PADM has no record of, or a folder narrower than PADM says. Both are the safe direction. | S |
+| SharePoint storage | **Orphans.** If a save fails after its file was uploaded, or after a narrowing change already moved the folder, the file or the moved folder stays in SharePoint until the nightly mirror sweep or P4's change check finds it (D-102). | SharePoint can briefly hold a file PDMS has no record of, or a folder narrower than PDMS says. Both are the safe direction. | S |
 | SharePoint storage | **No migration between storage backends.** Turning SharePoint on doesn't move files already stored locally or in S3, and they can't be read afterwards. | Turn it on before real documents are added; the test server is reset when it is switched (D-102). | M |
 | Audit | No archival of old audit entries (nothing is purged; forwarding gives an external copy). | Only matters after many years of heavy use. | S |
 

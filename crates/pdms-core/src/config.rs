@@ -73,7 +73,7 @@ pub struct Config {
     pub exports: ExportsConfig,
     pub comments: CommentsConfig,
     pub ocr: OcrConfig,
-    /// Microsoft Graph as PADM itself (app-only, certificate). Used by the
+    /// Microsoft Graph as PDMS itself (app-only, certificate). Used by the
     /// Entra user sync and, later, SharePoint storage.
     pub graph: GraphConfig,
     pub entra_sync: EntraSyncConfig,
@@ -328,7 +328,7 @@ impl Default for S3StorageConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SharePointConfig {
-    /// e.g. `https://contoso.sharepoint.com/sites/PADMRecords`.
+    /// e.g. `https://contoso.sharepoint.com/sites/PDMSRecords`.
     pub site_url: String,
     /// The document library (drive) name.
     pub library: String,
@@ -603,7 +603,7 @@ impl Default for OcrConfig {
     }
 }
 
-/// Microsoft Graph with an app registration ("PADM Service") and a
+/// Microsoft Graph with an app registration ("PDMS Service") and a
 /// certificate credential. All three of `tenant_id`, `client_id`, and
 /// `certificate` are needed; with none of them set, Graph is off.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1038,7 +1038,7 @@ mod sharepoint_config_tests {
     fn sharepoint_config() -> Config {
         let mut c = Config::default();
         c.storage.backend = StorageBackend::SharePoint;
-        c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PADMRecords".into();
+        c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PDMSRecords".into();
         c
     }
 
@@ -1060,7 +1060,7 @@ mod sharepoint_config_tests {
         c.sharepoint.upload_chunk_bytes = 327_680 * 193;
         assert!(c.validate().is_err(), "over 60 MiB");
         let mut c = sharepoint_config();
-        c.sharepoint.site_url = "http://contoso.sharepoint.com/sites/PADM".into();
+        c.sharepoint.site_url = "http://contoso.sharepoint.com/sites/PDMS".into();
         assert!(c.validate().is_err());
         let mut c = sharepoint_config();
         c.sharepoint.library = " ".into();

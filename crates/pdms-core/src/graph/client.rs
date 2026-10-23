@@ -30,7 +30,7 @@ const MAX_PAGES: usize = 10_000;
 /// Longest piece of an Entra error message kept in a `GraphError`.
 const MAX_REASON: usize = 300;
 
-/// A Graph client acting as the PADM app registration. Cheap to clone.
+/// A Graph client acting as the PDMS app registration. Cheap to clone.
 #[derive(Clone)]
 pub struct GraphClient {
     inner: Arc<Inner>,
@@ -94,7 +94,7 @@ impl GraphClient {
             .connect_timeout(timeout)
             .read_timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("PADM/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("PDMS/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| GraphError::Transport(e.to_string()))?;
         Ok(GraphClient {

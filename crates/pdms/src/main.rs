@@ -91,7 +91,7 @@ enum Command {
     /// Print a new random master secret for PDMS_SECRET_KEY.
     GenSecret,
     /// Create the certificate for the Microsoft Graph app registration
-    /// ("PADM Service"). Writes certificate + private key to OUT (mode 0600)
+    /// ("PDMS Service"). Writes certificate + private key to OUT (mode 0600)
     /// and the public certificate to OUT with ".crt" appended (graph.pem
     /// gives graph.pem.crt), which you upload in Entra ID. Needs no
     /// configuration.
@@ -101,7 +101,7 @@ enum Command {
         /// Validity in days (30 to 1095).
         #[arg(long, default_value_t = 730)]
         days: u32,
-        #[arg(long, default_value = "PADM Service")]
+        #[arg(long, default_value = "PDMS Service")]
         name: String,
     },
     /// Validate configuration and print it with secrets redacted.
@@ -510,11 +510,11 @@ fn write_graph_cert(out: &std::path::Path, days: u32, name: &str) -> anyhow::Res
     create(out, 0o600)?.write_all(g.pem.as_bytes())?;
     create(&public, 0o644)?.write_all(g.certificate_pem.as_bytes())?;
     println!(
-        "Certificate and private key: {} (secret: give it to PADM as PDMS_GRAPH__CERTIFICATE_FILE)",
+        "Certificate and private key: {} (secret: give it to PDMS as PDMS_GRAPH__CERTIFICATE_FILE)",
         out.display()
     );
     println!(
-        "Public certificate for Entra ID (App registrations > PADM Service > Certificates & secrets > Upload): {}",
+        "Public certificate for Entra ID (App registrations > PDMS Service > Certificates & secrets > Upload): {}",
         public.display()
     );
     println!("SHA-256 thumbprint (x5t#S256): {}", g.thumbprint);
@@ -618,7 +618,7 @@ mod tests {
     use super::write_graph_cert;
 
     fn scratch() -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("padm-cert-{}", uuid::Uuid::new_v4()));
+        let d = std::env::temp_dir().join(format!("pdms-cert-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&d).unwrap();
         d
     }
@@ -628,7 +628,7 @@ mod tests {
         let d = scratch();
         let out = d.join("graph.pem");
         std::fs::write(d.join("graph.pem.crt"), "keep me").unwrap();
-        assert!(write_graph_cert(&out, 30, "PADM test").is_err());
+        assert!(write_graph_cert(&out, 30, "PDMS test").is_err());
         assert_eq!(
             std::fs::read_to_string(d.join("graph.pem.crt")).unwrap(),
             "keep me"
@@ -641,7 +641,7 @@ mod tests {
     fn out_ending_in_crt_keeps_the_key_and_writes_a_separate_public_file() {
         let d = scratch();
         let out = d.join("x.crt");
-        write_graph_cert(&out, 30, "PADM test").unwrap();
+        write_graph_cert(&out, 30, "PDMS test").unwrap();
         assert!(
             std::fs::read_to_string(&out)
                 .unwrap()

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Entra ID "Department" values → PADM departments (D-086).
+//! Entra ID "Department" values → PDMS departments (D-086).
 
 use std::collections::{BTreeMap, BTreeSet};
 

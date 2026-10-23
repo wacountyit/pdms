@@ -2,7 +2,7 @@
 // Copyright (C) 2026 PDMS contributors
 //! Document files in a SharePoint library, through Microsoft Graph (D-081 to D-084).
 //!
-//! PADM is the only writer. Files live in `Departments/`, `County-wide/`, or
+//! PDMS is the only writer. Files live in `Departments/`, `County-wide/`, or
 //! `Restricted/`, then a department folder, then one folder per document with
 //! one file per version (spec §5). Uploads are synchronous. Renames, moves, and
 //! column values are applied by the `sharepoint.mirror_document` job, except
@@ -74,7 +74,7 @@ pub struct Resolved {
     pub departments_id: String,
     pub county_wide_id: String,
     pub restricted_id: String,
-    /// PADM created `County-wide/` itself, so it lacks the "Everyone except
+    /// PDMS created `County-wide/` itself, so it lacks the "Everyone except
     /// external users" read grant an admin adds at setup (spec Appendix A, step 5).
     pub county_wide_created: bool,
 }
@@ -192,7 +192,7 @@ async fn resolve(inner: &Inner) -> CoreResult<Resolved> {
     let (restricted_id, _) = folders::ensure_area_folder(g, &drive.id, Area::Restricted).await?;
     if county_wide_created {
         tracing::warn!(
-            "PADM created the County-wide folder in SharePoint; give \"Everyone except external users\" read access to it (see the SharePoint setup guide)"
+            "PDMS created the County-wide folder in SharePoint; give \"Everyone except external users\" read access to it (see the SharePoint setup guide)"
         );
     }
     Ok(Resolved {

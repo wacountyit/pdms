@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Keeping SharePoint in step with PADM: folder placement, file names, and
-//! column values (spec §7.3). PADM is authoritative. The job is idempotent and
+//! Keeping SharePoint in step with PDMS: folder placement, file names, and
+//! column values (spec §7.3). PDMS is authoritative. The job is idempotent and
 //! convergent: running it again after a crash or a manual change in
 //! SharePoint restores the desired state.
 
@@ -76,7 +76,7 @@ fn short(id: Uuid) -> String {
     id.simple().to_string().chars().take(8).collect()
 }
 
-/// Bring one document's folder and files in SharePoint in line with PADM.
+/// Bring one document's folder and files in SharePoint in line with PDMS.
 pub async fn mirror_document(core: &Core, document_id: Uuid) -> CoreResult<()> {
     let Some(sp) = core.sharepoint.as_ref() else {
         return Ok(());

@@ -1,5 +1,5 @@
 -- Entra ID user sync (spec 2026-10-14, §6; D-086): who manages each account,
--- the raw Department value, Department → PADM department mappings, and cursors
+-- the raw Department value, Department → PDMS department mappings, and cursors
 -- for change tracking.
 
 CREATE TYPE user_source AS ENUM ('local', 'entra');

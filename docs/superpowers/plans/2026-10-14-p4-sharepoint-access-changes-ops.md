@@ -2,13 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Before you start (added 2026-10-21):** this plan was written on 2026-10-15, before P2, P3 and UI redesign R1 were built. Run a pre-flight check against `main`, and correct this plan in your branch before Task 1:
-> - **When:** start only once P3 and R2's admin pages are merged (ROADMAP §0.5).
-> - **Migrations:** this plan's migration takes the next free number after P3's (`0012` if nothing else takes one), not `0011`. The other migration names in the text are off by one too. For example, the ARCHITECTURE row in Task 9 names `0009_entra_sync`, but P2's is `0010_entra_sync`.
-> - **Decisions:** this plan creates D-091 to D-097, but `main` already has D-091 to D-096. Number them from the next free number on `main` and in open PRs, and change every mention in the text: the headings, the DECISIONS and ROADMAP rows, a code comment, and Task 9's commit message.
-> - **Pages:** `/admin/sharepoint` and the `admin/entra.html` section must follow R2's admin page pattern, not this plan's pre-R1 markup. The document page notice must fit R1's document page as built. Task 7's insertion point (`<div class="toolbar">` inside `doc-header`) no longer exists; put the notice in `header.doc-head`.
-> - **Names:** check every name this plan consumes from P2 and P3 against the code. The [plan index](2026-10-14-padm-sharepoint-entra-index.md) lists what changed.
-> - **Claim P4 first**, and check for work in flight on the same files (ROADMAP §0.1a and §0.6, and `gh pr list`).
+> **Pre-flight done (2026-10-23, WACountyIT).** This plan was written on 2026-10-15, before P2, P3, R1 and R2 were built. It was checked against `main` at `2915b94`. Most of what it consumes exists as assumed (`GraphError::Auth`, `actions::send`, `Notice`, `sync_cursors`, the mock Graph anchors in `sp.rs`, the directory functions, `Worker::handle`/`every`, `documents::access::can`). Everyone works directly on `main` now: ignore any branch or pull-request wording, and start commit messages with `P4:`. These corrections apply; the text below already carries the numeric ones.
+> - **Migration `0014`** (`0014_sharepoint_access.sql`; "Applied 14/…"). `main` ends at `0013_sharepoint_files.sql` (P3) and P2's is `0010_entra_sync.sql`.
+> - **Decisions D-104 to D-110** (the plan's D-091 to D-097, in the same order). `main` ends at D-103.
+> - **All tasks, test file headers:** put the two SPDX lines **first**, then the `#![allow(` block (CLAUDE.md; P3's `tests/sharepoint.rs`).
+> - **Task 1:** don't add a new `ENTRA_CURSOR` constant; make `entra_sync::CURSOR` (`"entra.users"`) `pub(crate)` and reuse it.
+> - **Task 2:** don't redefine `certificate()` or `sp_core`; import `mock_graph::certificate` and copy P3's `core_with`/`sp_core` pattern (or move them to a shared helper).
+> - **Task 3:** in `directory/sync.rs` there are no `before`/`after` sets: queue the folder-access run when `want_depts != have_depts` (the early return at `sync.rs:72`). For the Entra sync, don't hook `run_job` and `sync_one`: queue it inside `entra_sync::set_idp_department` (on its `conn`) whenever it changes a membership. That also covers `pdms sync-directory` and mapping edits in `entra_values.rs`.
+> - **Task 4:** reuse P3's `sharepoint::files::flag_changed` (make it `pub(crate)` from `sharepoint`) instead of writing a second `sharepoint.changed_outside` event, so the action has one shape. A file already flagged by a download must still reach administrators: the change check flags it (sets `changed_by`/`changed_at` and notifies) when `changed_by IS NULL` (owner question 3 below).
+> - **Task 5:** Graph failures in restore, accept and re-check go through `sharepoint::unavailable(…)` (`CoreError::Unavailable`), so the page shows a message instead of an error page (D-102).
+> - **Task 6:** `integrity.rs` computes `files_checked` as `blobs - sharepoint_files_skipped`: count local files separately; remove P3's `sharepoint_files_skipped` audit context and report field once SharePoint files are checked; add `sharepoint_file` to the `Problem.kind` doc comment.
+> - **Task 7 (pages):** follow R2's admin page pattern (R2 spec §5.2; `admin/entra.html`, `admin/deleted.html`): `{% block heading %}` with `header.page-head`, `<h1>{{ l.title }}</h1>`, `.page-lede`, `.page-actions` ("Check for changes now" the only primary button); sections as `section.panel` with `.panel-head`; run status as `dl.facts`; tables in `.table-wrap`; `p.empty` for empty lists; "not turned on" as `flash-info role="status"`, flagged files as `flash-error role="alert"`. The handler calls `.admin_tab("sharepoint")`; the menu item goes in the *Integrations* group of `Layout::admin_groups()` (`views.rs`), not `base.html`. The Entra page section is a `section.panel`. The document-page notice goes in `templates/documents/show.html` inside `header.doc-head`, after `.doc-title-row` and before `nav.on-this-page`, as a `p.flash`. Add `/admin/sharepoint` to `every_admin_page_uses_the_admin_pattern` (`tests/shell.rs`) and to `tools/ui-screenshots/shoot.py`.
+> - **Task 8 (installer and Compose):** the Outlook anchors are gone (D-087): add `PDMS_GRAPH__CERTIFICATE_FILE` after `PDMS_EMAIL__SMTP_PASSWORD_FILE`, the `graph_certificate` secret after `smtp_password`, and to both secrets lists; in `install.sh` drop `outlook` from the `--configure` lists, add the new variables after the existing `PDMS_INSTALL_*` help lines, extend the `for f in oidc_client_secret smtp_password` loop, and insert the step before the "Removed: Outlook calendar sync" comment. Today's installer also shows the Caddy ports and the Entra redirect URI; keep both. How `[storage] backend` is set, and the certificate file name and thumbprint, wait on owner questions 1 and 2. ADMIN_GUIDE's manual Compose edit for the certificate (Entra sync step 3) must get an "undo this before `git pull`" note, because the installer now does it.
+> - **Task 9 (docs):** ADMIN_GUIDE already has "SharePoint storage" in §4 (from P3): update it (site grant, `delta_interval_minutes`, the integrity and known-gap bullets, the `[storage] backend` row) rather than adding a section in §12, and rewrite Entra step 3. ARCHITECTURE: add a §12 row `9 (0014_sharepoint_access, P4)` in the current style. DECISIONS: add D-104 to D-110, and edit the status lines of D-082, D-084 and D-089 by hand (the plan's `sed` no longer fits, and would wrongly change D-083). ROADMAP: §0.3 row 1, §0.1, §0.5, §0.6, and the §4 orphans row (as CLAUDE.md describes); the plan's `1b`/`2a` rows don't exist. Index: `0014`, D-104 to D-110. After P4, `tests/sharepoint.rs` has 27 tests plus 3 ignored live tests.
+>
+> **Questions for the owner** (answer before the task that needs them; recorded as a decision when answered):
+> 1. **How SharePoint storage is switched on (Task 8):** the plan's `config/pdms.env` (`PDMS_STORAGE__BACKEND`, loaded with Compose `env_file`, needs Compose ≥ 2.24), or the installer's existing `[storage]` block (the ClamAV one) owning all of `[storage]`, including `backend`.
+> 2. **Certificate (Task 8):** one file name for the public certificate (P2's `secrets/graph_certificate.crt`, or the plan's `config/pdms-service.cer`), and the SHA-256 thumbprint that the Entra page shows, or SHA-1 as well (the Entra admin center lists SHA-1).
+> 3. **"Changed outside PDMS" (Task 4):** one audit shape for both the download check and the change check, and should a change first found by a download also notify administrators?
+> 4. **Installer steps (Task 8):** should `--configure sharepoint` also turn on the Entra sync, or stay separate (the sync already works without SharePoint)?
+> 5. **Status page and Restricted documents (Task 7):** for a document the administrator cannot open, the page shows its ID with the title and path hidden. Is the ID acceptable (D-085)?
+> 6. **Document-page notice (Task 7):** wording and severity (alert or status) for ordinary viewers, given that P3 already stops downloads of a changed file.
 
 **Goal:** Finish SharePoint storage so it can run in the county:
 
@@ -30,7 +44,7 @@ They are wired into the job worker, the directory functions that change membersh
 
 **Tech Stack:** Rust 2024, Axum 0.8, SQLx 0.9 (`query!` macros, `.sqlx/` offline data), Askama 0.16, Microsoft Graph v1.0 through P2's `GraphClient`, Bash (installer), Docker Compose ≥ 2.24.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §7.4 (department folder access), §7.6 (change detection and resolution), §7.7 (integrity), §9–§11 (configuration, errors, security), §12 (P4 tests), §13 (rollout), Appendix A (county setup). **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P4"). **Depends on:** P1, P2, and P3 merged. This plan uses their names as written in [P2](2026-10-14-p2-graph-client-entra-sync.md) and [P3](2026-10-14-p3-sharepoint-storage.md); the deviations from the index are listed at the end.
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §7.4 (department folder access), §7.6 (change detection and resolution), §7.7 (integrity), §9–§11 (configuration, errors, security), §12 (P4 tests), §13 (rollout), Appendix A (county setup). **Index:** [2026-10-14-pdms-sharepoint-entra-index.md](2026-10-14-pdms-sharepoint-entra-index.md) ("Produced by P4"). **Depends on:** P1, P2, and P3 merged. This plan uses their names as written in [P2](2026-10-14-p2-graph-client-entra-sync.md) and [P3](2026-10-14-p3-sharepoint-storage.md); the deviations from the index are listed at the end.
 
 ## Global Constraints
 
@@ -40,43 +54,43 @@ They are wired into the job worker, the directory functions that change membersh
   - Only `Departments/<department>/` folders get per-person grants.
   - The readers are the department's members whose account is active and whose `users.source = 'entra'`. Local break-glass accounts never get grants.
   - Every grant is exactly `POST /drives/{drive}/items/{folder}/invite` with the body `{"recipients":[{"email":<email>}],"roles":["read"],"requireSignIn":true,"sendInvitation":false}`.
-  - PADM removes only grants it recorded in `sharepoint_folder_access`. Any other permission on the folder is reported and never changed.
+  - PDMS removes only grants it recorded in `sharepoint_folder_access`. Any other permission on the folder is reported and never changed.
   - `County-wide/` and `Restricted/` are set up by hand (Appendix A).
 - **Change detection (spec §7.6):**
   - A tracked file counts as changed when its `size` or `file.hashes.quickXorHash` differs from what `sharepoint_files` recorded at upload.
   - Who made the change is recorded and shown, never trusted.
-  - A change counts as PADM's own only when `lastModifiedBy.application.id` equals `[graph] client_id`. That only suppresses needless mirror repairs.
-- **Untracked files:** a file in the library that no `sharepoint_files` row points at is shown to administrators only after **10 minutes**, because an upload in progress has no row yet. PADM never deletes such files.
+  - A change counts as PDMS's own only when `lastModifiedBy.application.id` equals `[graph] client_id`. That only suppresses needless mirror repairs.
+- **Untracked files:** a file in the library that no `sharepoint_files` row points at is shown to administrators only after **10 minutes**, because an upload in progress has no row yet. PDMS never deletes such files.
 - **Audit actions:** `sharepoint.access_granted`, `sharepoint.access_revoked`, `sharepoint.changed_outside`, `sharepoint.change_resolved`, `sharepoint.unexpected_dismissed`. `pdms_audit::append` stays the **last** statement before `tx.commit()` (D-004).
 - **Capability:** `Capability::ManageSharePoint`, held by the org-wide `admin` role only. "Accept as new version" also needs `edit` on the document, through the normal `documents::add_version` check.
 - **Notices to administrators** (in-app, plus email when email is set up):
-  - Changes found: subject "SharePoint: N file(s) changed outside PADM", linking to `/admin/sharepoint`.
-  - Graph sign-in failure (HTTP 401/403 → `GraphError::Auth`): subject "PADM cannot sign in to Microsoft Graph", at most **once an hour** (dedupe key `graph-auth:YYYYMMDDHH`).
+  - Changes found: subject "SharePoint: N file(s) changed outside PDMS", linking to `/admin/sharepoint`.
+  - Graph sign-in failure (HTTP 401/403 → `GraphError::Auth`): subject "PDMS cannot sign in to Microsoft Graph", at most **once an hour** (dedupe key `graph-auth:YYYYMMDDHH`).
   - Neither notice names a document.
 - **Restores are verified:** "Restore original" picks the SharePoint version whose content matches the version's recorded SHA-256 (`document_versions.blob_sha256`). It never trusts a version label.
 - **Storage choice:** `[storage] backend` is set through `config/pdms.env` (`PDMS_STORAGE__BACKEND=sharepoint`), loaded by Compose `env_file`, because the ClamAV block already owns the `[storage]` table.
 - **Graph certificate:** Compose always mounts the secret `graph_certificate` and sets `PDMS_GRAPH__CERTIFICATE_FILE: /run/secrets/graph_certificate`. P2's `_FILE` loader reads it, and an empty file means "not configured".
-- **Migration:** `migrations/0011_sharepoint_access.sql`. Never edit 0001–0010. Migrations carry no SPDX header (D-080).
+- **Migration:** `migrations/0014_sharepoint_access.sql`. Never edit 0001–0013. Migrations carry no SPDX header (D-080).
 - **New Rust files** start with `// SPDX-License-Identifier: AGPL-3.0-or-later` and `// Copyright (C) 2026 PDMS contributors`. New integration-test files use the `#![allow(` header pattern of `crates/pdms-core/tests/authz_sql.rs`.
 - **Lints:** `unwrap`, `expect`, `panic`, and `dbg` are denied outside tests; `unsafe` is forbidden. Every task must pass `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
 - **Offline query data:** after any `sqlx::query!` or migration change, run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/`.
-- **Dev environment:** use "Shared development setup" in the index. `DATABASE_URL` must point at the dev database with migrations through 0011 applied before building.
+- **Dev environment:** use "Shared development setup" in the index. `DATABASE_URL` must point at the dev database with migrations through 0014 applied before building.
 
 ## Review Focus
 
 Five inputs the spec implies but its happy path doesn't exercise. Each has a test in its owning task.
 
 1. **A person whose address SharePoint cannot resolve** (no mailbox, a typo in Entra). Their grant fails, but everyone else in the department still gets access, and the failure shows on the status panel. Task 2: `one_unresolvable_person_does_not_block_the_rest`.
-2. **A file PADM is uploading appears in the change feed before its database row commits.** It must not be reported as untracked. Task 4: `an_upload_in_progress_is_not_reported`.
+2. **A file PDMS is uploading appears in the change feed before its database row commits.** It must not be reported as untracked. Task 4: `an_upload_in_progress_is_not_reported`.
 3. **The Graph certificate expires or the site grant is removed.** Administrators are told once an hour, not every five minutes. The status panel shows the error, and the next run after the fix succeeds. Task 1: `graph_sign_in_failures_reach_admins_once_an_hour`; Task 2: `folder_access_reports_sign_in_failures`.
-4. **The change-feed token is rejected after a long outage (HTTP 410).** PADM rereads everything without flagging files that did not change. Task 4: `an_expired_change_token_rereads_without_false_alarms`.
+4. **The change-feed token is rejected after a long outage (HTTP 410).** PDMS rereads everything without flagging files that did not change. Task 4: `an_expired_change_token_rereads_without_false_alarms`.
 5. **The administrator resolving a change cannot open the document** (Restricted). The status panel hides the title and path. "Restore original" still works, and "Accept as new version" is refused for lack of `edit`. Task 5: `accept_needs_edit_rights_restore_does_not`; Task 7: `sharepoint_panel_is_for_administrators`.
 
 ## Files
 
 | File | Responsibility |
 |---|---|
-| `migrations/0011_sharepoint_access.sql` (create) | `sharepoint_folder_access`, `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, `sharepoint_files.changed_by/changed_at` |
+| `migrations/0014_sharepoint_access.sql` (create) | `sharepoint_folder_access`, `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, `sharepoint_files.changed_by/changed_at` |
 | `crates/pdms-authz/src/capability.rs` (modify) | `Capability::ManageSharePoint` |
 | `crates/pdms-core/src/notifications/dispatch.rs` (modify) | `Visibility::Anyone` for notices that name no document |
 | `crates/pdms-core/src/sharepoint/status.rs` (create) | `RunError`, run records, administrator notices, panel queries, document flags |
@@ -99,10 +113,10 @@ Five inputs the spec implies but its happy path doesn't exercise. Each has a tes
 
 ---
 
-### Task 1: Migration 0011, the `ManageSharePoint` capability, and run records with administrator notices
+### Task 1: Migration 0014, the `ManageSharePoint` capability, and run records with administrator notices
 
 **Files:**
-- Create: `migrations/0011_sharepoint_access.sql`
+- Create: `migrations/0014_sharepoint_access.sql`
 - Modify: `crates/pdms-authz/src/capability.rs`, `crates/pdms-authz/src/tests.rs`
 - Modify: `crates/pdms-core/src/notifications/dispatch.rs`
 - Create: `crates/pdms-core/src/sharepoint/status.rs`
@@ -131,20 +145,20 @@ Five inputs the spec implies but its happy path doesn't exercise. Each has a tes
 grep -n "pub fn graph\|pub async fn resolved\|pub struct Resolved\|pub fn area_id" crates/pdms-core/src/sharepoint/mod.rs
 grep -n "pub async fn department_folder_id\|pub async fn enqueue_mirror\|pub const MIRROR_SWEEP_JOB\|pub fn register_jobs" -r crates/pdms-core/src/sharepoint/
 grep -n "Auth(String)\|ResyncRequired" crates/pdms-core/src/graph/*.rs
-grep -n "CREATE TABLE sharepoint_files" -A16 migrations/0010_sharepoint_files.sql
+grep -n "CREATE TABLE sharepoint_files" -A16 migrations/0013_sharepoint_files.sql
 grep -n "pub async fn run_job\|pub async fn sync_one" crates/pdms-core/src/directory/entra_sync.rs
 grep -n "pub struct SpState\|pub const DRIVE\|pub(super) fn route\|pub(super) fn blob\|fn json(&self" crates/pdms-core/tests/mock_graph/sp.rs
 ```
 
 Expected: every name is found, and `sharepoint_files` has `item_id`, `list_item_id`, `name`, `quick_xor_hash`, `size`, `last_known_path`, `state`, and `checked_at`. If a name differs, use the real name everywhere in this plan's code, and record it in the index in Task 9.
 
-- [ ] **Step 2: Write the migration.** Create `migrations/0011_sharepoint_access.sql`:
+- [ ] **Step 2: Write the migration.** Create `migrations/0014_sharepoint_access.sql`:
 
 ```sql
--- SharePoint folder access, changes made outside PADM, and the status panel
+-- SharePoint folder access, changes made outside PDMS, and the status panel
 -- (spec §7.4, §7.6; plan P4).
 
--- Read access PADM granted, one person at a time, on Departments/<department>/.
+-- Read access PDMS granted, one person at a time, on Departments/<department>/.
 CREATE TABLE sharepoint_folder_access (
     department_id uuid NOT NULL REFERENCES departments (id),
     user_id       uuid NOT NULL REFERENCES users (id),
@@ -153,7 +167,7 @@ CREATE TABLE sharepoint_folder_access (
     PRIMARY KEY (department_id, user_id)
 );
 
--- Permissions on a department folder that PADM did not grant: reported, never changed.
+-- Permissions on a department folder that PDMS did not grant: reported, never changed.
 CREATE TABLE sharepoint_foreign_grants (
     department_id uuid NOT NULL REFERENCES departments (id),
     permission_id text NOT NULL,
@@ -163,7 +177,7 @@ CREATE TABLE sharepoint_foreign_grants (
     PRIMARY KEY (department_id, permission_id)
 );
 
--- Who changed a tracked file outside PADM, and when it was noticed.
+-- Who changed a tracked file outside PDMS, and when it was noticed.
 ALTER TABLE sharepoint_files
     ADD COLUMN changed_by text,
     ADD COLUMN changed_at timestamptz;
@@ -174,7 +188,7 @@ CREATE TABLE sharepoint_unexpected_items (
     name         text NOT NULL,
     path         text NOT NULL,
     created_by   text NOT NULL,
-    by_padm      boolean NOT NULL,               -- left behind by a PADM save that did not finish
+    by_pdms      boolean NOT NULL,               -- left behind by a PDMS save that did not finish
     first_seen   timestamptz NOT NULL DEFAULT now(),
     last_seen    timestamptz NOT NULL DEFAULT now(),
     dismissed_by uuid REFERENCES users (id),
@@ -187,7 +201,7 @@ GRANT SELECT, INSERT, UPDATE ON sharepoint_files TO pdms_app;
 ```
 
 Apply it: `sqlx migrate run --source migrations`
-Expected: `Applied 11/migrate sharepoint access`.
+Expected: `Applied 14/migrate sharepoint access`.
 
 - [ ] **Step 3: Write the failing capability test.** Append to `crates/pdms-authz/src/tests.rs`:
 
@@ -310,7 +324,7 @@ async fn graph_sign_in_failures_reach_admins_once_an_hour() {
     status::report_failure(&core, status::RECONCILE_CURSOR, &denied).await.unwrap();
     assert_eq!(
         in_app_notices(&core).await,
-        vec![(boss, "PADM cannot sign in to Microsoft Graph".to_owned())],
+        vec![(boss, "PDMS cannot sign in to Microsoft Graph".to_owned())],
         "one notice an hour, only to administrators"
     );
     let err: Option<String> =
@@ -370,7 +384,7 @@ pub enum RunError {
 }
 
 impl RunError {
-    /// Microsoft Graph refused PADM's sign-in or access (HTTP 401/403).
+    /// Microsoft Graph refused PDMS's sign-in or access (HTTP 401/403).
     pub fn is_auth(&self) -> bool {
         match self {
             RunError::Graph(GraphError::Auth(_)) => true,
@@ -500,10 +514,10 @@ pub async fn report_failure(core: &Core, name: &str, err: &RunError) -> CoreResu
             &mut tx,
             core,
             Notice {
-                subject: "PADM cannot sign in to Microsoft Graph".into(),
+                subject: "PDMS cannot sign in to Microsoft Graph".into(),
                 body: format!(
                     "SharePoint storage and Entra sync are paused until this is fixed: {message}. \
-                     Check the PADM Service certificate and app registration (docs/SHAREPOINT_SETUP.md)."
+                     Check the PDMS Service certificate and app registration (docs/SHAREPOINT_SETUP.md)."
                 ),
                 link: "/admin/sharepoint".into(),
                 document_id: None,
@@ -533,9 +547,9 @@ Expected: `test graph_sign_in_failures_reach_admins_once_an_hour ... ok`, and bo
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
-git add migrations/0011_sharepoint_access.sql crates/pdms-authz crates/pdms-core/src/notifications/dispatch.rs \
+git add migrations/0014_sharepoint_access.sql crates/pdms-authz crates/pdms-core/src/notifications/dispatch.rs \
   crates/pdms-core/src/sharepoint crates/pdms-core/tests/sharepoint_ops.rs .sqlx
-git commit -m "sharepoint: migration 0011, ManageSharePoint, run records and admin notices"
+git commit -m "P4: migration 0014, ManageSharePoint, run records and admin notices"
 ```
 
 ---
@@ -571,7 +585,7 @@ git commit -m "sharepoint: migration 0011, ManageSharePoint, run records and adm
 ```rust
     /// Earlier contents, oldest first: SharePoint's version history. `content` is current.
     pub history: Vec<Vec<u8>>,
-    /// Who created / last changed it: `None` is PADM's app, `Some(name)` a person.
+    /// Who created / last changed it: `None` is PDMS's app, `Some(name)` a person.
     pub created_by: Option<String>,
     pub modified_by: Option<String>,
     /// Direct permissions: (permission id, user email, SharePoint group name).
@@ -773,11 +787,11 @@ In `move_item`, replace its last four lines (from `let item = sp.items.get_mut(i
 (g) Add these functions at the end of `sp.rs`:
 
 ```rust
-/// Graph's identity set for a change: PADM's app (the mock's client id), or a person.
+/// Graph's identity set for a change: PDMS's app (the mock's client id), or a person.
 fn identity(person: Option<&str>) -> Value {
     match person {
         None => json!({
-            "application": {"id": CLIENT, "displayName": "PADM Service"},
+            "application": {"id": CLIENT, "displayName": "PDMS Service"},
             "user": {"displayName": "SharePoint App"}
         }),
         Some(n) => json!({"user": {
@@ -953,7 +967,7 @@ fn invite(sp: &mut SpState, id: &str, body: &[u8]) -> Response {
         id
     }
 
-    /// A file PADM's app put there whose save never committed. Returns its id.
+    /// A file PDMS's app put there whose save never committed. Returns its id.
     pub fn app_upload(&self, folder: &str, name: &str, bytes: &[u8]) -> String {
         let mut s = self.state.lock().unwrap();
         s.sp.ensure_root();
@@ -989,7 +1003,7 @@ fn invite(sp: &mut SpState, id: &str, body: &[u8]) -> Response {
         self.state.lock().unwrap().sp.expire_delta = true;
     }
 
-    /// Refuse PADM's sign-in (every API call gets HTTP 401) until called with `false`.
+    /// Refuse PDMS's sign-in (every API call gets HTTP 401) until called with `false`.
     pub fn deny(&self, on: bool) {
         self.state.lock().unwrap().min_token = if on { usize::MAX } else { 0 };
     }
@@ -1022,7 +1036,7 @@ Then add:
 ```rust
 fn certificate() -> &'static str {
     static C: OnceLock<String> = OnceLock::new();
-    C.get_or_init(|| cert::generate("PADM test", 30).unwrap().pem)
+    C.get_or_init(|| cert::generate("PDMS test", 30).unwrap().pem)
 }
 
 /// A `Core` that stores document files in the mock SharePoint (as in P3's tests).
@@ -1091,8 +1105,8 @@ async fn department_members_get_read_access_on_their_folder() {
     // Access someone added by hand is reported, never removed. What the folder
     // got from the site when its inheritance broke is not reported.
     let area = sp.item("Departments").unwrap().id;
-    sp.add_group_permission(&area, "PADM Test Members");
-    sp.add_group_permission(&folder, "PADM Test Members");
+    sp.add_group_permission(&area, "PDMS Test Members");
+    sp.add_group_permission(&folder, "PDMS Test Members");
     sp.add_group_permission(&folder, "Road and Bridge Editors");
     let r = access::reconcile(&core).await.unwrap();
     assert_eq!(r.foreign, 1);
@@ -1132,7 +1146,7 @@ async fn folder_access_reports_sign_in_failures() {
     assert!(access::reconcile(&core).await.is_err());
     assert_eq!(
         in_app_notices(&core).await,
-        vec![(boss, "PADM cannot sign in to Microsoft Graph".to_owned())]
+        vec![(boss, "PDMS cannot sign in to Microsoft Graph".to_owned())]
     );
     sp.deny(false);
     let r = access::reconcile(&core).await.unwrap();
@@ -1167,9 +1181,9 @@ Expected: compile error `could not find access in sharepoint`.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
 //! Read access on `Departments/<department>/` folders (spec §7.4, D-084).
-//! PADM grants each active member of a department who came from Entra read
+//! PDMS grants each active member of a department who came from Entra read
 //! access on that department's folder, one person at a time, and removes it
-//! when they leave or are deactivated. Permissions PADM did not grant are
+//! when they leave or are deactivated. Permissions PDMS did not grant are
 //! reported, never changed.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -1282,7 +1296,7 @@ impl GraphPermission {
     }
 }
 
-/// Bring every department folder's readers in line with PADM (one run at a
+/// Bring every department folder's readers in line with PDMS (one run at a
 /// time). A no-op when SharePoint storage is off.
 pub async fn reconcile(core: &Core) -> CoreResult<ReconcileReport> {
     if core.sharepoint.is_none() {
@@ -1449,7 +1463,7 @@ async fn department(
         report.revoked += 1;
     }
 
-    // Report access PADM did not grant.
+    // Report access PDMS did not grant.
     let mine: BTreeSet<String> = sqlx::query_scalar!(
         "SELECT permission_id FROM sharepoint_folder_access WHERE department_id = $1",
         department_id
@@ -1772,7 +1786,7 @@ async fn outside_changes_are_flagged_and_admins_told() {
     let (fuel, fuel_v1, fuel_item) = stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
     let (_lease, lease_v1, lease_item) = stored_document(&core, alice, roads, "Office Lease", &pdf("lease")).await;
 
-    // The first run reads everything; PADM's own files and folders are not changes.
+    // The first run reads everything; PDMS's own files and folders are not changes.
     let first = changes::detect_changes(&core).await.unwrap();
     assert_eq!((first.modified, first.missing, first.unexpected), (0, 0, 0), "{first:?}");
 
@@ -1788,7 +1802,7 @@ async fn outside_changes_are_flagged_and_admins_told() {
     assert!(audit_actions(&core).await.contains(&"sharepoint.changed_outside".to_owned()));
     assert_eq!(
         in_app_notices(&core).await,
-        vec![(boss, "SharePoint: 2 file(s) changed outside PADM".to_owned())]
+        vec![(boss, "SharePoint: 2 file(s) changed outside PDMS".to_owned())]
     );
     assert_eq!(
         status::document_flags(&core.db, fuel).await.unwrap(),
@@ -1825,17 +1839,17 @@ async fn untracked_files_are_listed_after_ten_minutes_and_never_deleted() {
         .await
         .unwrap()
         .into_iter()
-        .map(|u| (u.path, u.created_by, u.by_padm))
+        .map(|u| (u.path, u.created_by, u.by_pdms))
         .collect();
     seen.sort();
     assert_eq!(
         seen,
         vec![
             ("Departments/Road and Bridge/notes.docx".into(), "Pat Clerk <pat.clerk@county.example>".into(), false),
-            ("Departments/Road and Bridge/unfinished.pdf".into(), "PADM".into(), true),
+            ("Departments/Road and Bridge/unfinished.pdf".into(), "PDMS".into(), true),
         ]
     );
-    assert!(sp.item("Departments/Road and Bridge/notes.docx").is_some(), "PADM never deletes it");
+    assert!(sp.item("Departments/Road and Bridge/notes.docx").is_some(), "PDMS never deletes it");
 
     // Deleted in SharePoint: forgotten.
     sp.human_delete(&stray, "Pat Clerk");
@@ -1887,7 +1901,7 @@ async fn an_expired_change_token_rereads_without_false_alarms() {
 }
 
 #[tokio::test]
-async fn renamed_files_and_folders_get_padm_layout_back() {
+async fn renamed_files_and_folders_get_pdms_layout_back() {
     let sp = MockGraph::start().await;
     let (core, _db) = sp_core(&sp).await;
     let roads = department(&core, "RB", "Road and Bridge").await;
@@ -1932,11 +1946,11 @@ Expected: compile error `could not find changes in sharepoint`.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
 //! Changes made directly in SharePoint (spec §7.6, D-089). Every few minutes
-//! PADM reads the library's change feed (Graph delta) and compares each file
+//! PDMS reads the library's change feed (Graph delta) and compares each file
 //! it tracks with what it recorded at upload: size and QuickXorHash. A file
 //! that differs, or is gone, is flagged, audited, and reported to
 //! administrators. Who made the change is recorded but never trusted: the
-//! hashes decide. Files PADM does not track are listed for review and never
+//! hashes decide. Files PDMS does not track are listed for review and never
 //! deleted.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -2027,7 +2041,7 @@ pub struct Identity {
 }
 
 impl IdentitySet {
-    /// Written by PADM's own app registration.
+    /// Written by PDMS's own app registration.
     pub fn is_app(&self, client_id: &str) -> bool {
         self.application
             .as_ref()
@@ -2058,7 +2072,7 @@ impl DriveItem {
         self.file.as_ref()?.hashes.as_ref()?.quick_xor_hash.as_deref()
     }
 
-    fn modified_by_padm(&self, client_id: &str) -> bool {
+    fn modified_by_pdms(&self, client_id: &str) -> bool {
         self.last_modified_by.as_ref().is_some_and(|w| w.is_app(client_id))
     }
 
@@ -2069,7 +2083,7 @@ impl DriveItem {
     }
 }
 
-/// What PADM recorded about a file it put in SharePoint.
+/// What PDMS recorded about a file it put in SharePoint.
 #[derive(Clone, Debug)]
 pub struct Tracked {
     pub version_id: Uuid,
@@ -2081,23 +2095,23 @@ pub struct Tracked {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Observation {
-    /// A tracked file now differs from PADM's record, or is gone.
+    /// A tracked file now differs from PDMS's record, or is gone.
     Flag { version_id: Uuid, document_id: Uuid, by: String, missing: bool },
-    /// A flagged file matches PADM's record again.
+    /// A flagged file matches PDMS's record again.
     Cleared { version_id: Uuid, document_id: Uuid },
     /// A person renamed, moved, or relabelled a tracked file without changing
-    /// its content: put PADM's name, place, and columns back.
+    /// its content: put PDMS's name, place, and columns back.
     Touched { document_id: Uuid },
-    /// A file PADM does not track.
-    Unexpected { item_id: String, name: String, path: String, by: String, by_padm: bool },
-    /// A file PADM does not track is gone.
+    /// A file PDMS does not track.
+    Unexpected { item_id: String, name: String, path: String, by: String, by_pdms: bool },
+    /// A file PDMS does not track is gone.
     Forget { item_id: String },
     /// A person renamed or moved a folder.
     FolderChanged { item_id: String },
     Ignore,
 }
 
-/// What one change-feed entry means. Pure: the caller supplies PADM's record.
+/// What one change-feed entry means. Pure: the caller supplies PDMS's record.
 pub fn observe(item: &DriveItem, tracked: Option<&Tracked>, client_id: &str) -> Observation {
     if item.root.is_some() {
         return Observation::Ignore;
@@ -2115,24 +2129,24 @@ pub fn observe(item: &DriveItem, tracked: Option<&Tracked>, client_id: &str) -> 
         };
     }
     if item.folder.is_some() {
-        return if item.modified_by_padm(client_id) {
+        return if item.modified_by_pdms(client_id) {
             Observation::Ignore
         } else {
             Observation::FolderChanged { item_id: item.id.clone() }
         };
     }
     let Some(t) = tracked else {
-        let by_padm = item.created_by.as_ref().is_some_and(|w| w.is_app(client_id));
+        let by_pdms = item.created_by.as_ref().is_some_and(|w| w.is_app(client_id));
         return Observation::Unexpected {
             item_id: item.id.clone(),
             name: item.name.clone().unwrap_or_default(),
             path: String::new(),
-            by: if by_padm {
-                "PADM".into()
+            by: if by_pdms {
+                "PDMS".into()
             } else {
                 item.created_by.as_ref().map_or_else(|| "unknown".into(), IdentitySet::describe)
             },
-            by_padm,
+            by_pdms,
         };
     };
     let same = item.size == Some(t.size) && item.quick_xor_hash() == Some(t.quick_xor_hash.as_str());
@@ -2144,7 +2158,7 @@ pub fn observe(item: &DriveItem, tracked: Option<&Tracked>, client_id: &str) -> 
             by: item.modifier(),
             missing: false,
         },
-        (true, "ok") if item.modified_by_padm(client_id) => Observation::Ignore,
+        (true, "ok") if item.modified_by_pdms(client_id) => Observation::Ignore,
         (true, "ok") => Observation::Touched { document_id: t.document_id },
         (true, _) => Observation::Cleared { version_id: t.version_id, document_id: t.document_id },
     }
@@ -2270,7 +2284,7 @@ async fn run(core: &Core) -> Result<DeltaReport, RunError> {
             }
         }
         match observe(&item, t, &client_id) {
-            Observation::Unexpected { item_id, name, by, by_padm, .. } => {
+            Observation::Unexpected { item_id, name, by, by_pdms, .. } => {
                 // The feed leaves out folder paths; read the item for its location.
                 let url = format!("/drives/{drive}/items/{item_id}?$select=id,name,parentReference");
                 let path = match graph.get::<DriveItem>(&url).await {
@@ -2278,7 +2292,7 @@ async fn run(core: &Core) -> Result<DeltaReport, RunError> {
                     Err(GraphError::NotFound) => continue,
                     Err(e) => return Err(e.into()),
                 };
-                observations.push(Observation::Unexpected { item_id, name, path, by, by_padm });
+                observations.push(Observation::Unexpected { item_id, name, path, by, by_pdms });
             }
             Observation::FolderChanged { item_id } => folders.push((item_id, item.name.clone().unwrap_or_default())),
             o => observations.push(o),
@@ -2360,16 +2374,16 @@ async fn run(core: &Core) -> Result<DeltaReport, RunError> {
             Observation::Touched { document_id } => {
                 mirror.insert(document_id);
             }
-            Observation::Unexpected { item_id, name, path, by, by_padm } => {
+            Observation::Unexpected { item_id, name, path, by, by_pdms } => {
                 sqlx::query!(
-                    "INSERT INTO sharepoint_unexpected_items (item_id, name, path, created_by, by_padm)
+                    "INSERT INTO sharepoint_unexpected_items (item_id, name, path, created_by, by_pdms)
                      VALUES ($1, $2, $3, $4, $5)
                      ON CONFLICT (item_id) DO UPDATE SET name = EXCLUDED.name, path = EXCLUDED.path, last_seen = now()",
                     item_id,
                     name,
                     path,
                     by,
-                    by_padm
+                    by_pdms
                 )
                 .execute(&mut *tx)
                 .await?;
@@ -2403,8 +2417,8 @@ async fn run(core: &Core) -> Result<DeltaReport, RunError> {
             &mut tx,
             core,
             Notice {
-                subject: format!("SharePoint: {flagged} file(s) changed outside PADM"),
-                body: "Someone edited or deleted files directly in the PADM SharePoint site. \
+                subject: format!("SharePoint: {flagged} file(s) changed outside PDMS"),
+                body: "Someone edited or deleted files directly in the PDMS SharePoint site. \
                        Review them under Administration → SharePoint."
                     .into(),
                 link: "/admin/sharepoint".into(),
@@ -2507,11 +2521,11 @@ mod tests {
     fn untracked_files_and_folders() {
         assert!(matches!(
             observe(&file("AAA=", 10, false), None, APP),
-            Observation::Unexpected { by_padm: false, .. }
+            Observation::Unexpected { by_pdms: false, .. }
         ));
         assert!(matches!(
             observe(&file("AAA=", 10, true), None, APP),
-            Observation::Unexpected { by_padm: true, .. }
+            Observation::Unexpected { by_pdms: true, .. }
         ));
         let by_app = item(json!({"id": "d1", "name": "X", "folder": {}, "lastModifiedBy": {"application": {"id": APP}}}));
         let by_person = item(json!({"id": "d1", "name": "X", "folder": {}, "lastModifiedBy": {"user": {"displayName": "Pat"}}}));
@@ -2559,7 +2573,7 @@ pub struct UnexpectedFile {
     pub name: String,
     pub path: String,
     pub created_by: String,
-    pub by_padm: bool,
+    pub by_pdms: bool,
     pub first_seen: DateTime<Utc>,
 }
 
@@ -2567,7 +2581,7 @@ pub struct UnexpectedFile {
 pub async fn unexpected_files(db: &PgPool) -> CoreResult<Vec<UnexpectedFile>> {
     Ok(sqlx::query_as!(
         UnexpectedFile,
-        "SELECT item_id, name, path, created_by, by_padm, first_seen FROM sharepoint_unexpected_items
+        "SELECT item_id, name, path, created_by, by_pdms, first_seen FROM sharepoint_unexpected_items
           WHERE dismissed_at IS NULL AND first_seen < now() - interval '10 minutes'
           ORDER BY first_seen DESC LIMIT 500"
     )
@@ -2635,7 +2649,7 @@ Expected: six unit tests and every integration test `... ok`.
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
 git add crates/pdms-core/src/sharepoint crates/pdms-core/tests/sharepoint_ops.rs .sqlx
-git commit -m "sharepoint: flag files changed outside PADM and list untracked files"
+git commit -m "sharepoint: flag files changed outside PDMS and list untracked files"
 ```
 
 ---
@@ -2703,7 +2717,7 @@ async fn restore_original_puts_the_recorded_file_back() {
     assert_eq!(sp.content_of(&item), original);
     assert_eq!(file_state(&core, v1).await, ("ok".to_owned(), None));
     assert!(audit_actions(&core).await.contains(&"sharepoint.change_resolved".to_owned()));
-    // The restore was PADM's own change: the next check finds nothing.
+    // The restore was PDMS's own change: the next check finds nothing.
     let r = changes::detect_changes(&core).await.unwrap();
     assert_eq!((r.modified, r.missing, r.cleared), (0, 0, 0), "{r:?}");
 }
@@ -2793,11 +2807,11 @@ Expected: compile error `could not find resolve in sharepoint`.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
 //! Resolving a file changed directly in SharePoint (spec §7.6). An
-//! administrator either puts PADM's recorded file back (picked from
+//! administrator either puts PDMS's recorded file back (picked from
 //! SharePoint's version history by its SHA-256, never by label), or keeps the
 //! change as a new document version through the normal upload checks and then
 //! puts the earlier file back. Also: re-checking a file after a manual fix, and
-//! dismissing files PADM does not track.
+//! dismissing files PDMS does not track.
 
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
@@ -2821,8 +2835,8 @@ use crate::graph::{GraphClient, GraphError};
 
 const MISSING_HELP: &str = "The file was deleted in SharePoint. A site owner can restore it from the \
     site's recycle bin (Site contents → Recycle bin); then choose Re-check.";
-const ALREADY_OK: &str = "This file already matches PADM's record.";
-const NO_ORIGINAL: &str = "No earlier SharePoint version of this file matches PADM's record. Accept the \
+const ALREADY_OK: &str = "This file already matches PDMS's record.";
+const NO_ORIGINAL: &str = "No earlier SharePoint version of this file matches PDMS's record. Accept the \
     change as a new version, or restore the file by hand in SharePoint and choose Re-check.";
 
 struct Flagged {
@@ -2917,7 +2931,7 @@ struct VersionInfo {
     size: Option<i64>,
 }
 
-/// The newest earlier SharePoint version whose content is PADM's recorded file.
+/// The newest earlier SharePoint version whose content is PDMS's recorded file.
 async fn original_version(graph: &GraphClient, f: &Flagged) -> CoreResult<Option<String>> {
     let list: Versions = graph
         .get(&format!("/drives/{}/items/{}/versions", f.drive_id, f.item_id))
@@ -2935,7 +2949,7 @@ async fn original_version(graph: &GraphClient, f: &Flagged) -> CoreResult<Option
     Ok(None)
 }
 
-/// Make PADM's recorded content current again. `Ok(None)` if SharePoint no
+/// Make PDMS's recorded content current again. `Ok(None)` if SharePoint no
 /// longer has it.
 async fn put_back(graph: &GraphClient, f: &Flagged) -> CoreResult<Option<String>> {
     let Some(vid) = original_version(graph, f).await? else {
@@ -2946,7 +2960,7 @@ async fn put_back(graph: &GraphClient, f: &Flagged) -> CoreResult<Option<String>
     match current(graph, f).await? {
         Some(item) if matches_record(f, &item) => Ok(Some(vid)),
         _ => Err(CoreError::internal(
-            "SharePoint restored the earlier version, but the file still differs from PADM's record",
+            "SharePoint restored the earlier version, but the file still differs from PDMS's record",
         )),
     }
 }
@@ -2979,7 +2993,7 @@ async fn mark_ok(
     Ok(())
 }
 
-/// Put PADM's recorded file back (requires `ManageSharePoint`).
+/// Put PDMS's recorded file back (requires `ManageSharePoint`).
 pub async fn restore_original(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreResult<()> {
     ctx.require(Capability::ManageSharePoint)?;
     let (graph, _) = status::parts(core).await?;
@@ -3046,7 +3060,7 @@ pub async fn accept_as_new_version(core: &Core, ctx: &Ctx, version_id: Uuid) -> 
     Ok(new_version)
 }
 
-/// Compare the file with PADM's record again, after someone fixed it by hand
+/// Compare the file with PDMS's record again, after someone fixed it by hand
 /// (requires `ManageSharePoint`). True when it matches.
 pub async fn recheck(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreResult<bool> {
     ctx.require(Capability::ManageSharePoint)?;
@@ -3074,7 +3088,7 @@ pub async fn recheck(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreResult<boo
     Ok(ok)
 }
 
-/// Stop listing a file PADM does not track (requires `ManageSharePoint`).
+/// Stop listing a file PDMS does not track (requires `ManageSharePoint`).
 pub async fn dismiss_unexpected(core: &Core, ctx: &Ctx, item_id: &str) -> CoreResult<()> {
     ctx.require(Capability::ManageSharePoint)?;
     let mut tx = core.db.begin().await?;
@@ -3241,7 +3255,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
 (e) Add this function above `verify_with`:
 
 ```rust
-/// Check every file PADM stored in SharePoint against Graph's metadata and,
+/// Check every file PDMS stored in SharePoint against Graph's metadata and,
 /// optionally, its content. Problems are collected, never fatal.
 async fn check_sharepoint(
     core: &Core,
@@ -3658,8 +3672,8 @@ pub async fn panel(core: &Core, ctx: &Ctx) -> CoreResult<Panel> {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
 //! Administration → SharePoint: background run status, files changed
-//! directly in SharePoint and how to resolve them, files PADM does not track,
-//! and access on department folders that PADM did not grant.
+//! directly in SharePoint and how to resolve them, files PDMS does not track,
+//! and access on department folders that PDMS did not grant.
 
 use askama::Template;
 use axum::extract::{Path, State};
@@ -3699,7 +3713,7 @@ pub struct StrayRow {
     pub name: String,
     pub path: String,
     pub created_by: String,
-    pub by_padm: bool,
+    pub by_pdms: bool,
     pub first_seen: String,
 }
 
@@ -3768,7 +3782,7 @@ pub async fn page(State(state): State<AppState>, user: CurrentUser, flash: Flash
                 name: u.name,
                 path: u.path,
                 created_by: u.created_by,
-                by_padm: u.by_padm,
+                by_pdms: u.by_pdms,
                 first_seen: fmt_time(state.tz, u.first_seen),
             })
             .collect(),
@@ -3816,8 +3830,8 @@ pub async fn recheck(
 ) -> AppResult<Response> {
     user.require(&state, Capability::ManageSharePoint, BACK).await?;
     match resolve::recheck(&state.core, &user.ctx, version_id).await {
-        Ok(true) => Ok(redirect_with(&state, BACK, true, "The file matches PADM's record again.")),
-        Ok(false) => Ok(redirect_with(&state, BACK, false, "The file still differs from PADM's record.")),
+        Ok(true) => Ok(redirect_with(&state, BACK, true, "The file matches PDMS's record again.")),
+        Ok(false) => Ok(redirect_with(&state, BACK, false, "The file still differs from PDMS's record.")),
         Err(e) => done(&state, BACK, Err::<(), _>(e), ""),
     }
 }
@@ -3841,7 +3855,7 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
 {% if !enabled %}
 <p class="flash flash-error" role="status">SharePoint storage is not turned on for this installation. See <code>docs/SHAREPOINT_SETUP.md</code>, then run <code>./install.sh --configure sharepoint</code>.</p>
 {% else %}
-<p class="muted">Site <code>{{ site_url }}</code> · PADM Service app <code>{{ client_id }}</code></p>
+<p class="muted">Site <code>{{ site_url }}</code> · PDMS Service app <code>{{ client_id }}</code></p>
 {% endif %}
 
 <section aria-labelledby="runs-h">
@@ -3867,8 +3881,8 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
 </section>
 
 <section aria-labelledby="flagged-h">
-  <h2 id="flagged-h">Files changed outside PADM</h2>
-  <p class="muted">PADM compares every file it stored with SharePoint every few minutes. <strong>Restore original</strong> puts PADM's recorded file back. <strong>Accept as new version</strong> keeps the change as a new version of the document (you need edit rights on it) and puts the earlier file back.</p>
+  <h2 id="flagged-h">Files changed outside PDMS</h2>
+  <p class="muted">PDMS compares every file it stored with SharePoint every few minutes. <strong>Restore original</strong> puts PDMS's recorded file back. <strong>Accept as new version</strong> keeps the change as a new version of the document (you need edit rights on it) and puts the earlier file back.</p>
   <table>
     <thead><tr><th scope="col">Document</th><th scope="col">Version</th><th scope="col">What happened</th><th scope="col">By</th><th scope="col">Noticed</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
@@ -3887,20 +3901,20 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
           <form method="post" action="/admin/sharepoint/files/{{ f.version_id }}/recheck" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Re-check</button></form>
         </td>
       </tr>
-    {% else %}<tr><td colspan="6">None. Every file matches what PADM stored.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="6">None. Every file matches what PDMS stored.</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>
 
 <section aria-labelledby="stray-h">
-  <h2 id="stray-h">Files PADM does not track</h2>
-  <p class="muted">Files added to the site some other way. PADM never deletes them; a site owner can, after checking.</p>
+  <h2 id="stray-h">Files PDMS does not track</h2>
+  <p class="muted">Files added to the site some other way. PDMS never deletes them; a site owner can, after checking.</p>
   <table>
     <thead><tr><th scope="col">File</th><th scope="col">Added by</th><th scope="col">First seen</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
     {% for u in unexpected %}
       <tr><td><code>{{ u.path }}</code></td>
-      <td>{% if u.by_padm %}PADM (a save that did not finish; safe to delete){% else %}{{ u.created_by }}{% endif %}</td>
+      <td>{% if u.by_pdms %}PDMS (a save that did not finish; safe to delete){% else %}{{ u.created_by }}{% endif %}</td>
       <td>{{ u.first_seen }}</td>
       <td><form method="post" action="/admin/sharepoint/unexpected/{{ u.item_id }}/dismiss" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="small">Dismiss</button></form></td></tr>
     {% else %}<tr><td colspan="4">None.</td></tr>{% endfor %}
@@ -3910,7 +3924,7 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
 
 <section aria-labelledby="foreign-h">
   <h2 id="foreign-h">Other access on department folders</h2>
-  <p class="muted">PADM gives each department's staff read access on its folder. These permissions were added some other way; PADM leaves them alone.</p>
+  <p class="muted">PDMS gives each department's staff read access on its folder. These permissions were added some other way; PDMS leaves them alone.</p>
   <table>
     <thead><tr><th scope="col">Department folder</th><th scope="col">Who</th><th scope="col">Access</th></tr></thead>
     <tbody>
@@ -3955,7 +3969,7 @@ Create `crates/pdms-web/templates/admin/sharepoint.html`:
 {% if l.can_sharepoint %}
 <section aria-labelledby="sp-access-h">
   <h2 id="sp-access-h">SharePoint folder access</h2>
-  <p>After each sync, PADM gives every department's synced staff read access on that department's SharePoint folder and removes it when they leave. Status and anything that needs attention: <a href="/admin/sharepoint">Administration → SharePoint</a>.</p>
+  <p>After each sync, PDMS gives every department's synced staff read access on that department's SharePoint folder and removes it when they leave. Status and anything that needs attention: <a href="/admin/sharepoint">Administration → SharePoint</a>.</p>
 </section>
 {% endif %}
 ```
@@ -4012,7 +4026,7 @@ P2 left the Compose secret wiring for the Graph certificate, and the installer s
   - the variables `PDMS_INSTALL_SHAREPOINT_SITE_URL`, `PDMS_INSTALL_GRAPH_TENANT_ID`, `PDMS_INSTALL_GRAPH_CLIENT_ID`, `PDMS_INSTALL_ENTRA_SYNC` for unattended installs;
   - the Docker secret `graph_certificate`;
   - `config/pdms.env`, which sets `PDMS_STORAGE__BACKEND=sharepoint`;
-  - `config/padm-service.cer`, the public certificate to upload to Entra.
+  - `config/pdms-service.cer`, the public certificate to upload to Entra.
 
 - [ ] **Step 1: Compose.** In `docker-compose.yml`:
 
@@ -4089,20 +4103,20 @@ for f in oidc_client_secret smtp_password graph_client_secret graph_certificate;
 # --- 6b. SharePoint document storage and Entra user sync (Microsoft Graph) -------------
 if needs sharepoint sharepoint; then
   say "SharePoint document storage and Entra user sync (optional)"
-  note "PADM can keep every document file in a dedicated SharePoint site and keep people and"
+  note "PDMS can keep every document file in a dedicated SharePoint site and keep people and"
   note "their departments in step with Entra ID (the Department field). Set up the site and the"
-  note "\"PADM Service\" app registration first: docs/SHAREPOINT_SETUP.md."
+  note "\"PDMS Service\" app registration first: docs/SHAREPOINT_SETUP.md."
   note "Leave the site URL blank to keep files on this server."
   was_sharepoint=no
   [[ -f config/pdms.env ]] && grep -qx 'PDMS_STORAGE__BACKEND=sharepoint' config/pdms.env && was_sharepoint=yes
-  ask SHAREPOINT_SITE_URL "SharePoint site URL (e.g. https://contoso.sharepoint.com/sites/PADMRecords)" ""
+  ask SHAREPOINT_SITE_URL "SharePoint site URL (e.g. https://contoso.sharepoint.com/sites/PDMSRecords)" ""
   SHAREPOINT_SITE_URL=${SHAREPOINT_SITE_URL%/}
   if [[ -n "$SHAREPOINT_SITE_URL" ]]; then
     [[ "$SHAREPOINT_SITE_URL" =~ ^https://[A-Za-z0-9.-]+\.sharepoint\.(com|us)/sites/[A-Za-z0-9._-]+$ ]] \
       || fail "the site URL must look like https://<tenant>.sharepoint.com/sites/<name>"
     sso_tenant=$(sed -n 's#^issuer_url = "https://login.microsoftonline.com/\([^/]*\)/v2.0"#\1#p' "$CONFIG" | head -1)
     ask GRAPH_TENANT_ID "Directory (tenant) ID" "$sso_tenant"
-    ask GRAPH_CLIENT_ID "Application (client) ID of the PADM Service app" ""
+    ask GRAPH_CLIENT_ID "Application (client) ID of the PDMS Service app" ""
     guid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     [[ "$GRAPH_TENANT_ID" =~ $guid && "$GRAPH_CLIENT_ID" =~ $guid ]] \
       || fail "the tenant and client IDs are GUIDs like 01234567-89ab-cdef-0123-456789abcdef"
@@ -4110,19 +4124,19 @@ if needs sharepoint sharepoint; then
       # RSA-2048, as Entra and P2's client assertion (PS256) expect. Unencrypted
       # PKCS#8 key; it stays in secrets/ and is mounted as a Docker secret.
       tmpd=$(mktemp -d)
-      openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PADM Service" \
+      openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PDMS Service" \
         -keyout "$tmpd/key.pem" -out "$tmpd/cert.pem" 2>/dev/null
       cat "$tmpd/cert.pem" "$tmpd/key.pem" > secrets/graph_certificate
-      cp "$tmpd/cert.pem" config/padm-service.cer
+      cp "$tmpd/cert.pem" config/pdms-service.cer
       rm -rf "$tmpd"
       echo "   generated secrets/graph_certificate (valid for 2 years)"
     fi
     chmod 644 secrets/graph_certificate
-    [[ -s config/padm-service.cer ]] || openssl x509 -in secrets/graph_certificate -out config/padm-service.cer
-    chmod 644 config/padm-service.cer
-    thumb=$(openssl x509 -in config/padm-service.cer -noout -fingerprint -sha1 | sed 's/^.*=//; s/://g')
-    expires=$(openssl x509 -in config/padm-service.cer -noout -enddate | sed 's/^notAfter=//')
-    note "Upload config/padm-service.cer to the PADM Service app registration"
+    [[ -s config/pdms-service.cer ]] || openssl x509 -in secrets/graph_certificate -out config/pdms-service.cer
+    chmod 644 config/pdms-service.cer
+    thumb=$(openssl x509 -in config/pdms-service.cer -noout -fingerprint -sha1 | sed 's/^.*=//; s/://g')
+    expires=$(openssl x509 -in config/pdms-service.cer -noout -enddate | sed 's/^notAfter=//')
+    note "Upload config/pdms-service.cer to the PDMS Service app registration"
     note "(Certificates & secrets -> Certificates). Thumbprint $thumb, expires $expires."
     if [[ -n "$sso_tenant" ]]; then
       yes_no ENTRA_SYNC "Sync people and their departments from Entra ID every night?" y
@@ -4138,9 +4152,9 @@ if needs sharepoint sharepoint; then
     done
     write_block sharepoint <<EOF
 [graph]
-# The "PADM Service" app registration (docs/SHAREPOINT_SETUP.md). Certificate and
+# The "PDMS Service" app registration (docs/SHAREPOINT_SETUP.md). Certificate and
 # key: secrets/graph_certificate (Docker secret). Public part for Entra:
-# config/padm-service.cer.
+# config/pdms-service.cer.
 tenant_id = $(toml "$GRAPH_TENANT_ID")
 client_id = $(toml "$GRAPH_CLIENT_ID")
 
@@ -4157,7 +4171,7 @@ EOF
     echo "   SharePoint storage configured. Check it under Administration -> SharePoint once running."
   else
     if [[ $was_sharepoint == yes ]]; then
-      warn "Files already stored in SharePoint stay there, but PADM will no longer be able to open them."
+      warn "Files already stored in SharePoint stay there, but PDMS will no longer be able to open them."
       warn "Entra user sync, set up in this same step, stops too."
       yes_no STOP_SHAREPOINT "Stop using SharePoint for document files anyway?" n
       [[ $STOP_SHAREPOINT == yes ]] || fail "keeping SharePoint storage; nothing was changed"
@@ -4180,7 +4194,7 @@ fi
 
 ```
 /config/pdms.env
-/config/padm-service.cer
+/config/pdms-service.cer
 ```
 
 - [ ] **Step 5: Check the scripts.**
@@ -4214,33 +4228,33 @@ git commit -m "install: --configure sharepoint, Graph certificate secret, storag
 - Modify: `docs/ARCHITECTURE.md` (§12 data-model table)
 - Modify: `docs/DECISIONS.md` (new entries before `## Open questions`; statuses of D-081 to D-086 and D-089; the open-questions row)
 - Modify: `docs/ROADMAP.md` (§0.3)
-- Modify: `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md` ("Produced by P4")
+- Modify: `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md` ("Produced by P4")
 - Modify: `crates/pdms-core/tests/sharepoint.rs` (P3's file: shared live-test setup and two opt-in live tests)
 
 **Interfaces:**
 - Consumes: everything above; P3's live test `live_sharepoint_round_trip`, its variables `PDMS_LIVE_TENANT_ID`, `PDMS_LIVE_CLIENT_ID`, `PDMS_LIVE_CERTIFICATE_FILE`, `PDMS_LIVE_SITE_URL`, and its test helpers `core_with`, `new_department`, `editing_department`, `as_user`, `pdf`, `new_doc`, `external_id`.
-- Produces: the county runbook; `live_padm_writes_are_recognised` and `live_department_staff_get_read_access` (ignored by default); the extra variable `PDMS_LIVE_READER_EMAIL`.
+- Produces: the county runbook; `live_pdms_writes_are_recognised` and `live_department_staff_get_read_access` (ignored by default); the extra variable `PDMS_LIVE_READER_EMAIL`.
 
 - [ ] **Step 1: The county setup guide.** Create `docs/SHAREPOINT_SETUP.md`:
 
 ````markdown
-# Setting up SharePoint for PADM
+# Setting up SharePoint for PDMS
 
-PADM keeps every document file in one dedicated SharePoint site, and reads
+PDMS keeps every document file in one dedicated SharePoint site, and reads
 people and their departments from Entra ID. This guide is for the county's
 Microsoft 365 administrator.
 
 - **Part A** can be done at any time.
-- **Part B** is done when PADM is ready to connect.
+- **Part B** is done when PDMS is ready to connect.
 - **Part C** covers looking after the connection.
 
 Do everything for the **test** site and test server first.
 
 | | Test | Production |
 |---|---|---|
-| Site | `PADM Records – Test` | `PADM Records` |
-| App registration | `PADM Service – Test` | `PADM Service` |
-| PADM server | the test server | the production server |
+| Site | `PDMS Records – Test` | `PDMS Records` |
+| App registration | `PDMS Service – Test` | `PDMS Service` |
+| PDMS server | the test server | the production server |
 
 Use a separate app registration for each server, so the test server's
 certificate can never reach production files.
@@ -4252,12 +4266,12 @@ certificate can never reach production files.
 In the SharePoint admin center, choose **Sites → Active sites → Create →
 Communication site**:
 
-- name `PADM Records – Test` (production: `PADM Records`);
+- name `PDMS Records – Test` (production: `PDMS Records`);
 - design **Blank**;
 - language English.
 
 Note the site address, for example
-`https://contoso.sharepoint.com/sites/PADMRecordsTest`. The PADM installer
+`https://contoso.sharepoint.com/sites/PDMSRecordsTest`. The PDMS installer
 asks for it.
 
 ### A2. Permissions
@@ -4266,10 +4280,10 @@ On the site, open **Settings (gear) → Site permissions → Advanced permission
 settings**:
 
 - **Owners:** one or two named administrators. These are the only people who
-  can change files directly; PADM watches for that (step B9).
+  can change files directly; PDMS watches for that (step B9).
 - **Members** and **Visitors:** remove everyone. Leave the groups empty.
 
-Do not add people or groups anywhere else on the site. PADM gives each
+Do not add people or groups anywhere else on the site. PDMS gives each
 department's staff read access to their own department folder itself.
 
 ### A3. Sharing
@@ -4302,9 +4316,9 @@ On `County-wide` only: choose **… → Manage access → Advanced settings →
 Stop inheriting permissions**, then **Grant permissions** to **Everyone
 except external users** with **Read**.
 
-Leave `Departments` and `Restricted` inheriting (owners only). PADM creates
+Leave `Departments` and `Restricted` inheriting (owners only). PDMS creates
 the department and document folders itself. If a top-level folder is missing,
-PADM creates it and logs a warning; `County-wide` then still needs the
+PDMS creates it and logs a warning; `County-wide` then still needs the
 permission change above.
 
 ### A6. Retention (recommended)
@@ -4317,7 +4331,7 @@ always be recovered.
 
 ### A7. The Department field
 
-PADM puts each person in a department from the **Department** field of their
+PDMS puts each person in a department from the **Department** field of their
 Entra account. Make sure every staff account has one consistent value per
 department, and make the field part of account creation. To list the values
 in use (Microsoft Graph PowerShell):
@@ -4328,14 +4342,14 @@ Get-MgUser -All -Filter "accountEnabled eq true and userType eq 'Member'" -Prope
   Group-Object Department | Sort-Object Count -Descending | Select-Object Count, Name
 ```
 
-## Part B: connecting PADM
+## Part B: connecting PDMS
 
 ### B1. Register the app
 
 In the Entra admin center, choose **Applications → App registrations → New
 registration**:
 
-- name `PADM Service – Test` (production: `PADM Service`);
+- name `PDMS Service – Test` (production: `PDMS Service`);
 - **Accounts in this organizational directory only**;
 - no redirect URI.
 
@@ -4350,10 +4364,10 @@ permissions**, add:
 - `User.Read.All`
 
 Then choose **Grant admin consent**. Do not add `Sites.ReadWrite.All` or
-`Files.ReadWrite.All`: `Sites.Selected` limits PADM to the one site you grant
+`Files.ReadWrite.All`: `Sites.Selected` limits PDMS to the one site you grant
 in B5.
 
-### B3. Run the installer on the PADM server
+### B3. Run the installer on the PDMS server
 
 ```sh
 ./install.sh --configure sharepoint
@@ -4362,25 +4376,25 @@ in B5.
 It asks for the site address, the tenant ID (it suggests the one used for
 sign-in), and the client ID. It then:
 
-- creates the certificate PADM signs in with: `secrets/graph_certificate`
+- creates the certificate PDMS signs in with: `secrets/graph_certificate`
   (private; never copy it off the server except in backups);
-- writes the public part to `config/padm-service.cer` and prints its
+- writes the public part to `config/pdms-service.cer` and prints its
   thumbprint and expiry date;
 - asks whether to sync people and departments from Entra ID every night
   (needs Entra ID sign-in, `--configure sso`, first);
-- restarts PADM.
+- restarts PDMS.
 
-Copy `config/padm-service.cer` to your workstation, for example with `scp`.
+Copy `config/pdms-service.cer` to your workstation, for example with `scp`.
 
 ### B4. Upload the certificate
 
 In the app registration, choose **Certificates & secrets → Certificates →
-Upload certificate** and pick `padm-service.cer`. Check that the thumbprint
+Upload certificate** and pick `pdms-service.cer`. Check that the thumbprint
 matches the one the installer printed.
 
 ### B5. Give the app full control of this one site
 
-PADM needs full control so it can create the library columns and folders and
+PDMS needs full control so it can create the library columns and folders and
 grant and remove read access on department folders. The grant is made in two
 steps, because Microsoft Graph creates the permission first and then raises
 it. Sign in as a Global Administrator or SharePoint Administrator. Use one of
@@ -4390,10 +4404,10 @@ the two methods.
 
 ```powershell
 Connect-MgGraph -Scopes "Sites.FullControl.All" -TenantId "<tenant-id>"
-$site = Get-MgSite -SiteId "contoso.sharepoint.com:/sites/PADMRecordsTest"
+$site = Get-MgSite -SiteId "contoso.sharepoint.com:/sites/PDMSRecordsTest"
 $perm = New-MgSitePermission -SiteId $site.Id -BodyParameter @{
   roles = @("write")
-  grantedToIdentities = @(@{ application = @{ id = "<client-id>"; displayName = "PADM Service – Test" } })
+  grantedToIdentities = @(@{ application = @{ id = "<client-id>"; displayName = "PDMS Service – Test" } })
 }
 Update-MgSitePermission -SiteId $site.Id -PermissionId $perm.Id -BodyParameter @{ roles = @("fullcontrol") }
 Get-MgSitePermission -SiteId $site.Id | Format-List Id, Roles, GrantedToIdentitiesV2
@@ -4403,10 +4417,10 @@ The same calls in raw Microsoft Graph (Graph Explorer, signed in with
 `Sites.FullControl.All`):
 
 ```http
-GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/PADMRecordsTest?$select=id
+GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/PDMSRecordsTest?$select=id
 
 POST https://graph.microsoft.com/v1.0/sites/{site-id}/permissions
-{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client-id>","displayName":"PADM Service – Test"}}]}
+{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client-id>","displayName":"PDMS Service – Test"}}]}
 
 PATCH https://graph.microsoft.com/v1.0/sites/{site-id}/permissions/{permission-id}
 {"roles":["fullcontrol"]}
@@ -4417,27 +4431,27 @@ documentation):
 
 ```powershell
 Connect-PnPOnline -Url "https://contoso-admin.sharepoint.com" -Interactive -ClientId "<pnp-app-id>"
-$p = Grant-PnPAzureADAppSitePermission -AppId "<client-id>" -DisplayName "PADM Service – Test" `
-       -Permissions Write -Site "https://contoso.sharepoint.com/sites/PADMRecordsTest"
-Set-PnPAzureADAppSitePermission -Site "https://contoso.sharepoint.com/sites/PADMRecordsTest" `
+$p = Grant-PnPAzureADAppSitePermission -AppId "<client-id>" -DisplayName "PDMS Service – Test" `
+       -Permissions Write -Site "https://contoso.sharepoint.com/sites/PDMSRecordsTest"
+Set-PnPAzureADAppSitePermission -Site "https://contoso.sharepoint.com/sites/PDMSRecordsTest" `
   -PermissionId $p.Id -Permissions FullControl
 ```
 
 Recent PnP releases name these `Grant-PnPEntraIDAppSitePermission` and
 `Set-PnPEntraIDAppSitePermission`.
 
-To disconnect PADM later, remove this permission
+To disconnect PDMS later, remove this permission
 (`Remove-MgSitePermission -SiteId $site.Id -PermissionId <id>`).
 
 ### B6. Check the connection
 
-In PADM, open **Administration → SharePoint** and choose **Check now**. On
-its first connection PADM creates the library columns (Document ID, Document
+In PDMS, open **Administration → SharePoint** and choose **Check now**. On
+its first connection PDMS creates the library columns (Document ID, Document
 Type, Tags, Status, Visibility, Department, Owner, the four dates, Version,
-Current, Open in PADM) and checks the three folders. The page should show the
+Current, Open in PDMS) and checks the three folders. The page should show the
 run as successful within a minute.
 
-If it shows "PADM cannot sign in to Microsoft Graph", check, in order:
+If it shows "PDMS cannot sign in to Microsoft Graph", check, in order:
 
 1. the certificate upload (B4);
 2. admin consent (B2);
@@ -4452,31 +4466,31 @@ exist. In `Documents`, open the view menu (**All Documents**) and choose
 - name **Current documents**, type **List**, **Make this the default view**;
 - then **Edit current view**:
   - **Columns:** Name, Document ID, Title, Document Type, Department, Status,
-    Review Date, Expiration Date, Open in PADM;
+    Review Date, Expiration Date, Open in PDMS;
   - **Sort:** Review Date, ascending;
   - **Filter:** show items only when **Current** is equal to **Yes**;
   - **Folders:** **Show all items without folders**.
 
 The existing **All Documents** view shows every version; you may rename it
-**All versions**. "Open in PADM" is plain text, because Microsoft Graph cannot
+**All versions**. "Open in PDMS" is plain text, because Microsoft Graph cannot
 write link columns: copy it into the browser.
 
 ### B8. Departments
 
 If Entra user sync is on, open **Administration → Entra ID sync**, map each
-Department value from A7 to a PADM department, and choose **Sync now**.
-Within about a minute PADM gives each department's staff read access to
+Department value from A7 to a PDMS department, and choose **Sync now**.
+Within about a minute PDMS gives each department's staff read access to
 `Departments/<department>`. **Administration → SharePoint** shows the run and
 anyone SharePoint could not resolve (for example, an account without a
 mailbox).
 
 ### B9. Prove the change check (test site only)
 
-1. Upload a document in PADM.
+1. Upload a document in PDMS.
 2. In SharePoint, as a site owner, open its file and change it.
-3. Within about five minutes (`[sharepoint] delta_interval_minutes`), PADM
+3. Within about five minutes (`[sharepoint] delta_interval_minutes`), PDMS
    flags the document, and administrators get "SharePoint: 1 file(s) changed
-   outside PADM".
+   outside PDMS".
 4. On **Administration → SharePoint**, choose **Restore original**. The flag
    clears.
 5. On the server, run:
@@ -4488,17 +4502,17 @@ mailbox).
 ### C1. Renew the certificate (every two years)
 
 The installer prints the expiry date; set a reminder 30 days before it. To
-renew without an outage, add the new certificate to the app before PADM uses
+renew without an outage, add the new certificate to the app before PDMS uses
 it:
 
 ```sh
 cd /path/to/pdms
 d=$(mktemp -d secrets/renew.XXXX)
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PADM Service" \
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PDMS Service" \
   -keyout "$d/key.pem" -out "$d/cert.pem"
 # Upload $d/cert.pem to the app registration now (B4). Keep the old certificate there.
 cat "$d/cert.pem" "$d/key.pem" > secrets/graph_certificate && chmod 644 secrets/graph_certificate
-cp "$d/cert.pem" config/padm-service.cer && rm -rf "$d"
+cp "$d/cert.pem" config/pdms-service.cer && rm -rf "$d"
 docker compose up -d --force-recreate app worker
 ```
 
@@ -4509,11 +4523,11 @@ old certificate from the app registration.
 
 | You see | Likely cause | What to do |
 |---|---|---|
-| "PADM cannot sign in to Microsoft Graph" (at most hourly) | certificate expired or not uploaded, consent or site grant removed | B4, B2, B5; then **Check now** |
+| "PDMS cannot sign in to Microsoft Graph" (at most hourly) | certificate expired or not uploaded, consent or site grant removed | B4, B2, B5; then **Check now** |
 | "File storage (SharePoint) is unavailable right now" for users | Microsoft 365 outage or throttling | wait; nothing was saved or changed |
 | Someone cannot open their department folder in SharePoint | blank or unmapped Department, a local (non-Entra) account, or no mailbox | A7, B8; the error list on **Administration → SharePoint** |
-| "Other access on department folders" | someone shared a folder directly in SharePoint | remove it in SharePoint if it was not intended; PADM never removes it |
-| "Files PADM does not track" | someone added a file in SharePoint, or an upload failed half-way | delete it in SharePoint if it does not belong, then **Dismiss** |
+| "Other access on department folders" | someone shared a folder directly in SharePoint | remove it in SharePoint if it was not intended; PDMS never removes it |
+| "Files PDMS does not track" | someone added a file in SharePoint, or an upload failed half-way | delete it in SharePoint if it does not belong, then **Dismiss** |
 ````
 
 Run: `grep -c '^### ' docs/SHAREPOINT_SETUP.md`
@@ -4543,43 +4557,43 @@ manual steps are for Entra sync without SharePoint storage.
 With document files in SharePoint ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md)),
 **Administration → SharePoint** (administrators only) shows:
 
-- **Change check:** PADM reads the site's change feed every
+- **Change check:** PDMS reads the site's change feed every
   `[sharepoint] delta_interval_minutes` (default 5) and shows the last run,
   its result, and any error. **Check now** runs it at once.
 - **Department folder access:** department members whose account comes from
-  Entra ID get read access to `Departments/<department>` in SharePoint. PADM
+  Entra ID get read access to `Departments/<department>` in SharePoint. PDMS
   updates it about a minute after a membership change, after each Entra
   sync, and every night. **Update access now** runs it at once. People
   SharePoint could not resolve (for example, no mailbox) are listed with the
   error. Local accounts, such as the break-glass administrator, never get
   SharePoint access.
-- **Other access on department folders:** access that PADM did not grant
-  (someone shared the folder in SharePoint). PADM reports it and never
+- **Other access on department folders:** access that PDMS did not grant
+  (someone shared the folder in SharePoint). PDMS reports it and never
   removes it.
-- **Files changed outside PADM:** a file whose size or content hash no longer
-  matches what PADM uploaded, or that was deleted. The document page shows a
+- **Files changed outside PDMS:** a file whose size or content hash no longer
+  matches what PDMS uploaded, or that was deleted. The document page shows a
   notice too. Administrators get one notice per check that finds changes.
   The title and path are hidden from administrators who cannot view the
   document.
-- **Files PADM does not track:** files added in SharePoint, listed once they
-  are ten minutes old (uploads in progress are not listed). PADM never deletes
+- **Files PDMS does not track:** files added in SharePoint, listed once they
+  are ten minutes old (uploads in progress are not listed). PDMS never deletes
   them; delete them in SharePoint if they do not belong, then choose
   **Dismiss**.
 - **Failed jobs:** SharePoint jobs that gave up, with their last error.
 
-Resolving a file changed outside PADM (each action is audited):
+Resolving a file changed outside PDMS (each action is audited):
 
 | Action | What it does | Who |
 |---|---|---|
-| **Restore original** | Puts back the SharePoint version whose content matches PADM's record (checked by SHA-256). Renames and moves are put back too | administrators |
-| **Accept as new version** | Downloads the file as it is now, runs the normal upload checks (file type, virus scan), and adds it as a new PADM version with a note. The original stays in the history | administrators with edit permission on the document |
+| **Restore original** | Puts back the SharePoint version whose content matches PDMS's record (checked by SHA-256). Renames and moves are put back too | administrators |
+| **Accept as new version** | Downloads the file as it is now, runs the normal upload checks (file type, virus scan), and adds it as a new PDMS version with a note. The original stays in the history | administrators with edit permission on the document |
 | **Re-check** | Checks the file again, for example after you restored a deleted file from the site's recycle bin, and clears the flag if it matches | administrators |
 
-Renamed or moved files and folders are put back in PADM's layout
+Renamed or moved files and folders are put back in PDMS's layout
 automatically, without a flag. Users never see a changed file: downloads are
-checked against PADM's SHA-256 and stop with an error if they differ.
+checked against PDMS's SHA-256 and stop with an error if they differ.
 
-If PADM cannot sign in to Microsoft Graph (expired certificate, removed
+If PDMS cannot sign in to Microsoft Graph (expired certificate, removed
 consent or site grant), administrators get a notice at most once an hour, and
 uploads and downloads fail with "File storage (SharePoint) is unavailable".
 See [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) C2.
@@ -4595,7 +4609,7 @@ its SHA-256 (slow).
 (a) After the **File store** row, add:
 
 ```markdown
-| **SharePoint site** (with SharePoint storage) | the `PADM Records` site | Every document file. Not copied by `pdms-backup.sh`: protected by library versioning, the recycle bin, and the Purview retention policy ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) A4, A6). Include the site in your Microsoft 365 backup if you have one |
+| **SharePoint site** (with SharePoint storage) | the `PDMS Records` site | Every document file. Not copied by `pdms-backup.sh`: protected by library versioning, the recycle bin, and the Purview retention policy ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) A4, A6). Include the site in your Microsoft 365 backup if you have one |
 ```
 
 (b) In the **Secrets** row, after "Also the database passwords and the SSO/SMTP secrets", add: ", and `graph_certificate` (without it, make a new one and upload it to the app registration: SHAREPOINT_SETUP.md C1)".
@@ -4605,16 +4619,16 @@ its SHA-256 (slow).
 (d) After the "**Consistency rule**" paragraph, add:
 
 ```markdown
-With SharePoint storage the same rule holds: PADM uploads a file before the
+With SharePoint storage the same rule holds: PDMS uploads a file before the
 database rows that point at it are committed. After restoring an older
 database dump, files uploaded since the dump stay in SharePoint and appear
-under **Administration → SharePoint → Files PADM does not track**.
+under **Administration → SharePoint → Files PDMS does not track**.
 ```
 
 - [ ] **Step 4: Architecture.** In `docs/ARCHITECTURE.md` §12, after the phase-5 row, add:
 
 ```markdown
-| SharePoint and Entra (`0009_entra_sync`, `0010_sharepoint_files`, `0011_sharepoint_access`; plans P2–P4) | `user_source` enum and users `source`, `entra_department`, `entra_synced_at`; department_entra_values, sync_cursors; sharepoint_department_folders, sharepoint_document_folders, sharepoint_files (incl. `state`, `changed_by`, `changed_at`); sharepoint_folder_access, sharepoint_foreign_grants, sharepoint_unexpected_items |
+| SharePoint and Entra (`0010_entra_sync`, `0013_sharepoint_files`, `0014_sharepoint_access`; plans P2–P4) | `user_source` enum and users `source`, `entra_department`, `entra_synced_at`; department_entra_values, sync_cursors; sharepoint_department_folders, sharepoint_document_folders, sharepoint_files (incl. `state`, `changed_by`, `changed_at`); sharepoint_folder_access, sharepoint_foreign_grants, sharepoint_unexpected_items |
 ```
 
 - [ ] **Step 5: Decision records.** Find the last decision number:
@@ -4623,33 +4637,33 @@ under **Administration → SharePoint → Files PADM does not track**.
 grep -oE '^### D-[0-9]+' docs/DECISIONS.md | tail -1
 ```
 
-Expected: `### D-090` (P2's). If it is higher, renumber the entries below from the next free number. Before `## Open questions`, add:
+Expected: `### D-103` (P3's). If it is higher, renumber the entries below from the next free number. Before `## Open questions`, add:
 
 ```markdown
-### D-091 Department folder access: one read grant per person, Entra accounts only — Accepted
-Entra security groups are not available to PADM (D-086), so each member of a
+### D-104 Department folder access: one read grant per person, Entra accounts only — Accepted
+Entra security groups are not available to PDMS (D-086), so each member of a
 department gets their own `read` permission on `Departments/<department>`
 through the Graph invite call (`requireSignIn`, no invitation email). Only
 active members whose account comes from Entra get one; local break-glass
-accounts never do. PADM records each grant and removes only what it
+accounts never do. PDMS records each grant and removes only what it
 recorded. Other access on the folder is reported and never changed. Runs are
 coalesced to one per minute after membership changes, follow each Entra
 sync, and repeat nightly. Permissions SharePoint copies from the site when a
 folder's inheritance breaks are not reported.
 
-### D-092 Changes in SharePoint are found by comparing file hashes — Accepted
+### D-105 Changes in SharePoint are found by comparing file hashes — Accepted
 A tracked file counts as changed when its size or QuickXorHash in the change
-feed differs from what PADM recorded at upload. `lastModifiedBy` is shown and
+feed differs from what PDMS recorded at upload. `lastModifiedBy` is shown and
 audited but never trusted: it decides only whether a rename or a column
-change needs PADM's layout put back. An expired change token (HTTP 410)
+change needs PDMS's layout put back. An expired change token (HTTP 410)
 rereads everything; unchanged files are not flagged.
 
-### D-093 Files PADM does not track: listed after ten minutes, never deleted — Accepted
+### D-106 Files PDMS does not track: listed after ten minutes, never deleted — Accepted
 An upload in progress has no database row until it commits, so untracked
-files are listed only once they are ten minutes old. PADM never deletes them;
+files are listed only once they are ten minutes old. PDMS never deletes them;
 an administrator deletes them in SharePoint or dismisses them (audited).
 
-### D-094 SharePoint administration: `ManageSharePoint` — Accepted
+### D-107 SharePoint administration: `ManageSharePoint` — Accepted
 A new capability, held by the org-wide administrator role, gates the status
 page and the restore, re-check, and dismiss actions. "Accept as new version"
 also needs `edit` on the document, through the normal version check, because
@@ -4657,22 +4671,22 @@ it adds content. The status page hides the title and path of documents the
 administrator cannot view. "Restore original" picks the SharePoint version by
 SHA-256, never by its label.
 
-### D-095 The installer selects SharePoint storage through `config/pdms.env` — Accepted
+### D-108 The installer selects SharePoint storage through `config/pdms.env` — Accepted
 The ClamAV installer block already owns the `[storage]` table, so
 `--configure sharepoint` writes `PDMS_STORAGE__BACKEND=sharepoint` to
 `config/pdms.env`, which Docker Compose loads as an optional `env_file`
 (Compose 2.24 or newer). The Graph certificate is always mounted as the
 `graph_certificate` secret; an empty file means "not configured". The
-installer creates the certificate with `openssl`, because the PADM image is
+installer creates the certificate with `openssl`, because the PDMS image is
 not built yet at that point.
 
-### D-096 `verify-integrity --rehash-sharepoint` — Accepted
+### D-109 `verify-integrity --rehash-sharepoint` — Accepted
 By default `verify-integrity` checks SharePoint files through Graph metadata
 (present, size, QuickXorHash) without downloading them. Downloading every file
 and comparing SHA-256 is opt-in, because it can take hours on a large
 library.
 
-### D-097 Graph sign-in failures: one notice an hour — Accepted
+### D-110 Graph sign-in failures: one notice an hour — Accepted
 HTTP 401/403 from Microsoft Graph means the certificate, consent, or site
 grant is broken, and every run fails the same way. Administrators get one
 in-app (and email) notice per hour, and the status page shows the latest
@@ -4688,7 +4702,7 @@ grep -nE '^### D-08[1-9]' docs/DECISIONS.md
 
 Expected: D-081 to D-086 and D-089 end in "— Accepted". D-087 and D-088 are unchanged (sub-project 3).
 
-In the open-questions table, change the "SharePoint/OneDrive storage" row's answer to: `Decided and built: SharePoint holds the files (D-081 to D-084, D-089, D-091 to D-097). Setup: SHAREPOINT_SETUP.md`.
+In the open-questions table, change the "SharePoint/OneDrive storage" row's answer to: `Decided and built: SharePoint holds the files (D-081 to D-084, D-089, D-104 to D-110). Setup: SHAREPOINT_SETUP.md`.
 
 - [ ] **Step 6: Roadmap.** In `docs/ROADMAP.md` §0.3:
 
@@ -4702,17 +4716,17 @@ In the open-questions table, change the "SharePoint/OneDrive storage" row's answ
 
 (c) In "**Waiting on the county**", change "the steps are in Appendix A of the spec" to "the steps are in [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md)".
 
-- [ ] **Step 7: The plan index.** In `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, replace the "Produced by P4" table's rows with:
+- [ ] **Step 7: The plan index.** In `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, replace the "Produced by P4" table's rows with:
 
 ```markdown
 | Jobs | `sharepoint::RECONCILE_JOB = "sharepoint.reconcile_access"` (defined in `sharepoint::access`); `sharepoint::DELTA_JOB = "sharepoint.delta"` (defined in `sharepoint::changes`); both registered by `sharepoint::register_ops_jobs(worker, core)` |
 | Run records | `sync_cursors` rows `sharepoint.delta` (with the delta link) and `sharepoint.reconcile` |
-| DB | `0011_sharepoint_access.sql`: `sharepoint_folder_access`, `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, `sharepoint_files.changed_by/changed_at` |
+| DB | `0014_sharepoint_access.sql`: `sharepoint_folder_access`, `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, `sharepoint_files.changed_by/changed_at` |
 | Authz | `Capability::ManageSharePoint` (org-wide `admin` role); notifications `dispatch::Visibility::Anyone` |
 | Admin | `/admin/sharepoint` (in `doc_admin_routes`) status panel and resolution; P2's `/admin/entra` gains a SharePoint access section; a notice on the document page |
 | CLI | `pdms verify-integrity --rehash-sharepoint`; `IntegrityReport.sharepoint_files_checked` replaces P3's `sharepoint_files_skipped` |
 | Install | `./install.sh --configure sharepoint`; Compose secret `graph_certificate`; `config/pdms.env` |
-| Docs | `docs/SHAREPOINT_SETUP.md`; ADMIN_GUIDE "SharePoint storage"; D-091 to D-097 |
+| Docs | `docs/SHAREPOINT_SETUP.md`; ADMIN_GUIDE "SharePoint storage"; D-104 to D-110 |
 ```
 
 and below the table add the "Deviations from the index and the spec" list from the end of this plan.
@@ -4760,23 +4774,23 @@ fn live_code() -> String {
 (c) After `live_sharepoint_round_trip`, add:
 
 ```rust
-/// PADM's own folders, files, and column values must not look like changes
-/// made outside PADM. This checks how SharePoint reports the app in
-/// `lastModifiedBy` (D-092). Same variables as `live_sharepoint_round_trip`.
+/// PDMS's own folders, files, and column values must not look like changes
+/// made outside PDMS. This checks how SharePoint reports the app in
+/// `lastModifiedBy` (D-105). Same variables as `live_sharepoint_round_trip`.
 ///
 /// ```text
-/// cargo test -p pdms-core --test sharepoint live_padm_writes_are_recognised -- --ignored --nocapture
+/// cargo test -p pdms-core --test sharepoint live_pdms_writes_are_recognised -- --ignored --nocapture
 /// ```
 #[tokio::test]
 #[ignore = "needs a real SharePoint test site and app registration"]
-async fn live_padm_writes_are_recognised() {
+async fn live_pdms_writes_are_recognised() {
     let (core, _db) = live_core().await;
     // Read the whole change feed once, so only this test's writes follow.
     sharepoint::changes::detect_changes(&core).await.unwrap();
     let code = live_code();
-    let (dept, alice) = editing_department(&core, &code, &format!("PADM live test {code}"), "live@x.org").await;
+    let (dept, alice) = editing_department(&core, &code, &format!("PDMS live test {code}"), "live@x.org").await;
     let ctx = as_user(&core, alice).await;
-    let bytes = pdf("PADM live change check");
+    let bytes = pdf("PDMS live change check");
     let id =
         new_doc(&core, &ctx, dept, alice, "Live change check", Visibility::Department, Some(("live.pdf", &bytes))).await;
     sharepoint::mirror_document(&core, id).await.unwrap();
@@ -4795,15 +4809,15 @@ async fn live_padm_writes_are_recognised() {
         }
     }
     assert!(seen.items >= 3, "the feed never listed the department folder, document folder, and file: {seen:?}");
-    assert_eq!((seen.modified, seen.missing, seen.mirrors), (0, 0, 0), "PADM's own writes were reported: {seen:?}");
+    assert_eq!((seen.modified, seen.missing, seen.mirrors), (0, 0, 0), "PDMS's own writes were reported: {seen:?}");
     assert!(sharepoint::status::document_flags(&core.db, id).await.unwrap().is_empty());
-    println!("left in SharePoint: Departments/PADM live test {code}/{} – Live change check", external_id(&core, id).await);
+    println!("left in SharePoint: Departments/PDMS live test {code}/{} – Live change check", external_id(&core, id).await);
 }
 
 /// Read access for a real person. `PDMS_LIVE_READER_EMAIL` is an ordinary
 /// member account in the test tenant, not a site owner. This checks that the
 /// invite call works with `Sites.Selected` plus full control on the site
-/// (D-091), and that SharePoint's copied site permissions are not reported.
+/// (D-104), and that SharePoint's copied site permissions are not reported.
 ///
 /// ```text
 /// PDMS_LIVE_READER_EMAIL=someone@county.gov … \
@@ -4815,7 +4829,7 @@ async fn live_department_staff_get_read_access() {
     let reader = std::env::var("PDMS_LIVE_READER_EMAIL").unwrap_or_else(|_| panic!("set PDMS_LIVE_READER_EMAIL"));
     let (core, _db) = live_core().await;
     let code = live_code();
-    let dept = new_department(&core, &code, &format!("PADM live test {code}")).await;
+    let dept = new_department(&core, &code, &format!("PDMS live test {code}")).await;
     let person = directory::create_user(&core.db, &system(), &reader, &reader, Some(dept)).await.unwrap();
     sqlx::query("UPDATE users SET source = 'entra' WHERE id = $1")
         .bind(person)
@@ -4831,12 +4845,12 @@ async fn live_department_staff_get_read_access() {
     directory::remove_department_member(&core.db, &system(), person, dept).await.unwrap();
     let r = sharepoint::access::reconcile(&core).await.unwrap();
     assert_eq!((r.revoked, r.errors.len()), (1, 0), "{r:?}");
-    println!("left in SharePoint: Departments/PADM live test {code} (empty)");
+    println!("left in SharePoint: Departments/PDMS live test {code} (empty)");
 }
 ```
 
 Run: `cargo test -p pdms-core --test sharepoint -- --list --ignored 2>/dev/null | grep live_`
-Expected: `live_department_staff_get_read_access: test`, `live_padm_writes_are_recognised: test`, `live_sharepoint_round_trip: test`.
+Expected: `live_department_staff_get_read_access: test`, `live_pdms_writes_are_recognised: test`, `live_sharepoint_round_trip: test`.
 
 - [ ] **Step 9: Full verification.**
 
@@ -4860,7 +4874,7 @@ Expected:
 
 ```bash
 git add docs crates/pdms-core/tests/sharepoint.rs
-git commit -m "docs: SharePoint setup guide, admin guide, decisions D-091 to D-097; live SharePoint tests"
+git commit -m "docs: SharePoint setup guide, admin guide, decisions D-104 to D-110; live SharePoint tests"
 ```
 
 - [ ] **Step 11: Live test and rollout on the test server (spec §13, step 3).** Needs the county's Part A and Part B. Not a code change.
@@ -4868,7 +4882,7 @@ git commit -m "docs: SharePoint setup guide, admin guide, decisions D-091 to D-0
 > **Warning:** step 1 erases the test server's database and files. Confirm with the owner before running it.
 
 1. On the test server: `cd <install directory> && git pull && docker compose down -v`.
-2. `./install.sh`. Answer the SharePoint step with the test site, the tenant ID, and the `PADM Service – Test` client ID. Do SHAREPOINT_SETUP.md B4 to B6.
+2. `./install.sh`. Answer the SharePoint step with the test site, the tenant ID, and the `PDMS Service – Test` client ID. Do SHAREPOINT_SETUP.md B4 to B6.
 3. `docker compose run --rm app seed-demo`. Demo files go to the test site.
 4. From a workstation with the repository, run the three live tests against the test site. Set the `PDMS_LIVE_*` variables, with `PDMS_LIVE_CERTIFICATE_FILE` pointing at a copy of the test server's `secrets/graph_certificate`. Delete that copy afterwards.
 5. Do SHAREPOINT_SETUP.md B7 to B9. B9 covers: edit as a site owner, see the flag and the notice, restore, and run `verify-integrity --rehash-sharepoint`.
@@ -4883,7 +4897,7 @@ Recorded in the index by Task 9, Step 7.
 1. **Mock Graph:** the index expected a P4 SharePoint mock. P4 extends P2's `tests/mock_graph` and P3's child module `tests/mock_graph/sp.rs` (`MockGraph`, `SpItem`, `SpState`) instead.
 2. **Job constants:** the index has `sharepoint::RECONCILE_JOB` and `sharepoint::DELTA_JOB`. They are defined in `sharepoint::access` and `sharepoint::changes` and re-exported, so the paths in the index still work. Both are registered by the new `sharepoint::register_ops_jobs(worker, core)`, chained after P3's `register_jobs` on the last line of `maintenance::worker()`.
 3. **Run records:** the cursor `sharepoint.reconcile` is added beside `sharepoint.delta` in P2's `sync_cursors`.
-4. **Database:** the index lists only `sharepoint_folder_access` in `0011_sharepoint_access.sql`. P4 also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by/changed_at`.
+4. **Database:** the index lists only `sharepoint_folder_access` in `0014_sharepoint_access.sql`. P4 also adds `sharepoint_foreign_grants`, `sharepoint_unexpected_items`, and `sharepoint_files.changed_by/changed_at`.
 5. **Authorization:** `Capability::ManageSharePoint` is new, and so is `dispatch::Visibility::Anyone`, for notices that name no document.
 6. **Integrity:**
    - The spec's `verify-integrity --rehash` → `--rehash-sharepoint`. `--rehash` stays the local-file option.

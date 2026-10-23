@@ -603,7 +603,7 @@ if has_block outlook || has_table graph_calendar; then
     skip && index($0, end) == 1 { skip = 0; next }
     !skip { print }' "$CONFIG" > "$CONFIG.tmp" && cat "$CONFIG.tmp" > "$CONFIG" && rm -f "$CONFIG.tmp"
   has_table graph_calendar && remove_table graph_calendar
-  note "Removed the Outlook calendar settings: the Outlook sync is no longer part of PADM."
+  note "Removed the Outlook calendar settings: the Outlook sync is no longer part of PDMS."
   note "Events it created stay in that mailbox's calendar until someone deletes them."
 fi
 rm -f secrets/graph_client_secret

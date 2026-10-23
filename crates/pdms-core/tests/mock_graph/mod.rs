@@ -34,7 +34,7 @@ pub const CLIENT: &str = "client-1";
 /// One certificate per test binary (key generation is the slow part).
 pub fn certificate() -> &'static str {
     static C: OnceLock<String> = OnceLock::new();
-    C.get_or_init(|| cert::generate("PADM test", 30).unwrap().pem)
+    C.get_or_init(|| cert::generate("PDMS test", 30).unwrap().pem)
 }
 
 #[derive(Default)]

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 PDMS contributors
 #
-# Runs shoot.py in Microsoft's Playwright image against a local PADM instance.
+# Runs shoot.py in Microsoft's Playwright image against a local PDMS instance.
 # The image ships the browsers but not the Python package, so the package is
 # installed once into .pylib/ next to this script (git-ignored). Runs as your
 # user, so out/ and .pylib/ stay yours. Arguments are passed to shoot.py as
@@ -17,7 +17,7 @@ image=mcr.microsoft.com/playwright/python:v1.49.0-jammy
 docker run --rm --network host \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$here:/w" -e PYTHONPATH=/w/.pylib \
-  -e PADM_SHOTS_BASE -e PADM_SHOTS_USER -e PADM_SHOTS_PASSWORD -e PADM_SHOTS_THEME \
+  -e PDMS_SHOTS_BASE -e PDMS_SHOTS_USER -e PDMS_SHOTS_PASSWORD -e PDMS_SHOTS_THEME \
   "$image" sh -c '
     [ -d /w/.pylib/playwright ] || pip install --quiet --no-cache-dir --target /w/.pylib playwright==1.49.0
     exec python /w/shoot.py "$@"' sh "$@"

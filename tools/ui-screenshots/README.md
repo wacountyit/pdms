@@ -1,6 +1,6 @@
 # UI screenshots
 
-`shoot.py` signs in to a local PADM instance and takes a full-page screenshot
+`shoot.py` signs in to a local PDMS instance and takes a full-page screenshot
 of every page. It also flags common layout faults. It was used to check UI
 redesign round 1 (R1) and is meant for round 2 (R2): see
 [the R2 brief](../../docs/superpowers/specs/2026-10-21-ui-redesign-r2-brief.md).
@@ -24,7 +24,7 @@ Microsoft's Playwright image. `run.sh` uses `--network host` to reach the
 local instance at 127.0.0.1. Docker Desktop on macOS or Windows doesn't
 support that by default. There, either turn on host networking in Docker
 Desktop, or drop `--network host` from `run.sh` and set
-`PADM_SHOTS_BASE=http://host.docker.internal:18080`.
+`PDMS_SHOTS_BASE=http://host.docker.internal:18080`.
 
 ## 1. Start a local instance with demo data
 
@@ -79,7 +79,7 @@ tools/ui-screenshots/run.sh --theme=light                # every page in light m
 
 - **What `run.sh` does:** it starts Microsoft's Playwright image (`mcr.microsoft.com/playwright/python:v1.49.0-jammy`) as your user.
   - The image has the browsers but not the Playwright Python package. The first run therefore installs the package into `tools/ui-screenshots/.pylib/`, which needs internet access once.
-- **Settings:** `PADM_SHOTS_BASE`, `PADM_SHOTS_USER` and `PADM_SHOTS_PASSWORD` override the defaults, and are passed through when set in your shell.
+- **Settings:** `PDMS_SHOTS_BASE`, `PDMS_SHOTS_USER` and `PDMS_SHOTS_PASSWORD` override the defaults, and are passed through when set in your shell.
 - **Output:** PNGs and `report.json` land in `tools/ui-screenshots/out/`. That folder, `.pylib/` and `ids.json` are git-ignored, so screenshots never get committed.
 
 ## 4. Check the results

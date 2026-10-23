@@ -68,7 +68,7 @@ pub struct Core {
     pub ocr: Option<Arc<dyn ocr::OcrProvider>>,
     /// Document files in SharePoint (`[storage] backend = "sharepoint"`).
     pub sharepoint: Option<sharepoint::SharePoint>,
-    /// Microsoft Graph as PADM itself (`None` unless `[graph]` is configured).
+    /// Microsoft Graph as PDMS itself (`None` unless `[graph]` is configured).
     pub graph: Option<graph::GraphClient>,
 }
 

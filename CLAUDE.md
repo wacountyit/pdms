@@ -1,7 +1,7 @@
-# PADM: notes for Claude and other contributors
+# PDMS: notes for Claude and other contributors
 
-PADM is the county's policy and document management system. The code, crates,
-binary and Docker images are still named `pdms`. It is a Rust 2024 workspace:
+PDMS is the county's policy and document management system. The code, crates,
+binary and Docker images are named `pdms` too. It is a Rust 2024 workspace:
 - Axum serves server-rendered Askama templates with a little HTMX;
 - PostgreSQL holds the data, through SQLx;
 - a separate worker process runs jobs.
@@ -28,11 +28,11 @@ The README ("Layout") describes each crate.
    - §0.7: questions waiting for the owner.
 
    Don't rely on a copy of these lists anywhere else; copies go stale.
-   Two people work on PADM in turns, so read "Working in turns" below
+   Two people work on PDMS in turns, so read "Working in turns" below
    before you start.
    - **Next up: SharePoint plan P4.** P3 (SharePoint storage) is merged.
      Start with ROADMAP §0.5 (its pre-flight steps), then the
-     [plan index](docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md),
+     [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md),
      which holds the shared contracts and what P3 produced.
    - **UI redesign R2 is done** (2026-10-22). Its
      [spec](docs/superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §5.2
@@ -40,12 +40,12 @@ The README ("Layout") describes each crate.
 
 ## Working in turns
 
-Two people work on PADM, often one after the other, each with their own
+Two people work on PDMS, often one after the other, each with their own
 Claude session. These rules keep either one from overwriting or breaking the
 other's work. The owner (GitHub `@wc-sstevens`) follows them too.
 
 **Everyone works directly on `main`** (the owner's decision, 2026-10-23).
-PADM is not in production yet, so there are no feature branches or pull
+PDMS is not in production yet, so there are no feature branches or pull
 requests: you commit to `main` and push. CI runs on every push to `main`.
 Taking turns, claiming work, and pushing often are what keep the two of you
 from colliding.

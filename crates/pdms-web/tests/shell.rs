@@ -100,7 +100,7 @@ async fn shell_has_sidebar_menu_and_permissions() {
     // No seal set: the generic mark, and no link to the seal.
     assert!(
         home.body
-            .contains("<span class=\"mark\" aria-hidden=\"true\">PADM</span>")
+            .contains("<span class=\"mark\" aria-hidden=\"true\">PDMS</span>")
     );
     assert!(!home.body.contains("/branding/seal"));
 }

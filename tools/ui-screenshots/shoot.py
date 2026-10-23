@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 PDMS contributors
-"""Visual check: screenshot every page of a local PADM instance with demo data.
+"""Visual check: screenshot every page of a local PDMS instance with demo data.
 
 Used for the UI redesign (R1, R2). See README.md in this folder for how to
 start the local instance and make ids.json. Run it from the host with
@@ -10,7 +10,7 @@ Microsoft's Playwright image.
 Writes PNGs to /w/out/ and a findings summary to /w/out/report.json
 (horizontal overflow, h1 count, console/CSP errors, HTTP status per page).
 A name filter such as `desktop-admin` or `phone-` limits the run.
-`--theme=dark`, `--theme=light` or `--theme=system` (or PADM_SHOTS_THEME)
+`--theme=dark`, `--theme=light` or `--theme=system` (or PDMS_SHOTS_THEME)
 sets each signed-in account's color scheme first, and writes to
 /w/out/<theme>/ instead. Without it, accounts keep their own setting (dark by
 default).
@@ -22,13 +22,13 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
-BASE = os.environ.get("PADM_SHOTS_BASE", "http://127.0.0.1:18080")
-OUT = os.environ.get("PADM_SHOTS_OUT", "/w/out")
-USER = os.environ.get("PADM_SHOTS_USER", "admin@example.org")
-PASSWORD = os.environ.get("PADM_SHOTS_PASSWORD", "demo-password-change-me")
-IDS = json.load(open(os.environ.get("PADM_SHOTS_IDS", "/w/ids.json")))
+BASE = os.environ.get("PDMS_SHOTS_BASE", "http://127.0.0.1:18080")
+OUT = os.environ.get("PDMS_SHOTS_OUT", "/w/out")
+USER = os.environ.get("PDMS_SHOTS_USER", "admin@example.org")
+PASSWORD = os.environ.get("PDMS_SHOTS_PASSWORD", "demo-password-change-me")
+IDS = json.load(open(os.environ.get("PDMS_SHOTS_IDS", "/w/ids.json")))
 
-THEME = os.environ.get("PADM_SHOTS_THEME", "")
+THEME = os.environ.get("PDMS_SHOTS_THEME", "")
 FILTERS = []
 for arg in sys.argv[1:]:
     if arg.startswith("--theme="):

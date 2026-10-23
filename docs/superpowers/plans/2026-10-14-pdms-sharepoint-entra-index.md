@@ -48,7 +48,7 @@ These do not change behaviour. They change where things live.
    - `[storage] backend = "sharepoint"` selects SharePoint for **document
      files**.
 4. **`core.storage` (local or S3) stays in every configuration.** It holds
-   records-request export packages, which are PADM artifacts rather than
+   records-request export packages, which are PDMS artifacts rather than
    county documents, and it remains the document store for development and
    tests. Document file I/O goes through a new `documents::filestore` module
    that routes to SharePoint or to `core.storage`.
@@ -113,7 +113,7 @@ one, they update this table in the same commit.
 - **Config check:** `entra_sync.enabled` requires `[graph]`, `auth.oidc.issuer_url` and `auth.oidc.subject_claim = "oid"`.
 - **Sign-in:** when the sync is on, a first sign-in asks Entra about the person and is denied with `email_in_use` if an unlinked account has that email; a Graph error denies sign-in. The token never sets names or groups while the sync is on.
 - **Downloads:** download streams have no total deadline, so P3's large files are safe from it, but the download's pre-authenticated GET does not yet retry 429/503/504.
-- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 must be renumbered from the next free number (D-097 on 2026-10-21) when P4 is executed.
+- **Decision numbers:** P2 recorded D-096. P4's planned decisions D-091 to D-097 were renumbered D-104 to D-110 at its pre-flight (2026-10-23).
 - **Left to P4:** the Docker Compose secret and `install.sh` wiring for the certificate.
 - **Open behaviour:** an account that is departed and later re-enabled in Entra is **not** reactivated automatically; an admin reactivates it. A simultaneous first sign-in and nightly sync are resolved with `ON CONFLICT DO NOTHING`.
 
@@ -146,9 +146,9 @@ one, they update this table in the same commit.
 - **Behaviour:**
   - Soft-deleted documents move to `Restricted/<department>` until they are restored.
   - Department transfers move the folder *before* committing, like other narrowing changes.
-  - "Open in PADM" is a text column, because Graph cannot write hyperlink columns.
+  - "Open in PDMS" is a text column, because Graph cannot write hyperlink columns.
   - Empty files cannot be stored.
-  - File names use the PADM version number, so they skip numbers for metadata-only versions.
+  - File names use the PDMS version number, so they skip numbers for metadata-only versions.
   - Files are uploaded under a temporary name and renamed by the mirror job (D-103).
   - Folder moves are audited as `sharepoint.folder_moved` (D-102).
 - **Setup:** the "Current documents" view must be created by hand (Graph v1.0 cannot create views). P4's setup guide covers it.

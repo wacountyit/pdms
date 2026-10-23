@@ -204,22 +204,22 @@ pub fn extension_for(media_type: &str, file_name: &str) -> String {
 }
 
 // Column internal names (spec §5). `Title` is the library's built-in column.
-pub const DOCUMENT_ID: &str = "PadmDocumentId";
-pub const DOCUMENT_TYPE: &str = "PadmDocumentType";
-pub const TAGS: &str = "PadmTags";
-pub const STATUS: &str = "PadmStatus";
-pub const VISIBILITY: &str = "PadmVisibility";
-pub const DEPARTMENT: &str = "PadmDepartment";
-pub const OWNER: &str = "PadmOwner";
-pub const EFFECTIVE_DATE: &str = "PadmEffectiveDate";
-pub const REVIEW_DATE: &str = "PadmReviewDate";
-pub const RENEWAL_DATE: &str = "PadmRenewalDate";
-pub const EXPIRATION_DATE: &str = "PadmExpirationDate";
-pub const VERSION: &str = "PadmVersion";
-pub const CURRENT: &str = "PadmCurrent";
-pub const LINK: &str = "PadmLink";
+pub const DOCUMENT_ID: &str = "PdmsDocumentId";
+pub const DOCUMENT_TYPE: &str = "PdmsDocumentType";
+pub const TAGS: &str = "PdmsTags";
+pub const STATUS: &str = "PdmsStatus";
+pub const VISIBILITY: &str = "PdmsVisibility";
+pub const DEPARTMENT: &str = "PdmsDepartment";
+pub const OWNER: &str = "PdmsOwner";
+pub const EFFECTIVE_DATE: &str = "PdmsEffectiveDate";
+pub const REVIEW_DATE: &str = "PdmsReviewDate";
+pub const RENEWAL_DATE: &str = "PdmsRenewalDate";
+pub const EXPIRATION_DATE: &str = "PdmsExpirationDate";
+pub const VERSION: &str = "PdmsVersion";
+pub const CURRENT: &str = "PdmsCurrent";
+pub const LINK: &str = "PdmsLink";
 
-/// What PADM shows about a document, for the SharePoint columns.
+/// What PDMS shows about a document, for the SharePoint columns.
 pub struct PlacementDoc<'a> {
     pub external_id: &'a str,
     pub title: &'a str,
@@ -246,9 +246,9 @@ pub struct PlacementFile {
 /// hold at most 255 characters.
 pub const TEXT_MAX: usize = 255;
 
-/// `s` cut to [`TEXT_MAX`] characters. PADM titles can be 500 characters;
+/// `s` cut to [`TEXT_MAX`] characters. PDMS titles can be 500 characters;
 /// SharePoint refuses longer values, so they are truncated there (the owner's
-/// decision, 2026-10-22). PADM keeps the full value.
+/// decision, 2026-10-22). PDMS keeps the full value.
 fn text_value(s: &str) -> Value {
     Value::String(s.chars().take(TEXT_MAX).collect())
 }
@@ -277,7 +277,7 @@ pub fn columns(doc: &PlacementDoc<'_>, file: &PlacementFile) -> Map<String, Valu
     m
 }
 
-/// Library columns PADM creates when they are missing
+/// Library columns PDMS creates when they are missing
 /// (`POST /sites/{site}/lists/{list}/columns`).
 pub fn column_definitions() -> Vec<Value> {
     let text = |name: &str, display: &str| json!({"name": name, "displayName": display, "text": {"allowMultipleLines": false, "maxLength": TEXT_MAX}});
@@ -297,14 +297,14 @@ pub fn column_definitions() -> Vec<Value> {
         date(EXPIRATION_DATE, "Expiration Date", false),
         json!({"name": VERSION, "displayName": "Version", "number": {}}),
         json!({"name": CURRENT, "displayName": "Current", "indexed": true, "boolean": {}}),
-        text(LINK, "Open in PADM"),
+        text(LINK, "Open in PDMS"),
     ]
 }
 
 /// `https://<tenant>.sharepoint.com/sites/<Name>` → (host, `/sites/<Name>`).
 pub fn parse_site_url(s: &str) -> Result<(String, String), String> {
     let url = url::Url::parse(s.trim()).map_err(|_| {
-        "enter the site's full address, e.g. https://contoso.sharepoint.com/sites/PADMRecords"
+        "enter the site's full address, e.g. https://contoso.sharepoint.com/sites/PDMSRecords"
             .to_owned()
     })?;
     if url.scheme() != "https" {
@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn columns_carry_padm_metadata() {
+    fn columns_carry_pdms_metadata() {
         let tags = vec!["Roads".to_owned(), "FY2026".to_owned()];
         let doc = PlacementDoc {
             external_id: "CON-2026-000012",
@@ -505,7 +505,7 @@ mod tests {
             review_date: None,
             renewal_date: NaiveDate::from_ymd_opt(2027, 1, 14),
             expiration_date: None,
-            link: "https://padm.example.org/documents/abc",
+            link: "https://pdms.example.org/documents/abc",
         };
         let m = columns(
             &doc,
@@ -522,7 +522,7 @@ mod tests {
         assert_eq!(m[REVIEW_DATE], json!(null));
         assert_eq!(m[VERSION], json!(4));
         assert_eq!(m[CURRENT], json!(true));
-        assert_eq!(m[LINK], json!("https://padm.example.org/documents/abc"));
+        assert_eq!(m[LINK], json!("https://pdms.example.org/documents/abc"));
         // Every column written (except the built-in Title) is provisioned, once.
         let defined: Vec<String> = column_definitions()
             .iter()
@@ -549,7 +549,7 @@ mod tests {
             review_date: None,
             renewal_date: None,
             expiration_date: None,
-            link: "https://padm.example.org/documents/abc",
+            link: "https://pdms.example.org/documents/abc",
         };
         let m = columns(
             &doc,
@@ -569,17 +569,17 @@ mod tests {
     #[test]
     fn site_urls() {
         assert_eq!(
-            parse_site_url("https://contoso.sharepoint.com/sites/PADMRecords/").unwrap(),
+            parse_site_url("https://contoso.sharepoint.com/sites/PDMSRecords/").unwrap(),
             (
                 "contoso.sharepoint.com".to_owned(),
-                "/sites/PADMRecords".to_owned()
+                "/sites/PDMSRecords".to_owned()
             )
         );
-        assert!(parse_site_url("https://contoso.sharepoint.com/teams/PADM").is_ok());
-        assert!(parse_site_url("http://contoso.sharepoint.com/sites/PADM").is_err());
+        assert!(parse_site_url("https://contoso.sharepoint.com/teams/PDMS").is_ok());
+        assert!(parse_site_url("http://contoso.sharepoint.com/sites/PDMS").is_err());
         assert!(parse_site_url("https://contoso.sharepoint.com/").is_err());
         assert!(
-            parse_site_url("https://contoso.sharepoint.com/sites/PADM/Shared%20Documents").is_err()
+            parse_site_url("https://contoso.sharepoint.com/sites/PDMS/Shared%20Documents").is_err()
         );
         assert!(parse_site_url("not a url").is_err());
     }

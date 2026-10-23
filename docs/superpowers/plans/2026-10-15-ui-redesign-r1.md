@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Put PADM in its new direction-D look on every page. That means:
+**Goal:** Put PDMS in its new direction-D look on every page. That means:
 
 - a navy sidebar shell with Source Sans 3;
 - an accent color the admin can change;
@@ -40,7 +40,7 @@ workspace. Each task dispatch gives its value; run
 `export R1_SCRATCH=<value>` first.
 
 **Visual references:** the approved direction-D mockups are in
-`$R1_SCRATCH/padm-demos/project/`:
+`$R1_SCRATCH/pdms-demos/project/`:
 `D-SignIn.dc.html`, `D-Dashboard.dc.html`, `D-Documents.dc.html`,
 `D-Document.dc.html`, `D-Overview.dc.html`.
 
@@ -353,7 +353,7 @@ assert only status and headers, as above.
 
 - [ ] **Step 7: Rewrite `app.css`.** Replace the file with the direction-D system:
 
-1. **Header comment:** `/* PADM styles (direction D). Colors meet WCAG 2.1 AA; see docs/superpowers/specs/2026-10-15-ui-redesign-r1-design.md §4. */`
+1. **Header comment:** `/* PDMS styles (direction D). Colors meet WCAG 2.1 AA; see docs/superpowers/specs/2026-10-15-ui-redesign-r1-design.md §4. */`
 2. **`@font-face`** for the three weights:
    - `font-family: "Source Sans 3"; src: url("/static/fonts/source-sans-3-latin-400.woff2") format("woff2"); font-weight: 400; font-display: swap;`
    - the same for 600 and 700.
@@ -1075,8 +1075,8 @@ Cache-Control values. It only sets `no-store` when none is present
 <div class="app">
   <aside class="sidebar">
     <a class="brand" href="/">
-      {% if let Some(v) = l.seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="38" height="38">{% else %}<span class="mark" aria-hidden="true">PADM</span>{% endif %}
-      <span class="brand-text"><span class="product">PADM</span><span class="org">{{ l.org_name }}</span></span>
+      {% if let Some(v) = l.seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="38" height="38">{% else %}<span class="mark" aria-hidden="true">PDMS</span>{% endif %}
+      <span class="brand-text"><span class="product">PDMS</span><span class="org">{{ l.org_name }}</span></span>
     </a>
     <details class="menu-toggle">
       <summary>{% include "icons/menu.html" %} Menu</summary>
@@ -1232,13 +1232,13 @@ Cache-Control values. It only sets `no-store` when none is present
   - Add `"/admin/branding/seal"` to `is_upload_route` in `middleware.rs:114-121`, so `DeferredCsrf` is inserted for that multipart route.
 
 - [ ] **Step 4: Write the template** `admin/branding.html` (extends base). Contents:
-  - an intro line: "These settings change how PADM looks for everyone. The seal and county name also appear on the sign-in page, which anyone who can reach PADM can see.";
+  - an intro line: "These settings change how PDMS looks for everyone. The seal and county name also appear on the sign-in page, which anyone who can reach PDMS can see.";
   - **form 1**, fields:
     - "County name": text, maxlength 120, placeholder showing `config_name`, help "Leave blank to use {config_name}.";
     - "Accent color": `<input type="color" id="accent-picker">` **and** `<input type="text" name="accent" pattern="#[0-9A-Fa-f]{6}" value="{{ accent }}">`. Without JS the picker cannot sync to the text box, so make the color input itself `name="accent"`. Keep a text alternative via a separate form field `accent_text` that the handler prefers when non-empty. Ruling: one `<input type="color" name="accent">` plus `<input type="text" name="accent_text">` labeled "or type a hex code"; the handler uses `accent_text` if non-empty, else `accent`. Update the test POSTs to send `accent_text`;
     - help text: "White text must stay readable on it (4.5:1).";
     - a **Save** button;
-  - **form 2:** seal upload (`enctype="multipart/form-data"`; `_csrf` as the **first** input, then `<input type="file" name="file" accept="image/png,image/jpeg">`). It shows the current seal (`<img src="/branding/seal?v=…" alt="Current seal" width="96" height="96">`) or "No seal uploaded. PADM shows a plain mark.";
+  - **form 2:** seal upload (`enctype="multipart/form-data"`; `_csrf` as the **first** input, then `<input type="file" name="file" accept="image/png,image/jpeg">`). It shows the current seal (`<img src="/branding/seal?v=…" alt="Current seal" width="96" height="96">`) or "No seal uploaded. PDMS shows a plain mark.";
   - **form 3:** "Remove seal", shown only when a seal is set;
   - a **Preview** panel: a static sidebar strip (`.sidebar`-styled mini block with brand and one active item) plus one `.button.primary`, both using the live CSS variables. No JS;
   - a link to the reset confirm page.
@@ -1429,8 +1429,8 @@ Pass it into `render_login`.
 - [ ] **Step 4: Rewrite `login.html`** (standalone; spec §7.1; visual reference `D-SignIn.dc.html`).
   - **Head:** links `/static/app.css` and `/theme.css?v={{ theme_version }}`.
   - **Body:** `<div class="signin">` with two sections.
-  - **Left section: `<section class="signin-about" aria-label="About PADM">`:**
-    - the brand (seal or mark, "PADM", org name);
+  - **Left section: `<section class="signin-about" aria-label="About PDMS">`:**
+    - the brand (seal or mark, "PDMS", org name);
     - h1 "Know what's due, what's overdue, and who owns it.";
     - three points as a `<ul>`;
     - footer links.
@@ -1647,7 +1647,7 @@ Add `mod dashboard;` to `crates/pdms-web/src/lib.rs`.
     - Then `order_attention`.
   - **Recent:**
     - `search::search(core, ctx, &DocumentFilter { per_page: 5, ..Default::default() })` (default sort is updated, descending; excludes archived);
-    - for each item, `documents::versions(core, ctx, id)` and the newest version with `file_changed`. If `|newest.created_at − item.updated_at| <= 60s`, show "New version by {created_by_name or "PADM"}", else "Details updated";
+    - for each item, `documents::versions(core, ctx, id)` and the newest version with `file_changed`. If `|newest.created_at − item.updated_at| <= 60s`, show "New version by {created_by_name or "PDMS"}", else "Details updated";
     - date text: "Today", "Yesterday" or "%b %-d" in local time.
   - **Remove** the `inbox`, `departments` and `roles` fields from the dashboard.
 
@@ -2273,7 +2273,7 @@ Add `mod charts;` to `lib.rs`.
 
 - [ ] **Step 1: Add the decisions** to `docs/DECISIONS.md`, matching the existing entry format (`### D-0NN Title — Accepted (2026-10-15)` plus a paragraph):
   - **D-092:** UI direction D, chosen from four demos; the R1 scope; R1 ahead of sub-projects 1–3; R2 after them.
-  - **D-093:** branding set on an admin page (county name, accent with a 4.5:1 white-text rule, PNG/JPEG seal of at most 512 KB, stored in PADM's database); public before sign-in; the organization-name resolver is used for emails, feeds, webhooks and exports.
+  - **D-093:** branding set on an admin page (county name, accent with a 4.5:1 white-text rule, PNG/JPEG seal of at most 512 KB, stored in PDMS's database); public before sign-in; the organization-name resolver is used for emails, feeds, webhooks and exports.
   - **D-094:** sign-in page with username and password first and Microsoft always visible ("not set up yet" notice when off); usernames for local accounts (2–64 of `[A-Za-z0-9._-]`, unique ignoring case, no `@`); one generic failure message.
   - **D-095:** the dashboard shows "Recently updated" instead of an activity feed, so the audit log is not exposed; no "Share" button.
 

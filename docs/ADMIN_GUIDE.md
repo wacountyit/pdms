@@ -63,7 +63,7 @@ the installer adds your proxy's IP, `127.0.0.1`, and the Docker range
 1. In the Entra admin center, go to **App registrations → New registration**.
    - Name: your system name. Supported account types: this organization only.
    - Redirect URI (Web): `https://<your-public-url>/auth/oidc/callback`.
-     It must match PADM's address exactly, including any port: with Caddy
+     It must match PDMS's address exactly, including any port: with Caddy
      on port 444, for example, it is
      `https://10.0.0.5:444/auth/oidc/callback`. The installer prints the exact
      value, during the sign-in questions and again at the end.
@@ -101,15 +101,15 @@ sign-in for an Entra account whose email belongs to an existing, unlinked
 account is refused (see "Entra ID user sync" in section 3).
 
 With single sign-on on, `auto_provision = false`, and the sync off, only people
-who are already linked to their Entra account can sign in. PADM logs a warning
+who are already linked to their Entra account can sign in. PDMS logs a warning
 at startup in that setup. Turn on the sync, or allow auto-provisioning, so new
 people can sign in.
 
 **"AADSTS50011: The redirect URI … does not match"** means the app
-registration does not list the address PADM sent. Copy the URI from the
+registration does not list the address PDMS sent. Copy the URI from the
 error message (or from the installer's summary) into **App registrations →
 (your app) → Authentication → Web → Redirect URIs**, save, and sign in again.
-It changes whenever PADM's address changes (`./install.sh --configure
+It changes whenever PDMS's address changes (`./install.sh --configure
 network`), for example when Caddy moves to another port.
 
 If Entra is unreachable when the app starts, single sign-on is disabled until
@@ -200,7 +200,7 @@ You see only the pages your roles allow.
   review, renewal, and expiration dates appear on every employee's
   dashboard, calendar, and "everything you can see" ICS/Outlook feed, because
   those views list everything a person can view (decided, D-090); (2) only
-  the document's owner and PADM administrators can comment on them, though
+  the document's owner and PDMS administrators can comment on them, though
   everyone who can see them can read the comments (decided, D-091);
   (3) webhook service accounts count as active accounts, so they receive
   events about County-wide documents.
@@ -224,19 +224,19 @@ You see only the pages your roles allow.
 ### Branding
 
 Administration → **Branding** (requires the settings permission) sets how
-PADM presents your county. No config edit or restart is needed.
+PDMS presents your county. No config edit or restart is needed.
 
 | Field | Rules |
 |---|---|
 | County name | 1–120 characters. Leave blank to use `[org] name` from the config file. |
 | Accent color | Pick a color or type a hex code. White text on it must reach a 4.5:1 contrast ratio, or the page refuses it with a message (choose a darker color). Hover, link, and tint shades are derived automatically, for light and for dark mode; an accent with no readable dark-mode shades is refused too. |
-| Seal | PNG or JPEG, at most 512 KB, 16–2048 pixels per side. The real file type is checked, and SVG is refused. It is stored in PADM's database, so backups include it. It is also the browser-tab icon; without a seal the tab shows a generic PADM icon. A square seal works best there. |
+| Seal | PNG or JPEG, at most 512 KB, 16–2048 pixels per side. The real file type is checked, and SVG is refused. It is stored in PDMS's database, so backups include it. It is also the browser-tab icon; without a seal the tab shows a generic PDMS icon. A square seal works best there. |
 
 Two more actions: **Remove seal**, and **Reset to defaults** (asks you to
 confirm on a separate page).
 
 - **Public:** the seal and county name appear on the sign-in page, so anyone
-  who can reach PADM sees them. Do not upload anything you would not put on
+  who can reach PDMS sees them. Do not upload anything you would not put on
   your public website.
 - **Where the name is used:** page titles, the sidebar, notification emails,
   calendar feeds, webhooks, and records-request packages.
@@ -248,7 +248,7 @@ confirm on a separate page).
 
 ### Dark and light mode
 
-PADM is **dark by default**. Each person chooses for themselves, and nobody
+PDMS is **dark by default**. Each person chooses for themselves, and nobody
 else can change it for them (D-098):
 - **Your account → Appearance:** Dark, Light, or Match my device (follows the
   computer's or phone's setting).
@@ -263,7 +263,7 @@ Things to know:
 
 ### Preparing a demo for leadership
 
-To show PADM to county leadership on a test or demo server, after it is
+To show PDMS to county leadership on a test or demo server, after it is
 installed or updated:
 
 1. **Give the administrator a username**, so they can sign in as `sysadmin`:
@@ -324,7 +324,7 @@ the group's page. Review them before you turn the sync on.
 
 With the sync on, people and their departments come from Entra ID instead
 of token group claims. Each night (at `[entra_sync] run_at`, default 02:30 in
-the `[org]` timezone) PADM picks up the changes made in Entra ID since the
+the `[org]` timezone) PDMS picks up the changes made in Entra ID since the
 last run (the first run reads every account):
 
 - new people are created, so they have access before their first sign-in;
@@ -337,7 +337,7 @@ last run (the first run reads every account):
 
 The department comes from the Entra account property named by
 `[entra_sync] attribute` (default **Department**). Under **Administration →
-Entra ID sync**, map each value in use ("Road & Bridge", "R&B", ...) to a PADM
+Entra ID sync**, map each value in use ("Road & Bridge", "R&B", ...) to a PDMS
 department; case, spacing, and `&` versus "and" do not matter. People with a
 blank or unmapped value can sign in but see only what is shared with them;
 the page lists those values with counts. Make the Department field part of
@@ -351,7 +351,7 @@ until **Last run** shows a time after your change, then press **Full
 resync**, so nobody is left on the old mapping.
 
 Roles (administrator, legal counsel, records officer, auditor, appointments
-clerk, department head) are still assigned in PADM. Memberships you add by
+clerk, department head) are still assigned in PDMS. Memberships you add by
 hand are never changed by the sync. While the sync is on, the sign-in token
 never sets a person's name or groups.
 
@@ -375,7 +375,7 @@ never sets a person's name or groups.
   **Needs attention** instead.
 
 **Sign-in.** People are matched by Entra object ID, never by email. An Entra
-account whose email equals an existing unlinked PADM account (for example the
+account whose email equals an existing unlinked PDMS account (for example the
 break-glass administrator) is not linked: the sync reports it, and sign-in is
 refused (`email_in_use`) until you rename or remove the other account. With
 the sync on, a first sign-in asks Entra about the person; if Entra cannot be
@@ -393,7 +393,7 @@ queued run is skipped. **Full resync** reads every account again.
 
 1. Create the certificate in the `secrets/` directory on the host (never in
    the `pdmsdata` volume, which holds documents and is backed up as one
-   archive). Run it from the PADM install directory, either with the host
+   archive). Run it from the PDMS install directory, either with the host
    binary:
    `pdms gen-graph-cert --out secrets/graph_certificate`
    or through Docker (the container runs as an unprivileged user, so run it
@@ -406,7 +406,7 @@ queued run is skipped. **Full resync** reads every account again.
    the certificate thumbprint. Then make the key readable by the containers,
    as the installer does for the other secret files inside the private
    `secrets/` directory: `chmod 644 secrets/graph_certificate`.
-2. In Entra ID, register an app **PADM Service**, add the Microsoft Graph
+2. In Entra ID, register an app **PDMS Service**, add the Microsoft Graph
    **application** permission `User.Read.All`, grant admin consent, and
    upload `secrets/graph_certificate.crt` (the public certificate, from the
    host) under **Certificates & secrets**. There is no client secret.
@@ -428,14 +428,14 @@ queued run is skipped. **Full resync** reads every account again.
    ```
 
    The sync needs `[graph]`, `auth.oidc.issuer_url`, and
-   `auth.oidc.subject_claim = "oid"`; PADM refuses to start otherwise. Restart,
+   `auth.oidc.subject_claim = "oid"`; PDMS refuses to start otherwise. Restart,
    then press **Sync now**. `pdms sync-directory` runs a sync from the command
    line; `pdms sync-directory --full` reads every account again. Both refuse
    to run while `enabled = false`.
 4. Renew the certificate before it expires: create a new one, upload its
    `.crt` to the app registration, replace the file, and restart. The
    **Certificate thumbprint** on **Administration → Entra ID sync** is the one
-   PADM is using: after the restart it should equal the SHA-256 thumbprint
+   PDMS is using: after the restart it should equal the SHA-256 thumbprint
    `pdms gen-graph-cert` printed for the new certificate (Entra ID may list a
    different, SHA-1 thumbprint). Then remove the old certificate from the app
    registration.
@@ -549,15 +549,15 @@ email. Other files are refused, and the refusal is logged.
 ### SharePoint storage
 
 With `[storage] backend = "sharepoint"`, every document file uploaded through
-PADM is stored in one SharePoint document library, so people can also browse
-the files there, read-only. PADM stays the system people use: details,
-permissions, workflow, reminders, search and the audit log stay in PADM, and
-PADM wins when the two disagree (D-081). Export packages (records requests)
+PDMS is stored in one SharePoint document library, so people can also browse
+the files there, read-only. PDMS stays the system people use: details,
+permissions, workflow, reminders, search and the audit log stay in PDMS, and
+PDMS wins when the two disagree (D-081). Export packages (records requests)
 stay in `local_path`.
 
 | Setting (`config/pdms.toml`) | Default | Notes |
 |---|---|---|
-| `[sharepoint] site_url` | empty | The site, for example `https://contoso.sharepoint.com/sites/PADMRecords` |
+| `[sharepoint] site_url` | empty | The site, for example `https://contoso.sharepoint.com/sites/PDMSRecords` |
 | `[sharepoint] library` | `Documents` | The document library's name |
 | `[sharepoint] upload_chunk_bytes` | 10 MiB | Files are sent in pieces of this size: a multiple of 320 KiB, at most 60 MiB |
 | `[sharepoint] delta_interval_minutes` | 5 | For the change check that comes with plan P4 |
@@ -565,13 +565,13 @@ stay in `local_path`.
 **Before you turn it on:**
 1. Set up the site as the SharePoint setup steps describe (the design spec,
    Appendix A): owners only, sharing restricted, versioning on, and
-   `County-wide` readable by **Everyone except external users**. If PADM has
+   `County-wide` readable by **Everyone except external users**. If PDMS has
    to create `County-wide` itself, it logs a warning, because that read
    permission is then missing.
-2. The `PADM Service` app registration needs the Graph application permission
-   `Sites.Selected`, with full control on this one site, and PADM needs the
+2. The `PDMS Service` app registration needs the Graph application permission
+   `Sites.Selected`, with full control on this one site, and PDMS needs the
    `[graph]` settings and certificate described under "Entra ID user sync"
-   above. PADM refuses to start with `backend = "sharepoint"` and no `[graph]`
+   above. PDMS refuses to start with `backend = "sharepoint"` and no `[graph]`
    section. The exact commands for the site grant come with plan P4's setup
    guide.
 3. **Start with an empty system.** Files already stored locally or in S3 are
@@ -591,8 +591,8 @@ stay in `local_path`.
 - **Names and columns.** A new file first has a temporary name,
   `{ID} (uploading …)`. A background job (`sharepoint.mirror_document`), which
   runs after every change, then gives it its final name, such as
-  `CON-2026-000012 v2 – Amendment.pdf`, fills in the PADM columns (type,
-  tags, status, dates, owner, Current, "Open in PADM"), and moves or renames
+  `CON-2026-000012 v2 – Amendment.pdf`, fills in the PDMS columns (type,
+  tags, status, dates, owner, Current, "Open in PDMS"), and moves or renames
   folders. A nightly sweep queues it for every document, which picks up
   renamed departments, types and people.
 - **Changes that narrow access move the folder first**: tightening
@@ -600,7 +600,7 @@ stay in `local_path`.
   SharePoint can't be reached, the change is refused ("…so the change was not
   made") and nothing changes. Every folder move is in the audit log as
   `sharepoint.folder_moved`.
-- **Downloads** are streamed through PADM and checked against the SHA-256
+- **Downloads** are streamed through PDMS and checked against the SHA-256
   recorded at upload. If someone changed the file in SharePoint, the download
   stops with an error, the file is marked as changed, and
   `sharepoint.changed_outside` is written to the audit log. Restoring an
@@ -915,7 +915,7 @@ English is installed; other Tesseract languages can be added by extending
 searchable text. **Administration → Text extraction (OCR)** (under *System*)
 shows whether OCR is on and how to turn it on.
 
-**The Outlook calendar sync was removed (D-087).** The calendar is PADM's own
+**The Outlook calendar sync was removed (D-087).** The calendar is PDMS's own
 look-ahead. People who want the dates in Outlook subscribe to their calendar
 feed (section 5), which needs no setup. If an earlier version kept events in
 a shared mailbox:

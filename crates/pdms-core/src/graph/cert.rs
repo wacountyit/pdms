@@ -118,9 +118,9 @@ pub fn thumbprint(der: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(der))
 }
 
-/// A new self-signed certificate for the "PADM Service" app registration.
+/// A new self-signed certificate for the "PDMS Service" app registration.
 pub struct GeneratedCertificate {
-    /// Certificate followed by its private key: what PADM reads.
+    /// Certificate followed by its private key: what PDMS reads.
     pub pem: String,
     /// The public certificate alone: what you upload to Entra ID.
     pub certificate_pem: String,
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn generated_certificate_signs_verifiable_ps256_assertions() {
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         assert!(g.pem.starts_with("-----BEGIN CERTIFICATE-----"));
         assert!(g.pem.contains("-----BEGIN PRIVATE KEY-----"));
         let c = Credential::from_pem(&g.pem).unwrap();
@@ -256,7 +256,7 @@ mod tests {
     fn pkcs1_keys_from_openssl_are_accepted() {
         use rsa::pkcs1::EncodeRsaPrivateKey;
         use rsa::pkcs8::{DecodePrivateKey, LineEnding};
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         let key_pem = &g.pem[g.certificate_pem.len()..];
         let key = rsa::RsaPrivateKey::from_pkcs8_pem(key_pem).unwrap();
         let pkcs1 = key.to_pkcs1_pem(LineEnding::LF).unwrap();
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn missing_or_encrypted_keys_are_rejected() {
-        let g = generate("PADM test", 30).unwrap();
+        let g = generate("PDMS test", 30).unwrap();
         let e = Credential::from_pem(&g.certificate_pem)
             .unwrap_err()
             .to_string();

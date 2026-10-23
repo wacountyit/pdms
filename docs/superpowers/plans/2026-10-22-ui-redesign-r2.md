@@ -1,4 +1,4 @@
-# PADM UI redesign, round 2 (R2): implementation plan
+# PDMS UI redesign, round 2 (R2): implementation plan
 
 - **Date:** 2026-10-22
 - **Spec:** [R2 design](../specs/2026-10-22-ui-redesign-r2-design.md),

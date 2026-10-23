@@ -16,14 +16,14 @@
 > - **Test binaries:** `pub use sp::{…}` in `mock_graph/mod.rs` is compiled into the `graph.rs` and `entra_sync.rs` test binaries too. If `-D warnings` flags unused imports there, add `#[allow(unused_imports)]` to that line.
 >
 > **The owner's decisions (2026-10-22), recorded as D-102:**
-> 1. **Long text is truncated in SharePoint.** Titles can be 500 characters, but single-line columns (and `Title`) hold 255, so `layout::columns()` caps every single-line text value at `TEXT_MAX` (255). PADM keeps the full value. *Built in Task 2.*
+> 1. **Long text is truncated in SharePoint.** Titles can be 500 characters, but single-line columns (and `Title`) hold 255, so `layout::columns()` caps every single-line text value at `TEXT_MAX` (255). PDMS keeps the full value. *Built in Task 2.*
 > 2. **A SharePoint outage keeps the person's form.** `CoreError::Unavailable` is handled like a validation error on the new-document and edit forms, and in `views::done` (a message on the page instead of a 503). *Built in Task 3*; Task 6's upload-failure test asserts the form comes back.
 > 3. **Folder moves are audited**, with one action, `sharepoint.folder_moved` (category `system`, context: from and to path, and the reason: visibility, department, deleted or restored, or the mirror), written in the same transaction as the `sharepoint_document_folders` update. Applies in Tasks 9 and 10.
 > 4. **No real data is stored yet.** Switching the backend makes files stored locally unreadable (routing follows `core.sharepoint`, not each blob's backend), so the test server is reset when SharePoint is turned on, as the spec's rollout says.
 > 5. **Orphans are accepted for now, and noted.** These are staged uploads whose database transaction then fails, and a narrowing move made before an `update` that fails. They are left for the nightly mirror sweep and P4's change check. Listed under "Known gaps" in ROADMAP §4 in Task 11.
 > 6. **Graph calls during `set_visibility`'s row lock are accepted**: they are rare and short.
 
-**Goal:** Store every document file uploaded through PADM in one SharePoint library. Files are organised as `Departments/` / `County-wide/` / `Restricted/` → department → document folder, with one file per version. Downloads are streamed back through PADM and checked against the recorded SHA-256. PADM's metadata is mirrored into SharePoint columns, and folders move whenever a document's visibility, department, or deletion state changes.
+**Goal:** Store every document file uploaded through PDMS in one SharePoint library. Files are organised as `Departments/` / `County-wide/` / `Restricted/` → department → document folder, with one file per version. Downloads are streamed back through PDMS and checked against the recorded SHA-256. PDMS's metadata is mirrored into SharePoint columns, and folders move whenever a document's visibility, department, or deletion state changes.
 
 **Architecture:**
 
@@ -39,11 +39,11 @@
 
 **Tech Stack:** Rust 2024, SQLx 0.9 (`query!` macros, `.sqlx/` offline data), Tokio, Microsoft Graph v1.0 through P2's `GraphClient`, PostgreSQL 15/16.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §2 (D1–D9), §5, §6 `sharepoint_files`, §7.1–7.3, §7.7 (only what keeps `verify-integrity` working; P4 does the real SharePoint check), §8, §10, §12. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) ("Produced by P3"; this plan's deviations are listed at the end and Task 11 records them in the index). **Depends on:** P1 (`Visibility`, `set_visibility`, `NewDocument.visibility`, migration 0008) and P2 (`GraphClient`, `GraphError`, `Core.graph`, `[graph]` config, migration 0010) merged.
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md): §2 (D1–D9), §5, §6 `sharepoint_files`, §7.1–7.3, §7.7 (only what keeps `verify-integrity` working; P4 does the real SharePoint check), §8, §10, §12. **Index:** [2026-10-14-pdms-sharepoint-entra-index.md](2026-10-14-pdms-sharepoint-entra-index.md) ("Produced by P3"; this plan's deviations are listed at the end and Task 11 records them in the index). **Depends on:** P1 (`Visibility`, `set_visibility`, `NewDocument.visibility`, migration 0008) and P2 (`GraphClient`, `GraphError`, `Core.graph`, `[graph]` config, migration 0010) merged.
 
 ## Global Constraints
 
-- **Library layout (spec §5):** one library. The top-level folders are exactly `Departments`, `County-wide`, `Restricted`, then the department folder (the PADM department name), then `{document ID} – {title}`, then one file per version named `{document ID} v{n} – {label}.{ext}`, where `{n}` is the PADM version number. Files are never overwritten (`@microsoft.graph.conflictBehavior` is always `fail`).
+- **Library layout (spec §5):** one library. The top-level folders are exactly `Departments`, `County-wide`, `Restricted`, then the department folder (the PDMS department name), then `{document ID} – {title}`, then one file per version named `{document ID} v{n} – {label}.{ext}`, where `{n}` is the PDMS version number. Files are never overwritten (`@microsoft.graph.conflictBehavior` is always `fail`).
 - **Version labels:** "Original", "Revision", "Amendment", "Signed copy", "Restored".
 - **Visibility to area:** Department → `Departments`, County-wide → `County-wide`, Restricted → `Restricted`. Soft-deleted documents go to `Restricted` until restored.
 - **Names:**
@@ -53,13 +53,13 @@
   - Leading `~`, `.` and spaces are trimmed, as are trailing `.` and spaces.
   - An empty result becomes `Untitled`.
   - Caps: department folder 60 characters, document folder 100, file name ≤ 120. The document ID is never cut. A full path stays ≤ 400 characters (SharePoint's limit).
-- **Columns (spec §5):** the built-in `Title`, plus `PadmDocumentId`, `PadmDocumentType`, `PadmTags`, `PadmStatus`, `PadmVisibility`, `PadmDepartment`, `PadmOwner`, `PadmEffectiveDate`, `PadmReviewDate`, `PadmRenewalDate`, `PadmExpirationDate`, `PadmVersion`, `PadmCurrent`, `PadmLink`.
-  - Display names: "Document ID", "Document Type", "Tags", "Status", "Visibility", "Department", "Owner", "Effective Date", "Review Date", "Renewal Date", "Expiration Date", "Version", "Current", "Open in PADM".
+- **Columns (spec §5):** the built-in `Title`, plus `PdmsDocumentId`, `PdmsDocumentType`, `PdmsTags`, `PdmsStatus`, `PdmsVisibility`, `PdmsDepartment`, `PdmsOwner`, `PdmsEffectiveDate`, `PdmsReviewDate`, `PdmsRenewalDate`, `PdmsExpirationDate`, `PdmsVersion`, `PdmsCurrent`, `PdmsLink`.
+  - Display names: "Document ID", "Document Type", "Tags", "Status", "Visibility", "Department", "Owner", "Effective Date", "Review Date", "Renewal Date", "Expiration Date", "Version", "Current", "Open in PDMS".
   - Dates are written as `YYYY-MM-DDT12:00:00Z`: noon UTC shows the same date in every US time zone.
-  - "Open in PADM" is a **text** column, because Graph cannot write hyperlink columns.
+  - "Open in PDMS" is a **text** column, because Graph cannot write hyperlink columns.
 - **Upload sessions (Graph):** every upload uses `createUploadSession` and is sent in chunks of `[sharepoint] upload_chunk_bytes`. That value must be a multiple of 327,680 bytes (320 KiB) and at most 62,914,560 (60 MiB); the default is 10,485,760. Chunks are PUT to `uploadUrl` without an `Authorization` header (P2's `put_bytes`).
 - **Verification:**
-  - Uploads: the size and QuickXorHash that SharePoint reports must equal PADM's. If not, the item is deleted and the upload fails.
+  - Uploads: the size and QuickXorHash that SharePoint reports must equal PDMS's. If not, the item is deleted and the upload fails.
   - Downloads: SHA-256 and size are checked while streaming. A mismatch ends the stream with an error, sets `sharepoint_files.state = 'changed_outside'`, and audits `sharepoint.changed_outside`.
 - **User-facing failures:** use `CoreError::Unavailable` with exactly one of these messages:
   - "File storage (SharePoint) is unavailable right now, so nothing was saved. Try again in a few minutes." (upload)
@@ -91,13 +91,13 @@ Five inputs the spec implies but its happy path doesn't exercise. Each has a tes
 2. **SharePoint unreachable during an upload.** The user gets the "nothing was saved" message, and no document or version row is created. An empty file is refused with a clear message. Task 6 (`upload_failure_saves_nothing`, `empty_files_are_refused`).
 3. **A file edited directly in SharePoint, then downloaded.** The download must not complete as if nothing happened: the stream ends with an error, the file is flagged, and the event is audited. Task 7 (`changed_files_stop_the_download_and_are_flagged`).
 4. **Two departments whose names clean up to the same folder name, or a department renamed.** Each department gets its own folder (the second one is suffixed with its code), and a rename renames the folder in place without creating a new one. Task 5 (`departments_with_the_same_folder_name_get_their_own_folders`, `renaming_a_department_renames_its_folder`).
-5. **Visibility tightened while SharePoint is down.** The change is refused with the "change was not made" message, PADM still shows the old visibility, and the folder hasn't moved. Task 10 (`tightening_is_refused_when_sharepoint_is_down`).
+5. **Visibility tightened while SharePoint is down.** The change is refused with the "change was not made" message, PDMS still shows the old visibility, and the folder hasn't moved. Task 10 (`tightening_is_refused_when_sharepoint_is_down`).
 
 ---
 
 ### Task 1: QuickXorHash
 
-SharePoint reports `file.hashes.quickXorHash` for every file. PADM computes the same value while uploading, so it can confirm SharePoint stored exactly what was sent.
+SharePoint reports `file.hashes.quickXorHash` for every file. PDMS computes the same value while uploading, so it can confirm SharePoint stored exactly what was sent.
 
 **Files:**
 - Create: `crates/pdms-core/src/sharepoint/mod.rs`
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn columns_carry_padm_metadata() {
+    fn columns_carry_pdms_metadata() {
         let tags = vec!["Roads".to_owned(), "FY2026".to_owned()];
         let doc = PlacementDoc {
             external_id: "CON-2026-000012",
@@ -445,7 +445,7 @@ mod tests {
             review_date: None,
             renewal_date: NaiveDate::from_ymd_opt(2027, 1, 14),
             expiration_date: None,
-            link: "https://padm.example.org/documents/abc",
+            link: "https://pdms.example.org/documents/abc",
         };
         let m = columns(&doc, &PlacementFile { version_no: 4, current: true });
         assert_eq!(m["Title"], json!("Fuel Supply Agreement"));
@@ -456,7 +456,7 @@ mod tests {
         assert_eq!(m[REVIEW_DATE], json!(null));
         assert_eq!(m[VERSION], json!(4));
         assert_eq!(m[CURRENT], json!(true));
-        assert_eq!(m[LINK], json!("https://padm.example.org/documents/abc"));
+        assert_eq!(m[LINK], json!("https://pdms.example.org/documents/abc"));
         // Every column written (except the built-in Title) is provisioned, once.
         let defined: Vec<String> = column_definitions()
             .iter()
@@ -470,13 +470,13 @@ mod tests {
     #[test]
     fn site_urls() {
         assert_eq!(
-            parse_site_url("https://contoso.sharepoint.com/sites/PADMRecords/").unwrap(),
-            ("contoso.sharepoint.com".to_owned(), "/sites/PADMRecords".to_owned())
+            parse_site_url("https://contoso.sharepoint.com/sites/PDMSRecords/").unwrap(),
+            ("contoso.sharepoint.com".to_owned(), "/sites/PDMSRecords".to_owned())
         );
-        assert!(parse_site_url("https://contoso.sharepoint.com/teams/PADM").is_ok());
-        assert!(parse_site_url("http://contoso.sharepoint.com/sites/PADM").is_err());
+        assert!(parse_site_url("https://contoso.sharepoint.com/teams/PDMS").is_ok());
+        assert!(parse_site_url("http://contoso.sharepoint.com/sites/PDMS").is_err());
         assert!(parse_site_url("https://contoso.sharepoint.com/").is_err());
-        assert!(parse_site_url("https://contoso.sharepoint.com/sites/PADM/Shared%20Documents").is_err());
+        assert!(parse_site_url("https://contoso.sharepoint.com/sites/PDMS/Shared%20Documents").is_err());
         assert!(parse_site_url("not a url").is_err());
     }
 
@@ -694,22 +694,22 @@ pub fn extension_for(media_type: &str, file_name: &str) -> String {
 }
 
 // Column internal names (spec §5). `Title` is the library's built-in column.
-pub const DOCUMENT_ID: &str = "PadmDocumentId";
-pub const DOCUMENT_TYPE: &str = "PadmDocumentType";
-pub const TAGS: &str = "PadmTags";
-pub const STATUS: &str = "PadmStatus";
-pub const VISIBILITY: &str = "PadmVisibility";
-pub const DEPARTMENT: &str = "PadmDepartment";
-pub const OWNER: &str = "PadmOwner";
-pub const EFFECTIVE_DATE: &str = "PadmEffectiveDate";
-pub const REVIEW_DATE: &str = "PadmReviewDate";
-pub const RENEWAL_DATE: &str = "PadmRenewalDate";
-pub const EXPIRATION_DATE: &str = "PadmExpirationDate";
-pub const VERSION: &str = "PadmVersion";
-pub const CURRENT: &str = "PadmCurrent";
-pub const LINK: &str = "PadmLink";
+pub const DOCUMENT_ID: &str = "PdmsDocumentId";
+pub const DOCUMENT_TYPE: &str = "PdmsDocumentType";
+pub const TAGS: &str = "PdmsTags";
+pub const STATUS: &str = "PdmsStatus";
+pub const VISIBILITY: &str = "PdmsVisibility";
+pub const DEPARTMENT: &str = "PdmsDepartment";
+pub const OWNER: &str = "PdmsOwner";
+pub const EFFECTIVE_DATE: &str = "PdmsEffectiveDate";
+pub const REVIEW_DATE: &str = "PdmsReviewDate";
+pub const RENEWAL_DATE: &str = "PdmsRenewalDate";
+pub const EXPIRATION_DATE: &str = "PdmsExpirationDate";
+pub const VERSION: &str = "PdmsVersion";
+pub const CURRENT: &str = "PdmsCurrent";
+pub const LINK: &str = "PdmsLink";
 
-/// What PADM shows about a document, for the SharePoint columns.
+/// What PDMS shows about a document, for the SharePoint columns.
 pub struct PlacementDoc<'a> {
     pub external_id: &'a str,
     pub title: &'a str,
@@ -755,7 +755,7 @@ pub fn columns(doc: &PlacementDoc<'_>, file: &PlacementFile) -> Map<String, Valu
     m
 }
 
-/// Library columns PADM creates when they are missing
+/// Library columns PDMS creates when they are missing
 /// (`POST /sites/{site}/lists/{list}/columns`).
 pub fn column_definitions() -> Vec<Value> {
     let text = |name: &str, display: &str| {
@@ -779,14 +779,14 @@ pub fn column_definitions() -> Vec<Value> {
         date(EXPIRATION_DATE, "Expiration Date", false),
         json!({"name": VERSION, "displayName": "Version", "number": {}}),
         json!({"name": CURRENT, "displayName": "Current", "indexed": true, "boolean": {}}),
-        text(LINK, "Open in PADM"),
+        text(LINK, "Open in PDMS"),
     ]
 }
 
 /// `https://<tenant>.sharepoint.com/sites/<Name>` → (host, `/sites/<Name>`).
 pub fn parse_site_url(s: &str) -> Result<(String, String), String> {
     let url = url::Url::parse(s.trim()).map_err(|_| {
-        "enter the site's full address, e.g. https://contoso.sharepoint.com/sites/PADMRecords"
+        "enter the site's full address, e.g. https://contoso.sharepoint.com/sites/PDMSRecords"
             .to_owned()
     })?;
     if url.scheme() != "https" {
@@ -864,7 +864,7 @@ mod sharepoint_config_tests {
     fn sharepoint_config() -> Config {
         let mut c = Config::default();
         c.storage.backend = StorageBackend::SharePoint;
-        c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PADMRecords".into();
+        c.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PDMSRecords".into();
         c
     }
 
@@ -886,7 +886,7 @@ mod sharepoint_config_tests {
         c.sharepoint.upload_chunk_bytes = 327_680 * 193;
         assert!(c.validate().is_err(), "over 60 MiB");
         let mut c = sharepoint_config();
-        c.sharepoint.site_url = "http://contoso.sharepoint.com/sites/PADM".into();
+        c.sharepoint.site_url = "http://contoso.sharepoint.com/sites/PDMS".into();
         assert!(c.validate().is_err());
         let mut c = sharepoint_config();
         c.sharepoint.library = " ".into();
@@ -969,7 +969,7 @@ pub enum StorageBackend {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SharePointConfig {
-    /// e.g. `https://contoso.sharepoint.com/sites/PADMRecords`.
+    /// e.g. `https://contoso.sharepoint.com/sites/PDMSRecords`.
     pub site_url: String,
     /// The document library (drive) name.
     pub library: String,
@@ -1018,7 +1018,7 @@ impl Default for SharePointConfig {
 `crates/pdms-core/src/error.rs`, after `Conflict(String)`:
 
 ```rust
-    /// A service PADM depends on (SharePoint) is unreachable; nothing was changed.
+    /// A service PDMS depends on (SharePoint) is unreachable; nothing was changed.
     #[error("{0}")]
     Unavailable(String),
 ```
@@ -1056,7 +1056,7 @@ git commit -m "config: sharepoint storage backend; CoreError::Unavailable as 503
 
 ### Task 4: The SharePoint handle, a mock Graph, and first-use setup
 
-On first use, PADM:
+On first use, PDMS:
 - finds the site, library, and list;
 - creates any missing columns;
 - creates any missing area folders.
@@ -1105,7 +1105,7 @@ use serde_json::{Map, Value, json};
 
 use super::{MockGraph, MockState, graph_error, json_resp};
 
-pub const SITE_URL: &str = "https://contoso.sharepoint.com/sites/PADMTest";
+pub const SITE_URL: &str = "https://contoso.sharepoint.com/sites/PDMSTest";
 pub const SITE: &str = "site-1";
 pub const DRIVE: &str = "drive-1";
 pub const LIST: &str = "list-1";
@@ -1510,7 +1510,7 @@ use pdms_core::{Config, Core, sharepoint};
 /// One certificate per test binary (RSA key generation is the slow part).
 fn certificate() -> &'static str {
     static C: OnceLock<String> = OnceLock::new();
-    C.get_or_init(|| pdms_core::graph::cert::generate("PADM test", 30).unwrap().pem)
+    C.get_or_init(|| pdms_core::graph::cert::generate("PDMS test", 30).unwrap().pem)
 }
 
 async fn core_with(f: impl FnOnce(&mut Config)) -> (Core, pdms_testkit::TestDb) {
@@ -1539,8 +1539,8 @@ async fn first_use_creates_the_area_folders_and_columns() {
     let handle = core.sharepoint.clone().expect("sharepoint backend");
     let r = handle.resolved().await.unwrap();
     assert_eq!(sp.names(""), vec!["County-wide", "Departments", "Restricted"]);
-    assert!(r.county_wide_created, "PADM had to create County-wide itself");
-    for c in ["PadmDocumentId", "PadmVisibility", "PadmCurrent", "PadmLink"] {
+    assert!(r.county_wide_created, "PDMS had to create County-wide itself");
+    for c in ["PdmsDocumentId", "PdmsVisibility", "PdmsCurrent", "PdmsLink"] {
         assert!(sp.columns().contains(&c.to_owned()), "{c}");
     }
     // Another process finds everything instead of creating duplicates.
@@ -1588,7 +1588,7 @@ pub(super) struct Item {
 }
 
 /// A top-level area folder, created if missing. Returns its ID and whether
-/// PADM created it.
+/// PDMS created it.
 pub(super) async fn ensure_area_folder(g: &GraphClient, drive: &str, area: Area) -> CoreResult<(String, bool)> {
     let path = format!(
         "/drives/{drive}/root:/{}?$select=id",
@@ -1616,7 +1616,7 @@ pub(super) async fn ensure_area_folder(g: &GraphClient, drive: &str, area: Area)
 // Copyright (C) 2026 PDMS contributors
 //! Document files in a SharePoint library, through Microsoft Graph (D-081 to D-084).
 //!
-//! PADM is the only writer. Files live in `Departments/`, `County-wide/`, or
+//! PDMS is the only writer. Files live in `Departments/`, `County-wide/`, or
 //! `Restricted/`, then a department folder, then one folder per document with
 //! one file per version (spec §5). Uploads are synchronous. Renames, moves, and
 //! column values are applied by the `sharepoint.mirror_document` job, except
@@ -1662,7 +1662,7 @@ pub struct Resolved {
     pub departments_id: String,
     pub county_wide_id: String,
     pub restricted_id: String,
-    /// PADM created `County-wide/` itself, so it lacks the "Everyone except
+    /// PDMS created `County-wide/` itself, so it lacks the "Everyone except
     /// external users" read grant an admin adds at setup (spec Appendix A, step 5).
     pub county_wide_created: bool,
 }
@@ -1766,7 +1766,7 @@ async fn resolve(inner: &Inner) -> CoreResult<Resolved> {
     let (restricted_id, _) = folders::ensure_area_folder(g, &drive.id, Area::Restricted).await?;
     if county_wide_created {
         tracing::warn!(
-            "PADM created the County-wide folder in SharePoint; give \"Everyone except external users\" read access to it (see the SharePoint setup guide)"
+            "PDMS created the County-wide folder in SharePoint; give \"Everyone except external users\" read access to it (see the SharePoint setup guide)"
         );
     }
     Ok(Resolved {
@@ -2037,7 +2037,7 @@ pub async fn department_folder_id(core: &Core, area: Area, department_id: Uuid) 
 }
 
 /// Create folder `name` under `parent`. If the name is taken by a folder no
-/// PADM record points at (left by an interrupted run), adopt it. If it
+/// PDMS record points at (left by an interrupted run), adopt it. If it
 /// belongs to another record, try `fallback`.
 pub(super) async fn create_folder(
     db: &PgPool,
@@ -2272,7 +2272,7 @@ async fn large_files_are_sent_in_chunks() {
     let (core, _db) = sp_core(&sp).await;
     let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
     let ctx = as_user(&core, alice).await;
-    let bytes = "PADM chunk test\n".repeat(50_000).into_bytes(); // 800,000 bytes: three 320 KiB chunks
+    let bytes = "PDMS chunk test\n".repeat(50_000).into_bytes(); // 800,000 bytes: three 320 KiB chunks
     let id = new_doc(&core, &ctx, dept, alice, "Big notes", Visibility::Department, Some(("notes.txt", &bytes))).await;
     let puts = sp.requests().iter().filter(|r| r.starts_with("PUT /upload/")).count();
     assert_eq!(puts, 3);
@@ -2538,7 +2538,7 @@ pub(crate) async fn upload_staged(
         if item.size != size || remote.as_deref() != Some(local.as_str()) {
             let _ = g.delete(&format!("/drives/{}/items/{}", r.drive_id, item.id)).await;
             return Err(CoreError::internal(format!(
-                "SharePoint stored {} bytes with quickXorHash {remote:?}; PADM sent {size} bytes with {local}",
+                "SharePoint stored {} bytes with quickXorHash {remote:?}; PDMS sent {size} bytes with {local}",
                 item.size
             )));
         }
@@ -2962,7 +2962,7 @@ async fn records_packages_read_files_from_sharepoint() {
     )
     .await
     .unwrap();
-    // The package re-hashes every file against PADM's record while writing (D-067).
+    // The package re-hashes every file against PDMS's record while writing (D-067).
     exports::open(&core, &ctx_o, pkg).await.unwrap();
 }
 
@@ -3002,7 +3002,7 @@ Change `use super::{UPLOAD_UNAVAILABLE, unavailable};` to `use super::{READ_UNAV
 
 ```rust
 /// Stream a version's file from SharePoint, checked against the SHA-256 and
-/// size PADM recorded. For a version that carried an earlier file forward,
+/// size PDMS recorded. For a version that carried an earlier file forward,
 /// the newest file at or before `version_no` is the one read. A mismatch ends
 /// the stream with an error (the client sees a failed download), marks the
 /// file `changed_outside`, and is audited.
@@ -3090,7 +3090,7 @@ fn verified(
                     return None;
                 }
                 let detail = format!(
-                    "read {} bytes with SHA-256 {}; PADM recorded {} bytes with {}",
+                    "read {} bytes with SHA-256 {}; PDMS recorded {} bytes with {}",
                     s.seen,
                     hex::encode(got),
                     s.size,
@@ -3099,7 +3099,7 @@ fn verified(
                 flag_changed(&s.db, s.document_id, &s.item_id, "download_check", &detail).await;
                 Some((
                     Err(std::io::Error::other(
-                        "the file in SharePoint was changed outside PADM; the download was stopped and an administrator was alerted",
+                        "the file in SharePoint was changed outside PDMS; the download was stopped and an administrator was alerted",
                     )),
                     s,
                 ))
@@ -3108,10 +3108,10 @@ fn verified(
     }))
 }
 
-/// Mark a SharePoint file as changed outside PADM and audit it. Failures to
+/// Mark a SharePoint file as changed outside PDMS and audit it. Failures to
 /// record are logged; the caller has already refused the content.
 pub(crate) async fn flag_changed(db: &PgPool, document_id: Uuid, item_id: &str, source: &str, detail: &str) {
-    tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PADM's record");
+    tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PDMS's record");
     let r = async {
         sqlx::query!(
             "UPDATE sharepoint_files SET state = 'changed_outside', checked_at = now() WHERE item_id = $1",
@@ -3287,7 +3287,7 @@ git commit -m "documents: read files through filestore; SharePoint downloads ver
 
 In SharePoint mode, a restored file needs its own file for the new version, because each version has one file.
 
-- **Decision: copy out, then upload again.** PADM downloads the earlier file (verified against its SHA-256) into the spool and runs the normal staged upload.
+- **Decision: copy out, then upload again.** PDMS downloads the earlier file (verified against its SHA-256) into the spool and runs the normal staged upload.
 - **Why not Graph's server-side `copy`?** It is asynchronous: it returns a monitor URL that has to be polled, and the result would need a second verification. Restores are rare, so one code path with end-to-end verification is worth the extra transfer.
 
 **Files:**
@@ -3515,12 +3515,12 @@ async fn the_mirror_names_files_and_fills_columns() {
     );
     let v1 = sp.fields(&format!("{folder}/{ext} v1 – Original.pdf"));
     let v2 = sp.fields(&format!("{folder}/{ext} v2 – Amendment.pdf"));
-    assert_eq!(v1["PadmCurrent"], serde_json::json!(false));
-    assert_eq!(v2["PadmCurrent"], serde_json::json!(true));
-    assert_eq!(v2["PadmDocumentId"], serde_json::json!(ext));
-    assert_eq!(v2["PadmDepartment"], serde_json::json!("Road and Bridge"));
-    assert_eq!(v2["PadmVisibility"], serde_json::json!("Department"));
-    assert!(v2["PadmLink"].as_str().unwrap().ends_with(&format!("/documents/{id}")));
+    assert_eq!(v1["PdmsCurrent"], serde_json::json!(false));
+    assert_eq!(v2["PdmsCurrent"], serde_json::json!(true));
+    assert_eq!(v2["PdmsDocumentId"], serde_json::json!(ext));
+    assert_eq!(v2["PdmsDepartment"], serde_json::json!("Road and Bridge"));
+    assert_eq!(v2["PdmsVisibility"], serde_json::json!("Department"));
+    assert!(v2["PdmsLink"].as_str().unwrap().ends_with(&format!("/documents/{id}")));
     // Running it again changes nothing in SharePoint.
     let before = sp.requests().len();
     sharepoint::mirror_document(&core, id).await.unwrap();
@@ -3610,8 +3610,8 @@ Expected: compile errors `cannot find function mirror_document in module sharepo
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
-//! Keeping SharePoint in step with PADM: folder placement, file names, and
-//! column values (spec §7.3). PADM is authoritative. The job is idempotent and
+//! Keeping SharePoint in step with PDMS: folder placement, file names, and
+//! column values (spec §7.3). PDMS is authoritative. The job is idempotent and
 //! convergent: running it again after a crash or a manual change in
 //! SharePoint restores the desired state.
 
@@ -3681,7 +3681,7 @@ fn short(id: Uuid) -> String {
     id.simple().to_string().chars().take(8).collect()
 }
 
-/// Bring one document's folder and files in SharePoint in line with PADM.
+/// Bring one document's folder and files in SharePoint in line with PDMS.
 pub async fn mirror_document(core: &Core, document_id: Uuid) -> CoreResult<()> {
     let Some(sp) = core.sharepoint.as_ref() else {
         return Ok(());
@@ -3895,7 +3895,7 @@ Some changes must move the folder **before** the change is saved, and refuse the
 - transferring a department-visible document to another department;
 - deleting a document.
 
-Loosening changes wait for the mirror job (spec §7.3). If the database change fails after the move, SharePoint is narrower than PADM, which is the safe direction; the next mirror run or the nightly sweep puts the folder back.
+Loosening changes wait for the mirror job (spec §7.3). If the database change fails after the move, SharePoint is narrower than PDMS, which is the safe direction; the next mirror run or the nightly sweep puts the folder back.
 
 **Files:**
 - Modify: `crates/pdms-core/src/sharepoint/mirror.rs` (`apply_placement_now`)
@@ -3938,7 +3938,7 @@ async fn tightening_is_refused_when_sharepoint_is_down() {
     let err = documents::set_visibility(&core, &ctx, id, Visibility::Restricted).await.unwrap_err();
     assert!(matches!(&err, CoreError::Unavailable(m) if m.contains("the change was not made")), "{err:?}");
     let doc = documents::view(&core, &ctx, id).await.unwrap().document;
-    assert_eq!(doc.visibility, Visibility::CountyWide, "PADM unchanged");
+    assert_eq!(doc.visibility, Visibility::CountyWide, "PDMS unchanged");
     assert_eq!(sp.names("County-wide/Road and Bridge").len(), 1, "folder unchanged");
 }
 
@@ -4124,7 +4124,7 @@ git commit -m "sharepoint: narrowing moves happen before the change is saved"
 **Files:**
 - Modify: `config/pdms.example.toml`
 - Modify: `crates/pdms-core/tests/sharepoint.rs` (ignored live test)
-- Modify: `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md` (record the P3 deviations)
+- Modify: `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md` (record the P3 deviations)
 - Modify: `docs/ROADMAP.md` §0.3 (sub-project 1 status)
 
 **Interfaces:**
@@ -4141,7 +4141,7 @@ and add after the `[storage.s3]` block:
 
 ```toml
 [sharepoint]                    # used when [storage] backend = "sharepoint"; export packages stay in local_path
-site_url = ""                   # e.g. "https://contoso.sharepoint.com/sites/PADMRecords"
+site_url = ""                   # e.g. "https://contoso.sharepoint.com/sites/PDMSRecords"
 library = "Documents"           # the document library (drive) name
 delta_interval_minutes = 5      # change check interval (P4)
 upload_chunk_bytes = 10485760   # 10 MiB; a multiple of 327680 (320 KiB), at most 62914560
@@ -4154,7 +4154,7 @@ upload_chunk_bytes = 10485760   # 10 MiB; a multiple of 327680 (320 KiB), at mos
 ///
 /// ```text
 /// PDMS_LIVE_TENANT_ID=… PDMS_LIVE_CLIENT_ID=… PDMS_LIVE_CERTIFICATE_FILE=/path/graph.pem \
-/// PDMS_LIVE_SITE_URL=https://<tenant>.sharepoint.com/sites/PADMRecordsTest \
+/// PDMS_LIVE_SITE_URL=https://<tenant>.sharepoint.com/sites/PDMSRecordsTest \
 /// cargo test -p pdms-core --test sharepoint live_sharepoint_round_trip -- --ignored --nocapture
 /// ```
 ///
@@ -4180,19 +4180,19 @@ async fn live_sharepoint_round_trip() {
     })
     .await;
     let code = format!("LIVE{}", Uuid::new_v4().simple().to_string().chars().take(6).collect::<String>().to_uppercase());
-    let (dept, alice) = editing_department(&core, &code, &format!("PADM live test {code}"), "live@x.org").await;
+    let (dept, alice) = editing_department(&core, &code, &format!("PDMS live test {code}"), "live@x.org").await;
     let ctx = as_user(&core, alice).await;
-    let bytes = pdf("PADM live SharePoint test");
+    let bytes = pdf("PDMS live SharePoint test");
     let id = new_doc(&core, &ctx, dept, alice, "Live test", Visibility::Department, Some(("live.pdf", &bytes))).await;
     sharepoint::mirror_document(&core, id).await.unwrap();
     let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
     assert_eq!(read_all(dl.stream).await.unwrap(), bytes);
     documents::set_visibility(&core, &ctx, id, Visibility::Restricted).await.unwrap();
-    println!("left in SharePoint: Restricted/PADM live test {code}/{} – Live test", external_id(&core, id).await);
+    println!("left in SharePoint: Restricted/PDMS live test {code}/{} – Live test", external_id(&core, id).await);
 }
 ```
 
-- [x] **Step 3: Record the deviations from the index.** In `docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, update the "Produced by P3" table:
+- [x] **Step 3: Record the deviations from the index.** In `docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, update the "Produced by P3" table:
 
 - the `documents::filestore` row becomes: `put_version_file(core, &PutTarget, &StoredFile, src: &Path) -> CoreResult<FileLocation>`; `open(core, document_id, version_no, hash, size) -> CoreResult<ByteStream>`; `open_version_file(core, version_id) -> CoreResult<ByteStream>`; `record_location`, `backend_name`, `copy_for_restore`, `known_media_type`;
 - the Hook row becomes `apply_placement_now(core, document_id, to: Spot)`. It is called by `set_visibility`, by `update` (department change), and by `delete` whenever `layout::narrows(from, to)`;
@@ -4242,9 +4242,9 @@ git commit -m "sharepoint: example config, opt-in live test, and plan/roadmap st
 - **New tables beyond spec §6:** `sharepoint_department_folders` and `sharepoint_document_folders`, which track folders by item ID. `sharepoint_files` gains `list_item_id`, `name` and `fields_hash`.
 - **Soft-deleted documents** (the spec is silent): they move to `Restricted/<department>` at deletion and back on restore.
 - **Department transfers** of department-visible documents also move first, extending §7.3's rule that tightening changes are synchronous to every change that narrows access.
-- **"Open in PADM"** is a text column, because Graph cannot write hyperlink columns.
+- **"Open in PDMS"** is a text column, because Graph cannot write hyperlink columns.
 - **The "Current documents" view** can't be created through Graph v1.0, so P4's setup guide must include it as a manual step.
 - **Empty files** can't be stored in SharePoint mode.
-- **The version number in file names** is the PADM version number, so numbers skip over metadata-only versions.
+- **The version number in file names** is the PDMS version number, so numbers skip over metadata-only versions.
 - **Extensions** come from the sniffed content type.
 - **Temporary upload names (D-103):** spec §7.1 says to upload to the final name. Files are uploaded as `<external ID> (uploading <token>).<ext>` instead, and the mirror job renames them, because the version number is only known inside the version's transaction, which starts after the upload.

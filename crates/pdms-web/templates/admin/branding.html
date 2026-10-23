@@ -3,7 +3,7 @@
 <header class="page-head">
   <div>
     <h1>{{ l.title }}</h1>
-    <p class="page-lede">The county name, accent color and seal shown on every page and on the sign-in page. Anyone who can reach PADM sees them, before signing in.</p>
+    <p class="page-lede">The county name, accent color and seal shown on every page and on the sign-in page. Anyone who can reach PDMS sees them, before signing in.</p>
   </div>
 </header>
 {% endblock %}
@@ -11,7 +11,7 @@
 {% if confirm_reset %}
 <section class="panel" aria-labelledby="reset-h">
   <h2 id="reset-h">Reset branding to defaults?</h2>
-  <p>This clears the county name (PADM goes back to using “{{ config_name }}”), sets the accent color back to the default and removes the seal.</p>
+  <p>This clears the county name (PDMS goes back to using “{{ config_name }}”), sets the accent color back to the default and removes the seal.</p>
   <form method="post" action="/admin/branding/reset">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <button type="submit" class="button danger">Reset to defaults</button>
@@ -19,7 +19,7 @@
   </form>
 </section>
 {% else %}
-<p>These settings change how PADM looks for everyone. The seal and county name also appear on the sign-in page, which anyone who can reach PADM can see.</p>
+<p>These settings change how PDMS looks for everyone. The seal and county name also appear on the sign-in page, which anyone who can reach PDMS can see.</p>
 
 <section class="panel" aria-labelledby="name-h">
   <h2 id="name-h">Name and color</h2>
@@ -46,7 +46,7 @@
   {% if let Some(v) = seal_version %}
   <p><img class="seal-preview" src="/branding/seal?v={{ v }}" alt="Current seal" width="96" height="96">{% if let Some(i) = seal_info %} <span class="muted small">{{ i.0 }} × {{ i.1 }} pixels</span>{% endif %}</p>
   {% else %}
-  <p>No seal uploaded. PADM shows a plain mark.</p>
+  <p>No seal uploaded. PDMS shows a plain mark.</p>
   {% endif %}
   <form method="post" action="/admin/branding/seal" enctype="multipart/form-data" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
@@ -70,8 +70,8 @@
   <p class="help">Shows the saved colors.</p>
   <div class="sidebar branding-preview">
     <div class="brand">
-      {% if let Some(v) = seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="38" height="38">{% else %}<span class="mark" aria-hidden="true">PADM</span>{% endif %}
-      <span class="brand-text"><span class="product">PADM</span><span class="org">{{ l.org_name }}</span></span>
+      {% if let Some(v) = seal_version %}<img src="/branding/seal?v={{ v }}" alt="" width="38" height="38">{% else %}<span class="mark" aria-hidden="true">PDMS</span>{% endif %}
+      <span class="brand-text"><span class="product">PDMS</span><span class="org">{{ l.org_name }}</span></span>
     </div>
     <ul class="nav">
       <li><a href="/admin/branding" aria-current="page">Active item</a></li>

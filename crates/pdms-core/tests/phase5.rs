@@ -263,7 +263,7 @@ async fn county_wide_comments_are_owner_and_admin_only() {
         .unwrap();
     let (outsider, _) = user_in_new_department(&core, "HR", "outsider@x.org").await;
     let admin = make_admin(&core, "admin@x.org").await;
-    // An admin role scoped to one department is not a PADM administrator.
+    // An admin role scoped to one department is not a PDMS administrator.
     let dept_admin = directory::create_user(&core.db, &system(), "DA", "da@x.org", Some(dept))
         .await
         .unwrap();

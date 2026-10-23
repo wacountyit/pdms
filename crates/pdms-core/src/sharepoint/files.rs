@@ -150,7 +150,7 @@ pub(crate) async fn upload_staged(
                 .delete(&format!("/drives/{}/items/{}", r.drive_id, item.id))
                 .await;
             return Err(CoreError::internal(format!(
-                "SharePoint stored {} bytes with quickXorHash {remote:?}; PADM sent {size} bytes with {local}",
+                "SharePoint stored {} bytes with quickXorHash {remote:?}; PDMS sent {size} bytes with {local}",
                 item.size
             )));
         }
@@ -240,7 +240,7 @@ pub(crate) async fn record_upload(
 }
 
 /// Stream a version's file from SharePoint, checked against the SHA-256 and
-/// size PADM recorded. For a version that carried an earlier file forward,
+/// size PDMS recorded. For a version that carried an earlier file forward,
 /// the newest file at or before `version_no` is the one read. A mismatch ends
 /// the stream with an error (the client sees a failed download), marks the
 /// file `changed_outside`, and is audited.
@@ -340,7 +340,7 @@ fn verified(
                     return None;
                 }
                 let detail = format!(
-                    "read {} bytes with SHA-256 {}; PADM recorded {} bytes with {}",
+                    "read {} bytes with SHA-256 {}; PDMS recorded {} bytes with {}",
                     s.seen,
                     hex::encode(got),
                     s.size,
@@ -349,7 +349,7 @@ fn verified(
                 flag_changed(&s.db, s.document_id, &s.item_id, "download_check", &detail).await;
                 Some((
                     Err(std::io::Error::other(
-                        "the file in SharePoint was changed outside PADM; the download was stopped and an administrator was alerted",
+                        "the file in SharePoint was changed outside PDMS; the download was stopped and an administrator was alerted",
                     )),
                     s,
                 ))
@@ -358,7 +358,7 @@ fn verified(
     }))
 }
 
-/// Mark a SharePoint file as changed outside PADM and audit it, in one
+/// Mark a SharePoint file as changed outside PDMS and audit it, in one
 /// transaction. Failures to record are logged; the caller has already refused
 /// the content.
 pub(crate) async fn flag_changed(
@@ -368,7 +368,7 @@ pub(crate) async fn flag_changed(
     source: &str,
     detail: &str,
 ) {
-    tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PADM's record");
+    tracing::error!(%document_id, item_id, detail, "SharePoint file does not match PDMS's record");
     let r = async {
         let mut tx = db.begin().await?;
         sqlx::query!(

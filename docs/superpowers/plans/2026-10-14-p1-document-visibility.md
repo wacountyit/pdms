@@ -15,7 +15,7 @@
 
 **Tech Stack:** Rust 2024, Axum 0.8, SQLx 0.9 (`query!` macros with `.sqlx/` offline data), Askama 0.16, proptest, PostgreSQL 15/16.
 
-**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D7, §6 "Document visibility" and "Authorization rule changes"; decision D-085 in `docs/DECISIONS.md`. **Index:** [2026-10-14-padm-sharepoint-entra-index.md](2026-10-14-padm-sharepoint-entra-index.md) (contracts "Produced by P1").
+**Spec:** [docs/superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md](../specs/2026-10-14-sharepoint-storage-entra-sync-design.md) §2 D7, §6 "Document visibility" and "Authorization rule changes"; decision D-085 in `docs/DECISIONS.md`. **Index:** [2026-10-14-pdms-sharepoint-entra-index.md](2026-10-14-pdms-sharepoint-entra-index.md) (contracts "Produced by P1").
 
 ## Global Constraints
 

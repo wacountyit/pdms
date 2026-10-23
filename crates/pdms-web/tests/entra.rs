@@ -76,7 +76,7 @@ async fn the_status_panel_shows_the_certificate_thumbprint_and_last_run() {
     cfg.graph.tenant_id = "tenant-1".into();
     cfg.graph.client_id = "client-1".into();
     cfg.graph.certificate = Secret::new(
-        pdms_core::graph::cert::generate("PADM test", 30)
+        pdms_core::graph::cert::generate("PDMS test", 30)
             .unwrap()
             .pem,
     );

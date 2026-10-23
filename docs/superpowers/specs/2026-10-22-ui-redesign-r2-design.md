@@ -1,4 +1,4 @@
-# PADM UI redesign, round 2 (R2): design
+# PDMS UI redesign, round 2 (R2): design
 
 - **Date:** 2026-10-22
 - **Status:** Approved by the owner on 2026-10-22, built and merged
@@ -113,7 +113,7 @@ Each part is its own branch and PR, in the owner's order (§2, answer 3).
 Answer 3 did not place parts 7 to 9; this spec puts them after part 6
 (O-3). Dark mode comes last because it checks every finished screen in both
 modes once, instead of re-checking each screen as it is redesigned. Until
-part 9 merges, PADM stays light; from then on it is dark by default. Every
+part 9 merges, PDMS stays light; from then on it is dark by default. Every
 part before it uses only tokens (§10), so part 9 changes no layouts. Part 4
 is also what plan P4 waits for (ROADMAP §0.5), so P4 starts after parts 1 to
 4 are merged.
@@ -183,7 +183,7 @@ built from tokens: `.page-head`, `.page-lede`, `.page-actions`, `.empty`,
 where the everyday screens use `.page-head` and `.empty` first.
 
 When this pattern is merged, add a line to the plan index
-(`docs/superpowers/plans/2026-10-14-padm-sharepoint-entra-index.md`, under
+(`docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md`, under
 "Changes recorded when P4 was written") telling P4's `admin/sharepoint.html`
 to use it (brief §7).
 
@@ -541,9 +541,9 @@ they can open.
 - When a seal is set, every page (shell, sign-in, error page, and the
   inline `/source` and `/license` pages) links it as the icon:
   `<link rel="icon" href="/branding/seal?v=…">`. The seal is already public
-  (D-093), so nothing new is exposed. Browsers scale it; PADM does not
+  (D-093), so nothing new is exposed. Browsers scale it; PDMS does not
   resize images.
-- Without a seal, the icon is a generic "PADM" mark shipped in the binary as
+- Without a seal, the icon is a generic "PDMS" mark shipped in the binary as
   `static/icon.svg`, served like the other static files with long cache
   headers.
 - The version parameter changes with every seal change, so tabs update.

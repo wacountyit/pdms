@@ -3,7 +3,7 @@
 <header class="page-head">
   <div>
     <h1>{{ l.title }}</h1>
-    <p class="page-lede">What you can see in PADM, and the API tokens that let another system act as you.</p>
+    <p class="page-lede">What you can see in PDMS, and the API tokens that let another system act as you.</p>
   </div>
   {% if enabled %}<div class="page-actions"><a class="button primary" href="#new-token">{% include "icons/plus.html" %}New token</a></div>{% endif %}
 </header>
@@ -13,7 +13,7 @@
 <div class="doc-main">
 <section aria-labelledby="tokens-h" class="panel">
   <div class="panel-head"><h2 id="tokens-h">API tokens</h2><span class="muted small">{{ tokens.len() }}</span></div>
-  <p class="help">API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PADM API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
+  <p class="help">API tokens let another system (for example a records platform or a script) use the <a href="/api/docs">PDMS API</a> as you. A token can never do more than you can, and only what its scopes allow. Treat a token like a password; revoke it if it leaks or is no longer needed.</p>
   {% if !enabled %}<p class="flash flash-info" role="status">The API is turned off for this installation, so tokens cannot be created or used.</p>{% endif %}
   {% if tokens.is_empty() %}<p class="empty">You have no tokens.{% if enabled %} Create one below when another system needs to act as you.{% endif %}</p>{% else %}
   <div class="table-wrap">
