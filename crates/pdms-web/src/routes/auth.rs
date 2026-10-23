@@ -89,6 +89,7 @@ struct LoginPage<'a> {
     next: &'a str,
     next_encoded: String,
     local_enabled: bool,
+    sso_label: &'a str,
     totp_required: bool,
     error: Option<&'a str>,
     notice: Option<&'static str>,
@@ -124,6 +125,7 @@ fn render_login(
     }
     let next = safe_return_to(next);
     let branding = state.branding();
+    let sso_label = state.core.config().auth.oidc.display_name.clone();
     let page = LoginPage {
         org_name: &branding.org_name,
         theme_version: &branding.version,
@@ -132,6 +134,7 @@ fn render_login(
         next: &next,
         next_encoded: url::form_urlencoded::byte_serialize(next.as_bytes()).collect(),
         local_enabled: state.core.config().auth.local.enabled,
+        sso_label: &sso_label,
         totp_required: state.core.config().auth.local.require_totp,
         error,
         notice,
@@ -231,7 +234,7 @@ pub async fn oidc_start(
     Client(client): Client,
     Query(q): Query<NextQuery>,
 ) -> AppResult<Response> {
-    let Some(oidc) = state.oidc.clone() else {
+    let Some(oidc) = state.oidc() else {
         // The button is always shown; explain instead of a 404, and keep
         // where the person was going (only a safe local path survives).
         let next = safe_return_to(q.next.as_deref().unwrap_or("/"));
@@ -260,7 +263,7 @@ pub async fn oidc_callback(
     Client(client): Client,
     Query(q): Query<CallbackQuery>,
 ) -> AppResult<Response> {
-    let Some(oidc) = state.oidc.clone() else {
+    let Some(oidc) = state.oidc() else {
         return Err(pdms_core::CoreError::NotFound.into());
     };
     let mut cookie = read_login_cookie(&state, &jar);

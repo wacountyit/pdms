@@ -15,4 +15,5 @@ pub mod microsoft365;
 pub mod ops;
 pub mod schedule;
 pub mod sharepoint_admin;
+pub mod sign_in;
 pub mod workflow;

@@ -159,7 +159,10 @@ impl Layout {
         }
         let mut microsoft = Vec::new();
         if self.can_settings {
-            microsoft.push(link("microsoft-365", "Connection"));
+            microsoft.extend([
+                link("microsoft-365", "Connection"),
+                link("sign-in", "Sign-in"),
+            ]);
         }
         if self.can_directory {
             microsoft.push(link("entra", "Entra ID sync"));

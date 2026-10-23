@@ -98,6 +98,7 @@ DESKTOP_PAGES = [
     ("admin-sharepoint", "/admin/sharepoint"),
     # Added by S1 (settings in Administration).
     ("admin-microsoft-365", "/admin/microsoft-365"),
+    ("admin-sign-in", "/admin/sign-in"),
     ("error-404", "/documents/00000000-0000-0000-0000-000000000000"),
     ("source", "/source"),
     ("license", "/license"),

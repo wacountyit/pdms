@@ -11,6 +11,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum_extra::extract::Form;
 use pdms_authz::Capability;
 use pdms_core::CoreError;
+use pdms_core::auth::oidc_setup::is_guid;
 use pdms_core::graph::certs::{self, CertificateInfo};
 use pdms_core::settings::{self, Change, NewValue};
 use serde::Deserialize;
@@ -94,16 +95,6 @@ pub struct IdsForm {
     tenant_id: String,
     #[serde(default)]
     client_id: String,
-}
-
-/// `01234567-89ab-cdef-0123-456789abcdef`.
-fn is_guid(s: &str) -> bool {
-    let parts: Vec<&str> = s.split('-').collect();
-    parts.len() == 5
-        && parts
-            .iter()
-            .zip([8, 4, 4, 4, 12])
-            .all(|(p, n)| p.len() == n && p.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 pub async fn save(

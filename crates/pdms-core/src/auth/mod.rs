@@ -2,6 +2,7 @@
 // Copyright (C) 2026 PDMS contributors
 pub mod local;
 pub mod oidc;
+pub mod oidc_setup;
 pub mod password;
 pub mod principal;
 pub mod session;

@@ -678,7 +678,7 @@ impl EntraSyncConfig {
 }
 
 /// `https`, or plain `http` to this machine (tests and local mocks).
-fn https_or_loopback(s: &str) -> bool {
+pub(crate) fn https_or_loopback(s: &str) -> bool {
     Url::parse(s).is_ok_and(|u| u.scheme() == "https" || (u.scheme() == "http" && is_loopback(&u)))
 }
 

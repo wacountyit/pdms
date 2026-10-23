@@ -1064,6 +1064,23 @@ until it is on again. `[storage] backend` in the configuration file still
 wins (D-111), so the installer no longer writes `backend = "local"`, the
 default.
 
+### D-115 Microsoft sign-in is set up in Administration, and can't lock everyone out — Accepted (2026-10-23)
+**Administration → Microsoft 365 → Sign-in** (`manage_settings`) holds the
+sign-in settings: on or off, the tenant (the Entra issuer is built from it;
+another provider's issuer URL is accepted as it is), the client ID, the
+client secret (write-only, encrypted), the button label and account creation
+on first sign-in. Saving rebuilds the sign-in provider in this process at
+once, and in the other through the settings notice (D-112). If discovery
+fails, Microsoft sign-in is unavailable, the page shows why, PDMS retries
+every 5 minutes, and local sign-in keeps working; this replaces "disabled
+until the next restart" (D-021). The test reads the discovery document and
+checks the authorization request PDMS would build; it can't prove the secret
+or the redirect URI, which only Microsoft checks, so the page offers **Try
+sign-in** in a new tab. Lockout rule: with break-glass local sign-in on,
+every change can be saved; with it off (`[auth.local] enabled = false`, a
+file-only setting), Microsoft sign-in can't be turned off on the page and a
+change is saved only when it passes the test.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |

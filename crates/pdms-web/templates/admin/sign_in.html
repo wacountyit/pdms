@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Staff sign in to PDMS with their Microsoft work account. This uses its own app registration, "PDMS", not the PDMS Service app (ADMIN_GUIDE, "Microsoft Entra ID").</p>
+  </div>
+  {% if working %}
+  <div class="page-actions">
+    <a class="button" href="/auth/oidc/start?next=/admin/sign-in" target="_blank" rel="noopener">Try sign-in<span class="visually-hidden"> (opens in a new tab)</span></a>
+  </div>
+  {% endif %}
+</header>
+{% endblock %}
+{% block content %}
+{% if working %}<p class="flash flash-ok" role="status">Microsoft sign-in is on.</p>
+{% else if enabled %}<p class="flash flash-error" role="alert">Microsoft sign-in is on but unavailable{% if !error.is_empty() %}: {{ error }}{% endif %}. PDMS tries again every 5 minutes. {% if local_enabled %}Local sign-in keeps working.{% endif %}</p>
+{% else %}<p class="flash flash-info" role="status">Microsoft sign-in is off.{% if local_enabled %} Staff sign in with local accounts.{% endif %}</p>{% endif %}
+{% if !local_enabled %}<p class="flash flash-info" role="status">Local sign-in is off in the configuration file, so Microsoft sign-in can't be turned off here, and a change is saved only when it passes the test.</p>{% endif %}
+
+<section class="panel" aria-labelledby="redirect-h">
+  <div class="panel-head"><h2 id="redirect-h">Redirect URI</h2></div>
+  <p class="help">Add this address under <strong>Authentication → Web → Redirect URIs</strong> in the app registration, exactly as shown. It comes from <code>[server] public_url</code>: if staff open PDMS on another address or port, change that setting first, then register the new address.</p>
+  <div class="grid-form">
+    <label for="si-redirect">Redirect URI</label>
+    <input id="si-redirect" value="{{ redirect_uri }}" size="60" readonly spellcheck="false">
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2></div>
+  <p class="help">From the app registration's <strong>Overview</strong> page in the Entra admin center. <strong>Test</strong> reads Microsoft's sign-in configuration for what you typed and checks the request PDMS would send, without saving anything or signing anyone in.</p>
+  <form method="post" action="/admin/sign-in" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="enabled" value="true"{% if on %} checked{% endif %}{% if enabled_locked %} disabled{% endif %}> Staff can sign in with Microsoft</label>
+    {% if enabled_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="si-tenant">Directory (tenant) ID</label>
+    <div><input id="si-tenant" name="tenant" value="{{ tenant }}" size="44" autocomplete="off" spellcheck="false" aria-describedby="si-tenant-help"{% if issuer_locked %} disabled{% endif %}>
+    <p class="help" id="si-tenant-help">For another OpenID Connect provider, its issuer URL.{% if issuer_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <label for="si-client">Application (client) ID</label>
+    <div><input id="si-client" name="client_id" value="{{ client_id }}" maxlength="100" size="44" autocomplete="off" spellcheck="false"{% if client_locked %} disabled aria-describedby="si-client-locked"{% endif %}>
+    {% if client_locked %}<p class="help" id="si-client-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="si-secret">Client secret</label>
+    <div><input id="si-secret" name="client_secret" type="password" size="44" autocomplete="new-password" aria-describedby="si-secret-help"{% if secret_locked %} disabled{% endif %}>
+    <p class="help" id="si-secret-help">{% if secret_locked %}Set in the configuration file, so it can't be changed here.{% else if secret_saved %}A secret is saved; leave this empty to keep it. Client secrets expire: add the new one here before the old one runs out.{% else %}From <strong>Certificates &amp; secrets → Client secrets</strong>. PDMS stores it encrypted and never shows it again.{% endif %}</p></div>
+    <label for="si-label">Button label</label>
+    <div><input id="si-label" name="display_name" value="{{ display_name }}" maxlength="60" size="20" aria-describedby="si-label-help"{% if display_locked %} disabled{% endif %}>
+    <p class="help" id="si-label-help">The sign-in page shows "Sign in with {{ display_name }}".{% if display_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="auto_provision" value="true"{% if auto_provision %} checked{% endif %}{% if provision_locked %} disabled{% endif %}> Create an account the first time someone signs in</label>
+    <p class="help">New accounts start with no access. With the Entra ID user sync on, accounts come from the sync instead.{% if provision_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button><button type="submit" class="button" formaction="/admin/sign-in/test">Test</button></div>
+  </form>
+  {% if let Some(t) = test %}
+  <h3>Test result</h3>
+  <div role="status">
+  <ul class="checklist">
+    {% for (ok, line) in t.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
+  </ul>
+  {% if t.ok %}<p>Save to use these settings. Enter the client secret again before saving if you typed a new one.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

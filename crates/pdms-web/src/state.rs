@@ -12,6 +12,7 @@ use governor::{DefaultKeyedRateLimiter, Quota, RateLimiter};
 use metrics_exporter_prometheus::PrometheusHandle;
 use pdms_core::Core;
 use pdms_core::auth::oidc::OidcProvider;
+use pdms_core::auth::oidc_setup;
 use pdms_core::branding::{Branding, ThemeColors};
 use sha2::{Digest, Sha256};
 
@@ -136,12 +137,27 @@ impl CookieNames {
     }
 }
 
+/// How often a sign-in provider that failed to start is tried again.
+pub const OIDC_RETRY: Duration = Duration::from_secs(300);
+
+/// The Microsoft sign-in provider, rebuilt when its settings change (S1).
+#[derive(Default)]
+struct OidcSlot {
+    provider: Option<Arc<OidcProvider>>,
+    /// Why it isn't available, when it is on.
+    error: Option<String>,
+    /// [`oidc_setup::fingerprint`] of the settings it was built from.
+    built_from: String,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub core: Core,
     pub cookie_key: Key,
     pub cookies: CookieNames,
-    pub oidc: Option<Arc<OidcProvider>>,
+    oidc: Arc<RwLock<OidcSlot>>,
+    /// One rebuild at a time.
+    oidc_rebuild: Arc<tokio::sync::Mutex<()>>,
     pub login_limiter: Arc<DefaultKeyedRateLimiter<IpAddr>>,
     /// Per API token.
     pub api_limiter: Arc<DefaultKeyedRateLimiter<uuid::Uuid>>,
@@ -163,7 +179,16 @@ impl AppState {
         AppState {
             cookie_key: Key::from(core.keys.cookie_key()),
             cookies: CookieNames::new(cfg.server.secure_cookies),
-            oidc: oidc.map(Arc::new),
+            oidc: Arc::new(RwLock::new(OidcSlot {
+                built_from: if oidc.is_some() {
+                    oidc_setup::fingerprint(&cfg.auth.oidc, &cfg.server.public_url)
+                } else {
+                    String::new()
+                },
+                provider: oidc.map(Arc::new),
+                error: None,
+            })),
+            oidc_rebuild: Arc::new(tokio::sync::Mutex::new(())),
             login_limiter: Arc::new(RateLimiter::keyed(Quota::per_minute(per_minute))),
             api_limiter: Arc::new(RateLimiter::keyed(Quota::per_minute(
                 NonZeroU32::new(cfg.api.requests_per_minute.max(1)).unwrap_or(NonZeroU32::MIN),
@@ -184,6 +209,83 @@ impl AppState {
             branding_loads: Arc::new(AtomicU64::new(0)),
             core,
         }
+    }
+
+    /// The Microsoft sign-in provider, when it is on and working.
+    pub fn oidc(&self) -> Option<Arc<OidcProvider>> {
+        self.oidc
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .provider
+            .clone()
+    }
+
+    /// Why Microsoft sign-in is unavailable although it is on.
+    pub fn oidc_error(&self) -> Option<String> {
+        self.oidc
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .error
+            .clone()
+    }
+
+    /// Rebuild the sign-in provider if its settings changed since it was
+    /// built, or, with `retry`, if it failed last time (Microsoft could not
+    /// be reached). Until a rebuild succeeds, the old provider keeps working
+    /// only if its settings are still the current ones; local sign-in is
+    /// never affected (D-021).
+    pub async fn refresh_oidc(&self, retry: bool) {
+        let _one = self.oidc_rebuild.lock().await;
+        let cfg = self.core.config();
+        let want = oidc_setup::fingerprint(&cfg.auth.oidc, &cfg.server.public_url);
+        {
+            let slot = self.oidc.read().unwrap_or_else(PoisonError::into_inner);
+            if slot.built_from == want && !(retry && slot.error.is_some()) {
+                return;
+            }
+        }
+        let (provider, error) = if !cfg.auth.oidc.enabled {
+            (None, None)
+        } else {
+            match OidcProvider::discover(&cfg.auth.oidc, &cfg.server.public_url).await {
+                Ok(p) => {
+                    tracing::info!("Microsoft sign-in is ready");
+                    (Some(Arc::new(p)), None)
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "OIDC discovery failed; Microsoft sign-in is unavailable, retrying every 5 minutes");
+                    (None, Some(e.to_string()))
+                }
+            }
+        };
+        *self.oidc.write().unwrap_or_else(PoisonError::into_inner) = OidcSlot {
+            provider,
+            error,
+            built_from: want,
+        };
+    }
+
+    /// Keep the sign-in provider in step with the settings: rebuild it after
+    /// each settings change, and retry a failed one every [`OIDC_RETRY`].
+    pub fn spawn_oidc_watch(&self, mut settings: tokio::sync::watch::Receiver<i64>) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            let mut retry = tokio::time::interval(OIDC_RETRY);
+            retry.tick().await;
+            let mut open = true;
+            loop {
+                tokio::select! {
+                    changed = settings.changed(), if open => {
+                        if changed.is_err() {
+                            open = false;
+                            continue;
+                        }
+                        state.refresh_oidc(false).await;
+                    }
+                    _ = retry.tick() => state.refresh_oidc(true).await,
+                }
+            }
+        });
     }
 
     /// The cached branding.

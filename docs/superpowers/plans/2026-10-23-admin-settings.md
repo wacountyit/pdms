@@ -134,6 +134,14 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 
 ## Phase 4: Microsoft sign-in
 
+> **As built (2026-10-23):**
+> - Core: `auth::oidc_setup` (`issuer_for`, `tenant_of`, `is_guid`, `redirect_uri`, `fingerprint`, `candidate`, `test`, `save`). The tenant field also takes an issuer URL (https, or http on this machine), so other OpenID Connect providers and the mock provider in the tests work.
+> - The test checks the discovery document and the client ID and redirect URI in the authorization request; it can't check the secret, so a secret is required and **Try sign-in** proves the rest.
+> - Lockout rule as in the spec, made precise: with local sign-in on, anything can be saved; with it off, turning Microsoft sign-in off is refused and a change must pass the test (D-115). `auth.local.enabled` stays file-only.
+> - Web: `AppState` keeps the provider in a slot with the fingerprint of the settings it was built from (`oidc()`, `oidc_error()`, `refresh_oidc(retry)`, `spawn_oidc_watch`). A settings change rebuilds it only when a sign-in setting or the public URL changed; a failed discovery is retried every 5 minutes. `serve` builds it through the slot instead of before `AppState`.
+> - The login button reads "Sign in with {button label}".
+> - Tests: `tests/sign_in_settings.rs` (6, core); in `pdms-web/tests/oidc.rs`, turning sign-in on and off against the mock provider without a restart; the page is in the admin-pattern test and the screenshot list.
+
 - **Page `/admin/sign-in`** (`ManageSettings`): on or off, tenant ID (the issuer `https://login.microsoftonline.com/<tenant>/v2.0` is built from it; a full issuer URL is shown read-only when the file sets one), client ID, client secret (write-only), button label, create accounts on first sign-in. The redirect URI is shown with a copy-friendly field and a note about the port.
 - **Test:** fetch the discovery document for the form's values and check that the client ID is accepted (an authorization request URL is built and checked for the expected parameters; no sign-in happens). **Try sign-in** opens Microsoft's sign-in in a new tab, using the saved settings.
 - **Live:** `AppState.oidc` becomes swappable (`RwLock<Option<Arc<OidcProvider>>>`). The web server rebuilds it when the settings version changes. If discovery fails, Microsoft sign-in shows as unavailable, with the error on the page, and local sign-in keeps working.

@@ -423,3 +423,94 @@ async fn idp_mappings_page_says_they_are_not_applied_while_syncing() {
         assert_eq!(page.body.contains(notice), on, "sync on: {on}");
     }
 }
+
+#[tokio::test]
+async fn administrators_turn_microsoft_sign_in_on_without_a_restart() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let (_idp, issuer) = mock_idp(serde_json::json!({ "oid": "o-1" })).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/sign-in").await;
+    assert_eq!(page.status, 200);
+    assert!(page.body.contains("Microsoft sign-in is off."));
+    assert!(
+        page.body.contains("/auth/oidc/callback"),
+        "the redirect URI"
+    );
+    assert!(
+        page.body.contains(r#"href="/admin/sign-in""#),
+        "in the admin menu"
+    );
+    let csrf = page.csrf();
+    let fields = |tenant: &str| {
+        vec![
+            ("_csrf", csrf.clone()),
+            ("enabled", "true".into()),
+            ("tenant", tenant.to_owned()),
+            ("client_id", CLIENT_ID.into()),
+            ("client_secret", "pdms-secret-42".into()),
+            ("display_name", "Contoso".into()),
+            ("auto_provision", "true".into()),
+        ]
+    };
+
+    // The test reads the provider's configuration and saves nothing.
+    let r = post(&mut b, "/admin/sign-in/test", fields(&issuer)).await;
+    assert_eq!(r.status, 200);
+    assert!(
+        r.body.contains("Read the sign-in configuration."),
+        "{}",
+        r.body
+    );
+    assert!(
+        !r.body.contains("pdms-secret-42"),
+        "the secret is never sent back"
+    );
+    assert!(!app.core.config().auth.oidc.enabled);
+    let r = post(
+        &mut b,
+        "/admin/sign-in/test",
+        fields("http://127.0.0.1:9/nobody"),
+    )
+    .await;
+    assert!(
+        r.body.contains("couldn&#39;t read") || r.body.contains("couldn't read"),
+        "{}",
+        r.body
+    );
+
+    // Before saving, the button explains that sign-in isn't set up.
+    let r = b.get("/auth/oidc/start").await;
+    assert!(r.location().contains("notice=sso_off"), "{}", r.location());
+
+    let r = post(&mut b, "/admin/sign-in", fields(&issuer)).await;
+    assert!(r.status.is_redirection(), "{}", r.status);
+    let page = b.get("/admin/sign-in").await;
+    assert!(
+        page.body.contains("Microsoft sign-in is on."),
+        "{}",
+        page.body
+    );
+    assert!(page.body.contains("Try sign-in"));
+    assert!(!page.body.contains("pdms-secret-42"));
+
+    // Applied without a restart: the button now goes to the provider.
+    let r = b.get("/auth/oidc/start").await;
+    assert!(r.location().starts_with(&issuer), "{}", r.location());
+    assert!(r.location().contains(&format!("client_id={CLIENT_ID}")));
+    let login = Browser::new(&app).get("/login").await;
+    assert!(login.body.contains("Sign in with Contoso"));
+
+    // Turned off again, the button explains instead.
+    let mut off = fields(&issuer);
+    off.retain(|(k, _)| *k != "enabled");
+    post(&mut b, "/admin/sign-in", off).await;
+    let r = b.get("/auth/oidc/start").await;
+    assert!(r.location().contains("notice=sso_off"), "{}", r.location());
+}
+
+async fn post(b: &mut Browser, path: &str, f: Vec<(&str, String)>) -> Resp {
+    let f: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    b.post(path, &f).await
+}

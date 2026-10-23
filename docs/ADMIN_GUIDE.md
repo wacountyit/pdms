@@ -65,10 +65,11 @@ the installer adds your proxy's IP, `127.0.0.1`, and the Docker range
    - Redirect URI (Web): `https://<your-public-url>/auth/oidc/callback`.
      It must match PDMS's address exactly, including any port: with Caddy
      on port 444, for example, it is
-     `https://10.0.0.5:444/auth/oidc/callback`. The installer prints the exact
-     value, during the sign-in questions and again at the end.
-2. **Certificates & secrets → New client secret.** Copy the value into
-   `secrets/oidc_client_secret` (no trailing newline needed).
+     `https://10.0.0.5:444/auth/oidc/callback`. **Administration → Microsoft
+     365 → Sign-in** shows the exact value to copy, and the installer prints
+     it at the end.
+2. **Certificates & secrets → New client secret.** Copy the value; you enter
+   it in step 6.
 3. **Token configuration → Add groups claim → Security groups**, emitted as
    **Group ID** in the ID token. This drives automatic department and role
    assignment through identity provider mappings. Skip this step if you will
@@ -78,18 +79,30 @@ the installer adds your proxy's IP, `127.0.0.1`, and the Docker range
    delegated). Grant admin consent.
 5. Optional: under **Enterprise applications → (your app) → Properties**, set
    *Assignment required* to Yes and assign the groups that may use the system.
-6. Edit `config/pdms.toml`:
+6. Sign in to PDMS with a break-glass local account and open
+   **Administration → Microsoft 365 → Sign-in**. Enter the directory (tenant)
+   ID, the application (client) ID and the client secret, and tick **Staff
+   can sign in with Microsoft**. **Test** reads Microsoft's sign-in
+   configuration for the tenant and checks the request PDMS would send,
+   without saving anything or signing anyone in. Then choose **Save**: it
+   applies at once, without a restart.
+7. Choose **Try sign-in**. It opens Microsoft's sign-in in a new tab; sign in
+   with your work account to prove the whole flow, including the redirect
+   URI and the secret, which only Microsoft can check. The sign-in page shows
+   **Sign in with Microsoft** (the **Button label** sets the last word).
 
-   ```toml
-   [auth.oidc]
-   enabled = true
-   issuer_url = "https://login.microsoftonline.com/<tenant-id>/v2.0"
-   client_id = "<application (client) ID>"
-   display_name = "Microsoft"
-   ```
+The client secret is stored encrypted in the database and never shown again.
+Client secrets expire (at most two years in Entra): add the new one on the
+page before the old one runs out; leaving the field empty keeps the saved
+one. The same values can still be set in `[auth.oidc]` in `config/pdms.toml`
+and `secrets/oidc_client_secret`; there they win and show read-only on the
+page. For another OpenID Connect provider, enter its issuer URL in the
+tenant field.
 
-7. `docker compose up -d app` to restart. The sign-in page now shows **Sign in
-   with Microsoft**.
+**Lockout rule (D-115):** while break-glass local sign-in is on, any change
+can be saved, because local sign-in keeps working if Microsoft sign-in
+breaks. With `[auth.local] enabled = false`, Microsoft sign-in can't be
+turned off on the page, and a change is saved only if it passes the test.
 
 Users are identified by their Entra **object ID** (`oid`), never by email, so
 renaming an email address does not create a duplicate account. An existing
@@ -107,13 +120,14 @@ people can sign in.
 
 **"AADSTS50011: The redirect URI … does not match"** means the app
 registration does not list the address PDMS sent. Copy the URI from the
-error message (or from the installer's summary) into **App registrations →
+error message (or from the Sign-in page) into **App registrations →
 (your app) → Authentication → Web → Redirect URIs**, save, and sign in again.
 It changes whenever PDMS's address changes (`./install.sh --configure
 network`), for example when Caddy moves to another port.
 
-If Entra is unreachable when the app starts, single sign-on is disabled until
-the next restart (the log says so) and break-glass sign-in keeps working.
+If Entra is unreachable when the app starts, or after a change, Microsoft
+sign-in is unavailable and the Sign-in page shows why; PDMS tries again every
+5 minutes, and break-glass sign-in keeps working.
 
 **Users in more than 200 groups:** Entra then omits the groups claim. PDMS
 leaves those users' synced memberships unchanged and logs a warning. Graph-based

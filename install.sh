@@ -558,7 +558,8 @@ if needs sso auth.oidc; then
     tenant=""
   else
     note "Users sign in with their organization accounts. Leave the tenant blank to skip"
-    note "(the local administrator still works) and add it later with --configure sso."
+    note "(the local administrator still works) and set it up later on the admin page"
+    note "Administration -> Microsoft 365 -> Sign-in, which can also test it."
     note "First register an app in the Entra admin center (App registrations), and under"
     note "Authentication add a platform of type Web with exactly this redirect URI:"
     note ""
@@ -589,7 +590,7 @@ EOF
   else
     write_block sso <<'EOF'
 [auth.oidc]
-# Not set up. Run ./install.sh --configure sso to add Microsoft Entra ID sign-in.
+# Not set up here: use Administration -> Microsoft 365 -> Sign-in (or --configure sso).
 enabled = false
 EOF
   fi
@@ -882,7 +883,8 @@ esac
 if sso_enabled; then
   echo
   echo "   Microsoft sign-in: the Entra app registration must list this redirect URI"
-  echo "   (Authentication -> Web), exactly as written, including the port:"
+  echo "   (Authentication -> Web), exactly as written, including the port (also shown on"
+  echo "   Administration -> Microsoft 365 -> Sign-in):"
   echo "     $(redirect_uri)"
   if $NETWORK_CHANGED; then
     warn "the address changed in this run. Add the new redirect URI above to the app"

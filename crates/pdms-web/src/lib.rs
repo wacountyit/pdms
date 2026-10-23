@@ -60,7 +60,7 @@ pub fn router(state: AppState) -> Router {
     }
     use routes::{
         admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
-        integrations, microsoft365, ops, schedule, sharepoint_admin, workflow,
+        integrations, microsoft365, ops, schedule, sharepoint_admin, sign_in, workflow,
     };
 
     let admin_routes = Router::new()
@@ -130,6 +130,8 @@ pub fn router(state: AppState) -> Router {
             get(microsoft365::page).post(microsoft365::save),
         )
         .route("/microsoft-365/test", post(microsoft365::test))
+        .route("/sign-in", get(sign_in::page).post(sign_in::save))
+        .route("/sign-in/test", post(sign_in::test))
         .route("/microsoft-365/certificates", post(microsoft365::generate))
         .route(
             "/microsoft-365/certificates/{id}/activate",

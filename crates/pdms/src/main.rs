@@ -8,7 +8,6 @@ use std::process::ExitCode;
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
-use pdms_core::auth::oidc::OidcProvider;
 use pdms_core::auth::totp;
 use pdms_core::config::LogFormat;
 use pdms_core::model::UserStatus;
@@ -482,18 +481,6 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
         );
     }
 
-    let oidc = if cfg.auth.oidc.enabled {
-        match OidcProvider::discover(&cfg.auth.oidc, &cfg.server.public_url).await {
-            Ok(p) => Some(p),
-            Err(e) => {
-                tracing::error!(error = %e, "OIDC discovery failed; single sign-on is unavailable until restart");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
     let (tx, rx) = watch::channel(false);
     // Settings changed in Administration apply to this process at once (S1).
     let settings = pdms_core::settings::watch(core.clone());
@@ -505,7 +492,11 @@ async fn serve(config: Config, with_worker: bool) -> anyhow::Result<()> {
         ))
     });
 
-    let state = pdms_web::AppState::new(core, oidc, metrics);
+    let state = pdms_web::AppState::new(core, None, metrics);
+    // Microsoft sign-in: discovered now, rebuilt when its settings change,
+    // and retried while Microsoft can't be reached.
+    state.refresh_oidc(false).await;
+    state.spawn_oidc_watch(settings.clone());
     state.reload_branding().await;
     let app = pdms_web::router(state);
     let listener = tokio::net::TcpListener::bind(cfg.server.bind)
