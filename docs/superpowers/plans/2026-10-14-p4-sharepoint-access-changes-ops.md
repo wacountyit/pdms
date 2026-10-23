@@ -2689,7 +2689,9 @@ git commit -m "sharepoint: flag files changed outside PDMS and list untracked fi
   - `pub async fn recheck(core: &Core, ctx: &Ctx, version_id: Uuid) -> CoreResult<bool>` (true when the file matches again);
   - `pub async fn dismiss_unexpected(core: &Core, ctx: &Ctx, item_id: &str) -> CoreResult<()>`.
 
-- [ ] **Step 1: Write the failing tests.** Add `use pdms_core::sharepoint::resolve;` to the imports of `crates/pdms-core/tests/sharepoint_ops.rs`, and append:
+> **As built (2026-10-23):** every Microsoft Graph call in `resolve.rs` maps its failure through `sharepoint::unavailable(MOVE_UNAVAILABLE, …)`, so an outage shows "…so the change was not made" instead of an error page (D-102); a SharePoint outage while `status::parts` resolves the library is mapped the same way. The tests reuse the `read_all` helper from Task 4 (it returns a `Result`). Extra test: `a_sharepoint_outage_while_resolving_changes_nothing`.
+
+- [x] **Step 1: Write the failing tests.** Add `use pdms_core::sharepoint::resolve;` to the imports of `crates/pdms-core/tests/sharepoint_ops.rs`, and append:
 
 ```rust
 async fn read_all(mut s: pdms_storage::ByteStream) -> Vec<u8> {
@@ -2818,7 +2820,7 @@ async fn dismissed_untracked_files_leave_the_list() {
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: compile error `could not find resolve in sharepoint`.
 
-- [ ] **Step 2: Implement `resolve.rs`.** Create `crates/pdms-core/src/sharepoint/resolve.rs`:
+- [x] **Step 2: Implement `resolve.rs`.** Create `crates/pdms-core/src/sharepoint/resolve.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -3134,12 +3136,12 @@ pub async fn dismiss_unexpected(core: &Core, ctx: &Ctx, item_id: &str) -> CoreRe
 
 In `sharepoint/mod.rs`, add `pub mod resolve;`.
 
-- [ ] **Step 3: Run the tests and confirm they pass.**
+- [x] **Step 3: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: the five new tests and all earlier ones `... ok`.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -3176,7 +3178,9 @@ What is checked:
 
 Any file still flagged by the change check is reported too.
 
-- [ ] **Step 1: Write the failing test.** Add `use pdms_core::integrity;` to the imports of `crates/pdms-core/tests/sharepoint_ops.rs`, and append:
+> **As built (2026-10-23):** `files_checked` now counts local and S3 files with its own counter (P3 subtracted the skipped SharePoint files); P3's `sharepoint_files_skipped` audit context is replaced by `sharepoint_files_checked` and `sharepoint_downloaded`; the `Problem.kind` doc comment lists `sharepoint_file`; the hash comparison uses `h.finalize()[..]` (`as_slice` is deprecated). ADMIN_GUIDE and BACKUP.md describe the new checks and `--rehash-sharepoint` now, in the same commit.
+
+- [x] **Step 1: Write the failing test.** Add `use pdms_core::integrity;` to the imports of `crates/pdms-core/tests/sharepoint_ops.rs`, and append:
 
 ```rust
 #[tokio::test]
@@ -3215,7 +3219,7 @@ In P3's `crates/pdms-core/tests/sharepoint.rs`, rename `integrity_check_leaves_s
 Run: `cargo test -p pdms-core --test sharepoint_ops verify_integrity`
 Expected: compile error `no field sharepoint_files_checked` / `cannot find verify_with`.
 
-- [ ] **Step 2: Implement.** In `crates/pdms-core/src/integrity.rs`:
+- [x] **Step 2: Implement.** In `crates/pdms-core/src/integrity.rs`:
 
 (a) Add to the imports:
 
@@ -3410,7 +3414,7 @@ In `crates/pdms/src/main.rs`:
                 }
 ```
 
-- [ ] **Step 3: Run the tests and confirm they pass.**
+- [x] **Step 3: Run the tests and confirm they pass.**
 
 ```bash
 cargo test -p pdms-core --test sharepoint_ops verify_integrity
@@ -3421,7 +3425,7 @@ cargo run -q -p pdms -- verify-integrity --help | grep rehash-sharepoint
 
 Expected: tests `ok`; the help line `--rehash-sharepoint  Also download every file stored in SharePoint and re-hash it with SHA-256 (slow)`.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets

@@ -4,16 +4,20 @@
 //! database and the file store agree and that nothing was altered.
 //!
 //! - every stored file referenced by the database exists, has the recorded
-//!   size, and still hashes to its SHA-256;
+//!   size, and still hashes to its SHA-256 (files in SharePoint: present, the
+//!   right size and QuickXorHash, and with `--rehash-sharepoint` downloaded
+//!   and re-hashed);
 //! - every export package is present and intact;
 //! - every document version points at a recorded file;
 //! - the audit hash chain is unbroken.
 //!
 //! The run itself is recorded in the audit log.
 
+use futures_util::StreamExt;
 use pdms_audit::{AuditEvent, Category, Outcome};
 use pdms_storage::BlobHash;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::Core;
 use crate::context::Ctx;
@@ -21,7 +25,7 @@ use crate::error::CoreResult;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Problem {
-    /// `file`, `export_package`, `version`, or `audit`.
+    /// `file`, `sharepoint_file`, `export_package`, `version`, or `audit`.
     pub kind: &'static str,
     pub subject: String,
     pub detail: String,
@@ -38,9 +42,10 @@ pub struct IntegrityReport {
     pub problems: Vec<Problem>,
     /// File contents were not re-hashed (`--skip-files`); presence and size were checked.
     pub contents_skipped: bool,
-    /// Files stored in SharePoint. They are checked against SharePoint by the
-    /// change check (P4), not re-read here, and not counted in `files_checked`.
-    pub sharepoint_files_skipped: u64,
+    /// Files stored in SharePoint, checked against SharePoint's metadata (and,
+    /// with `download_sharepoint`, by downloading them). Not counted in
+    /// `files_checked`, which counts local and S3 files.
+    pub sharepoint_files_checked: u64,
 }
 
 impl IntegrityReport {
@@ -88,20 +93,148 @@ async fn check_blob(
     Ok(())
 }
 
+/// What `verify_with` checks beyond presence and size.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct VerifyOptions {
+    /// Re-read local files (SHA-256); compare SharePoint files' QuickXorHash.
+    pub rehash: bool,
+    /// Also download every SharePoint file and compare SHA-256 (slow).
+    pub download_sharepoint: bool,
+}
+
 /// Run every check. `rehash = false` checks presence and size only (fast).
 pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
+    verify_with(
+        core,
+        VerifyOptions {
+            rehash,
+            download_sharepoint: false,
+        },
+    )
+    .await
+}
+
+/// Check every file PDMS stored in SharePoint against Graph's metadata and,
+/// optionally, its content. Problems are collected, never fatal.
+async fn check_sharepoint(
+    core: &Core,
+    opts: VerifyOptions,
+    out: &mut Vec<Problem>,
+    bytes: &mut u64,
+) -> CoreResult<u64> {
+    let rows = sqlx::query!(
+        r#"SELECT f.drive_id, f.item_id, f.quick_xor_hash, f.size, f.state, f.last_known_path,
+                  v.blob_sha256 AS "sha256!"
+             FROM sharepoint_files f JOIN document_versions v ON v.id = f.document_version_id
+            ORDER BY f.uploaded_at"#
+    )
+    .fetch_all(&core.db)
+    .await?;
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let Some(graph) = core.graph.as_ref() else {
+        out.push(Problem {
+            kind: "sharepoint_file",
+            subject: "SharePoint".into(),
+            detail: format!(
+                "{} files are stored in SharePoint, but Microsoft Graph is not configured, so they cannot be checked",
+                rows.len()
+            ),
+        });
+        return Ok(0);
+    };
+    for r in &rows {
+        let problem = |detail: String| Problem {
+            kind: "sharepoint_file",
+            subject: r.last_known_path.clone(),
+            detail,
+        };
+        if r.state != "ok" {
+            out.push(problem(format!(
+                "flagged as {} (Administration → SharePoint)",
+                r.state.replace('_', " ")
+            )));
+        }
+        let path = format!(
+            "/drives/{}/items/{}?$select=id,size,file",
+            r.drive_id, r.item_id
+        );
+        let item = match graph
+            .get::<crate::sharepoint::changes::DriveItem>(&path)
+            .await
+        {
+            Ok(i) => i,
+            Err(crate::graph::GraphError::NotFound) => {
+                out.push(problem("missing from SharePoint".into()));
+                continue;
+            }
+            Err(e) => {
+                out.push(problem(format!("could not be read: {e}")));
+                continue;
+            }
+        };
+        *bytes += u64::try_from(r.size).unwrap_or(0);
+        if item.size != Some(r.size) {
+            out.push(problem(format!(
+                "size is {} bytes, expected {}",
+                item.size.unwrap_or(-1),
+                r.size
+            )));
+            continue;
+        }
+        if opts.rehash && item.quick_xor_hash() != Some(r.quick_xor_hash.as_str()) {
+            out.push(problem(
+                "content changed (QuickXorHash differs from the upload)".into(),
+            ));
+        }
+        if opts.download_sharepoint {
+            let url = format!("/drives/{}/items/{}/content", r.drive_id, r.item_id);
+            match graph.download(&url).await {
+                Ok(mut s) => {
+                    let mut h = Sha256::new();
+                    let mut failed = None;
+                    while let Some(c) = s.next().await {
+                        match c {
+                            Ok(c) => h.update(&c),
+                            Err(e) => {
+                                failed = Some(e.to_string());
+                                break;
+                            }
+                        }
+                    }
+                    match failed {
+                        Some(e) => out.push(problem(format!("could not be read: {e}"))),
+                        None if h.finalize()[..] != r.sha256[..] => {
+                            out.push(problem("content does not match its SHA-256".into()));
+                        }
+                        None => {}
+                    }
+                }
+                Err(e) => out.push(problem(format!("could not be read: {e}"))),
+            }
+        }
+    }
+    Ok(u64::try_from(rows.len()).unwrap_or(u64::MAX))
+}
+
+/// Run every check with the given options.
+pub async fn verify_with(core: &Core, opts: VerifyOptions) -> CoreResult<IntegrityReport> {
+    let rehash = opts.rehash;
     let mut problems = Vec::new();
     let blobs =
         sqlx::query!("SELECT sha256, size_bytes, storage_backend FROM blobs ORDER BY created_at")
             .fetch_all(&core.db)
             .await?;
     let mut bytes = 0u64;
-    let mut sharepoint_files_skipped = 0u64;
+    let mut files_checked = 0u64;
     for b in &blobs {
+        // SharePoint files are checked by `check_sharepoint`, never looked
+        // for in local storage.
         if b.storage_backend == "sharepoint" {
-            sharepoint_files_skipped += 1;
             continue;
         }
+        files_checked += 1;
         let Some(hash) = BlobHash::from_slice(&b.sha256) else {
             problems.push(Problem {
                 kind: "file",
@@ -142,6 +275,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
             }),
         }
     }
+    let sharepoint_files_checked = check_sharepoint(core, opts, &mut problems, &mut bytes).await?;
     let versions = sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM document_versions"#)
         .fetch_one(&core.db)
         .await?;
@@ -175,7 +309,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
         });
     }
     let report = IntegrityReport {
-        files_checked: blobs.len() as u64 - sharepoint_files_skipped,
+        files_checked,
         bytes_checked: bytes,
         packages_checked: packages.len() as u64,
         versions_checked: u64::try_from(versions).unwrap_or(0),
@@ -183,7 +317,7 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
         audit_last_seq: audit.last.seq,
         problems,
         contents_skipped: !rehash,
-        sharepoint_files_skipped,
+        sharepoint_files_checked,
     };
     let ctx = Ctx::system("verify-integrity");
     let mut e = AuditEvent::new(
@@ -205,11 +339,12 @@ pub async fn verify(core: &Core, rehash: bool) -> CoreResult<IntegrityReport> {
         "audit_entries_checked",
         i64::try_from(report.audit_entries_checked).unwrap_or(i64::MAX),
     )
-    .context(
-        "sharepoint_files_skipped",
-        i64::try_from(report.sharepoint_files_skipped).unwrap_or(i64::MAX),
-    )
     .context("contents_rehashed", rehash)
+    .context(
+        "sharepoint_files_checked",
+        i64::try_from(report.sharepoint_files_checked).unwrap_or(i64::MAX),
+    )
+    .context("sharepoint_downloaded", opts.download_sharepoint)
     .context(
         "problems",
         i64::try_from(report.problems.len()).unwrap_or(i64::MAX),

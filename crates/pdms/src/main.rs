@@ -73,6 +73,9 @@ enum Command {
         /// Check presence and size only; do not re-read file contents.
         #[arg(long)]
         skip_files: bool,
+        /// Also download every file stored in SharePoint and re-hash it with SHA-256 (slow).
+        #[arg(long)]
+        rehash_sharepoint: bool,
         #[arg(long)]
         json: bool,
     },
@@ -248,9 +251,20 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
                 return Ok(ExitCode::from(2));
             }
         }
-        Command::VerifyIntegrity { skip_files, json } => {
+        Command::VerifyIntegrity {
+            skip_files,
+            rehash_sharepoint,
+            json,
+        } => {
             let core = connect(config).await?;
-            let r = pdms_core::integrity::verify(&core, !skip_files).await?;
+            let r = pdms_core::integrity::verify_with(
+                &core,
+                pdms_core::integrity::VerifyOptions {
+                    rehash: !skip_files,
+                    download_sharepoint: rehash_sharepoint,
+                },
+            )
+            .await?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&r)?);
             } else {
@@ -268,10 +282,17 @@ async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
                     r.audit_entries_checked,
                     r.audit_last_seq
                 );
-                if r.sharepoint_files_skipped > 0 {
+                if r.sharepoint_files_checked > 0 {
                     println!(
-                        "SharePoint files: {} (checked by the SharePoint change check, not re-read here).",
-                        r.sharepoint_files_skipped
+                        "SharePoint files: {} checked ({}).",
+                        r.sharepoint_files_checked,
+                        if rehash_sharepoint {
+                            "downloaded and re-hashed"
+                        } else if skip_files {
+                            "presence and size only"
+                        } else {
+                            "size and QuickXorHash"
+                        }
                     );
                 }
                 if r.is_ok() {

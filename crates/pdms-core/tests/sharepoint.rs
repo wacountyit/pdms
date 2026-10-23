@@ -605,7 +605,7 @@ async fn records_packages_read_files_from_sharepoint() {
 }
 
 #[tokio::test]
-async fn integrity_check_leaves_sharepoint_files_to_the_change_check() {
+async fn integrity_check_covers_sharepoint_files() {
     let sp = MockGraph::start().await;
     let (core, _db) = sp_core(&sp).await;
     let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
@@ -622,7 +622,7 @@ async fn integrity_check_leaves_sharepoint_files_to_the_change_check() {
     .await;
     let r = pdms_core::integrity::verify(&core, true).await.unwrap();
     assert!(r.problems.is_empty(), "{} problems", r.problems.len());
-    assert_eq!(r.sharepoint_files_skipped, 1);
+    assert_eq!(r.sharepoint_files_checked, 1);
 }
 
 #[tokio::test]

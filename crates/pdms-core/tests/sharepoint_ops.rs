@@ -19,8 +19,8 @@ use pdms_core::config::StorageBackend;
 use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
 use pdms_core::graph::GraphError;
 use pdms_core::model::UserStatus;
-use pdms_core::sharepoint::{access, changes, status};
-use pdms_core::{Core, CoreError, acl, directory};
+use pdms_core::sharepoint::{access, changes, resolve, status};
+use pdms_core::{Core, CoreError, acl, directory, integrity};
 use uuid::Uuid;
 
 /// A person synced from Entra (only they get SharePoint folder access).
@@ -638,4 +638,235 @@ async fn a_change_found_by_a_download_reaches_admins_once() {
         )
     );
     assert_eq!(in_app_notices(&core).await.len(), 1);
+}
+
+/// A department, an administrator who is a member (so they may edit), the
+/// document owner, and one document whose file someone edited in SharePoint.
+async fn edited_in_sharepoint(
+    sp: &MockGraph,
+    core: &Core,
+    admin_in_department: bool,
+) -> (Uuid, Uuid, Uuid, String, Vec<u8>) {
+    let roads = department(core, "RB", "Road and Bridge").await;
+    let boss = admin(
+        core,
+        "admin@county.example",
+        admin_in_department.then_some(roads),
+    )
+    .await;
+    let alice = entra_user(core, "alice@county.example", Some(roads)).await;
+    let original = pdf("fuel at 2026 rates");
+    let (doc, v1, item) = stored_document(core, alice, roads, "Fuel Supply", &original).await;
+    changes::detect_changes(core).await.unwrap();
+    sp.human_edit(&item, &pdf("fuel at 2027 rates"), "Pat Clerk");
+    changes::detect_changes(core).await.unwrap();
+    assert_eq!(file_state(core, v1).await.0, "changed_outside");
+    (boss, doc, v1, item, original)
+}
+
+#[tokio::test]
+async fn restore_original_puts_the_recorded_file_back() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (boss, doc, v1, item, original) = edited_in_sharepoint(&sp, &core, true).await;
+    let owner: Uuid = sqlx::query_scalar("SELECT owner_id FROM documents WHERE id = $1")
+        .bind(doc)
+        .fetch_one(&core.db)
+        .await
+        .unwrap();
+    // Only administrators resolve, not the document's owner.
+    let owner_ctx = as_user(&core, owner).await;
+    assert!(matches!(
+        resolve::restore_original(&core, &owner_ctx, v1).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    let ctx = as_user(&core, boss).await;
+    resolve::restore_original(&core, &ctx, v1).await.unwrap();
+    assert_eq!(sp.content_of(&item), original);
+    assert_eq!(file_state(&core, v1).await, ("ok".to_owned(), None));
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"sharepoint.change_resolved".to_owned())
+    );
+    // The restore was PDMS's own change: the next check finds nothing.
+    let r = changes::detect_changes(&core).await.unwrap();
+    assert_eq!((r.modified, r.missing, r.cleared), (0, 0, 0), "{r:?}");
+}
+
+#[tokio::test]
+async fn accept_as_new_version_keeps_the_change_and_repairs_history() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (boss, doc, v1, item, original) = edited_in_sharepoint(&sp, &core, true).await;
+    let ctx = as_user(&core, boss).await;
+    let n = resolve::accept_as_new_version(&core, &ctx, v1)
+        .await
+        .unwrap();
+    assert_eq!(n, 2);
+    let f = documents::open_file(&core, &ctx, doc, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(read_all(f.stream).await.unwrap(), pdf("fuel at 2027 rates"));
+    assert_eq!(
+        sp.content_of(&item),
+        original,
+        "version 1's file is back as it was"
+    );
+    assert_eq!(file_state(&core, v1).await.0, "ok");
+    let note: String = sqlx::query_scalar(
+        "SELECT note FROM document_versions WHERE document_id = $1 AND version_no = 2",
+    )
+    .bind(doc)
+    .fetch_one(&core.db)
+    .await
+    .unwrap();
+    assert!(note.contains("Pat Clerk"), "{note}");
+}
+
+#[tokio::test]
+async fn accept_needs_edit_rights_restore_does_not() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    // An administrator outside the department may view but not edit the document.
+    let (boss, _doc, v1, _item, _original) = edited_in_sharepoint(&sp, &core, false).await;
+    let ctx = as_user(&core, boss).await;
+    assert!(matches!(
+        resolve::accept_as_new_version(&core, &ctx, v1).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    assert_eq!(
+        file_state(&core, v1).await.0,
+        "changed_outside",
+        "nothing changed"
+    );
+    resolve::restore_original(&core, &ctx, v1).await.unwrap();
+    assert_eq!(file_state(&core, v1).await.0, "ok");
+}
+
+#[tokio::test]
+async fn a_deleted_file_is_cleared_after_a_recycle_bin_restore_and_recheck() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let boss = admin(&core, "admin@county.example", Some(roads)).await;
+    let (_doc, v1, item) = stored_document(&core, boss, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+    sp.human_delete(&item, "Pat Clerk");
+    changes::detect_changes(&core).await.unwrap();
+    let ctx = as_user(&core, boss).await;
+    let err = resolve::restore_original(&core, &ctx, v1)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("recycle bin"), "{err}");
+    assert!(!resolve::recheck(&core, &ctx, v1).await.unwrap());
+    sp.restore_from_recycle_bin(&item);
+    assert!(resolve::recheck(&core, &ctx, v1).await.unwrap());
+    assert_eq!(file_state(&core, v1).await, ("ok".to_owned(), None));
+}
+
+#[tokio::test]
+async fn dismissed_untracked_files_leave_the_list() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let boss = admin(&core, "admin@county.example", Some(roads)).await;
+    stored_document(&core, boss, roads, "Fuel Supply", &pdf("fuel")).await;
+    changes::detect_changes(&core).await.unwrap();
+    let stray = sp.human_upload(
+        "Departments/Road and Bridge",
+        "notes.docx",
+        b"notes",
+        "Pat Clerk",
+    );
+    changes::detect_changes(&core).await.unwrap();
+    sqlx::query(
+        "UPDATE sharepoint_unexpected_items SET first_seen = now() - interval '11 minutes'",
+    )
+    .execute(&core.db)
+    .await
+    .unwrap();
+    assert_eq!(status::unexpected_files(&core.db).await.unwrap().len(), 1);
+    resolve::dismiss_unexpected(&core, &as_user(&core, boss).await, &stray)
+        .await
+        .unwrap();
+    assert!(status::unexpected_files(&core.db).await.unwrap().is_empty());
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"sharepoint.unexpected_dismissed".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn a_sharepoint_outage_while_resolving_changes_nothing() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (boss, _doc, v1, _item, _original) = edited_in_sharepoint(&sp, &core, true).await;
+    let ctx = as_user(&core, boss).await;
+    sp.fail("GET /drives/drive-1/items/");
+    let err = resolve::restore_original(&core, &ctx, v1)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, CoreError::Unavailable(m) if m.contains("the change was not made")),
+        "{err:?}"
+    );
+    assert_eq!(
+        file_state(&core, v1).await.0,
+        "changed_outside",
+        "nothing changed"
+    );
+    sp.heal();
+    resolve::restore_original(&core, &ctx, v1).await.unwrap();
+    assert_eq!(file_state(&core, v1).await.0, "ok");
+}
+
+#[tokio::test]
+async fn verify_integrity_checks_sharepoint_files() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let roads = department(&core, "RB", "Road and Bridge").await;
+    let alice = entra_user(&core, "alice@county.example", Some(roads)).await;
+    let (_a, _va, edited) = stored_document(&core, alice, roads, "Fuel Supply", &pdf("fuel")).await;
+    let (_b, _vb, deleted) =
+        stored_document(&core, alice, roads, "Office Lease", &pdf("lease")).await;
+    let clean = integrity::verify(&core, true).await.unwrap();
+    assert!(clean.problems.is_empty(), "{:?}", clean.problems);
+    assert_eq!(clean.sharepoint_files_checked, 2);
+
+    // Same size, different content: only a hash shows it.
+    sp.human_edit(&edited, &pdf("FUEL"), "Pat Clerk");
+    sp.human_delete(&deleted, "Pat Clerk");
+    let fast = integrity::verify(&core, false).await.unwrap();
+    assert_eq!(
+        fast.problems.len(),
+        1,
+        "presence and size only: {:?}",
+        fast.problems
+    );
+    assert!(fast.problems[0].detail.contains("missing from SharePoint"));
+    let full = integrity::verify(&core, true).await.unwrap();
+    assert!(
+        full.problems
+            .iter()
+            .any(|p| p.detail.contains("QuickXorHash")),
+        "{:?}",
+        full.problems
+    );
+    let deep = integrity::verify_with(
+        &core,
+        integrity::VerifyOptions {
+            rehash: true,
+            download_sharepoint: true,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        deep.problems.iter().any(|p| p.detail.contains("SHA-256")),
+        "{:?}",
+        deep.problems
+    );
+    assert!(deep.problems.iter().all(|p| p.kind == "sharepoint_file"));
 }

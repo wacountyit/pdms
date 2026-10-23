@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sharepoint_files SET state = $2, checked_at = now(), changed_at = coalesce(changed_at, now())\n              WHERE document_version_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "792f110de7dcfcde5cbc63abf506d3d72e1ace1f9dc075bbf76441a2dc6b0cac"
+}

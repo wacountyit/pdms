@@ -17,6 +17,7 @@ pub mod layout;
 mod mirror;
 mod ops;
 pub mod quickxor;
+pub mod resolve;
 pub mod status;
 
 use std::sync::Arc;

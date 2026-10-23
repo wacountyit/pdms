@@ -1,0 +1,179 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.document_id, v.version_no, d.external_id, d.title, d.department_id, f.drive_id,\n                  f.item_id, f.size, f.quick_xor_hash, f.state, v.blob_sha256 AS \"sha256!\",\n                  coalesce(v.file_name, f.name) AS \"file_name!\", f.changed_by, f.changed_at\n             FROM sharepoint_files f\n             JOIN document_versions v ON v.id = f.document_version_id\n             JOIN documents d ON d.id = f.document_id\n            WHERE f.document_version_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "document_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version_no",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "version_no"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "department_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "documents",
+            "name": "department_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "drive_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "drive_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "item_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "item_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "quick_xor_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "quick_xor_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "sha256!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "document_versions",
+            "name": "blob_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "file_name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "changed_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "changed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "changed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "changed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "481d52f0932728d108a54c2f539cb683c46744829cdb43605ced98fdaf952ef7"
+}

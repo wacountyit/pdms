@@ -124,12 +124,16 @@ the backup. Prefer restoring into a separate install to look up what you need.
 docker compose run --rm app verify-integrity            # full check
 docker compose run --rm app verify-integrity --skip-files   # presence and size only (fast)
 docker compose run --rm app verify-integrity --json
+docker compose run --rm app verify-integrity --rehash-sharepoint   # also download SharePoint files (slow)
 ```
 
 It checks that:
 
 - every stored file the database records is present, has the recorded size,
   and still hashes to its recorded SHA-256 (every byte is re-read);
+- with SharePoint storage, every file in SharePoint is present, has the
+  recorded size and QuickXorHash, and is not flagged as changed outside PDMS
+  (`--rehash-sharepoint` also downloads each one and compares its SHA-256);
 - every records request package is present and intact;
 - every document version points at a recorded file;
 - the audit hash chain is unbroken from the first entry to the last.

@@ -605,8 +605,13 @@ stay in `local_path`.
   stops with an error, the file is marked as changed, and
   `sharepoint.changed_outside` is written to the audit log. Restoring an
   earlier version copies its file into a new file.
-- **Integrity check.** `verify-integrity` does not re-read SharePoint files;
-  it reports how many it left to the SharePoint change check (plan P4).
+- **Integrity check.** `verify-integrity` checks every SharePoint file
+  through Microsoft Graph: present, the right size, and the QuickXorHash
+  recorded at upload (`--skip-files` checks presence and size only). Add
+  `--rehash-sharepoint` to download every file and compare its SHA-256 too;
+  that is slow on a large library, so run it occasionally, for example after
+  restoring a backup. Files still flagged by the change check are reported
+  as problems.
 - **Known gap.** If a save fails after the upload, or after a folder has
   already moved, the uploaded file or the moved folder stays in SharePoint
   until the nightly sweep or P4's change check finds it.
@@ -980,7 +985,9 @@ docker compose run --rm app verify-integrity
 
 It re-hashes every stored file, checks every export package and version, and
 verifies the audit chain; it exits with code 2 if anything is wrong. Files
-stored in SharePoint are counted separately and not re-read.
+stored in SharePoint are checked through Microsoft Graph by size and
+QuickXorHash; `--rehash-sharepoint` also downloads and re-hashes them (see
+"SharePoint storage").
 
 ## 13. Configuration reference
 
