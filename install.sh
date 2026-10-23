@@ -178,6 +178,17 @@ write_block() {
 # --configure NAME asks for it.
 needs() { configuring "$1" || { ! has_block "$1" && ! has_table "$2"; }; }
 
+# Whether Microsoft Entra ID sign-in is turned on in the configuration.
+sso_enabled() {
+  [[ -f "$CONFIG" ]] && awk '/^\[auth\.oidc\]/ { f = 1; next } /^\[/ { f = 0 }
+    f && /^enabled[[:space:]]*=[[:space:]]*true/ { found = 1 } END { exit !found }' "$CONFIG"
+}
+
+# Entra ID sends people back to exactly this address after they sign in. It
+# must be listed, character for character (including any port), as a Web
+# redirect URI on the app registration, or Entra refuses with AADSTS50011.
+redirect_uri() { echo "${PUBLIC_URL_NOW%/}/auth/oidc/callback"; }
+
 detect_timezone() {
   local tz=""
   command -v timedatectl >/dev/null && tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
@@ -500,8 +511,13 @@ if needs sso auth.oidc; then
   else
     note "Users sign in with their organization accounts. Leave the tenant blank to skip"
     note "(the local administrator still works) and add it later with --configure sso."
-    note "First register an app in the Entra admin center (App registrations) with this"
-    note "redirect URI (type Web):  ${PUBLIC_URL_NOW}/auth/oidc/callback"
+    note "First register an app in the Entra admin center (App registrations), and under"
+    note "Authentication add a platform of type Web with exactly this redirect URI:"
+    note ""
+    note "    $(redirect_uri)"
+    note ""
+    note "It must match character for character, including the port, or Microsoft refuses"
+    note "the sign-in (AADSTS50011). If the app is already registered, add it there."
     ask TENANT_ID "Directory (tenant) ID" ""
     tenant=$TENANT_ID
   fi
@@ -521,6 +537,7 @@ display_name = "Microsoft"
 EOF
     echo "   Entra ID sign-in configured. Map Entra groups to departments and roles under"
     echo "   Administration -> Identity provider mappings after signing in."
+    echo "   Check the app registration lists this redirect URI (type Web): $(redirect_uri)"
   else
     write_block sso <<'EOF'
 [auth.oidc]
@@ -716,6 +733,16 @@ case "$MODE" in
   external) echo "   Open: $PUBLIC_URL_NOW   (via your reverse proxy -> this host, port $(env_get PDMS_HTTP_PORT))" ;;
   *)        echo "   Open: $PUBLIC_URL_NOW   (local testing only)" ;;
 esac
+if sso_enabled; then
+  echo
+  echo "   Microsoft sign-in: the Entra app registration must list this redirect URI"
+  echo "   (Authentication -> Web), exactly as written, including the port:"
+  echo "     $(redirect_uri)"
+  if $NETWORK_CHANGED; then
+    warn "the address changed in this run. Add the new redirect URI above to the app"
+    note "registration (and remove the old one), or Microsoft refuses sign-in (AADSTS50011)."
+  fi
+fi
 if $ADMIN_CREATED_NOW; then
   echo
   echo "   Username: $ADMIN_USERNAME"
