@@ -126,7 +126,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110). Phases A (Task 1), B (Tasks 2–3), C (Task 4), D (Tasks 5–6), E (Task 7), F (Tasks 8–9): **Not started** | Phase A next. Six owner questions are listed at the top of the P4 plan; Tasks 4, 7 and 8 need their answers | 2026-10-23 |
+| **Plan P4, SharePoint access, change detection and operations** (1) | WACountyIT | Phase 0, pre-flight: **Done** (plan corrected; migration `0014`, decisions D-104 to D-110; the owner's answers recorded at the top of the plan). Phase A (Task 1: migration `0014`, `ManageSharePoint`, run records and admin notices): **Done**. Phases B (Tasks 2–3), C (Task 4), D (Tasks 5–6), E (Task 7), F (Tasks 8–9): **Not started** | Phase B next (folder access) | 2026-10-23 |
 
 §0.5 lists what can start next.
 

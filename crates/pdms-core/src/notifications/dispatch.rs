@@ -30,6 +30,10 @@ pub(crate) enum Visibility {
         grants: Vec<Grant>,
     },
     Position(PositionAttrs),
+    /// Not about a document or a position: the caller chose the recipients,
+    /// and the notice names no document (for example SharePoint status for
+    /// administrators).
+    Anyone,
 }
 
 impl Visibility {
@@ -50,6 +54,7 @@ impl Visibility {
             )
             .is_allowed(),
             Visibility::Position(p) => can_view_position(principal, p),
+            Visibility::Anyone => true,
         }
     }
 
@@ -57,6 +62,7 @@ impl Visibility {
         match self {
             Visibility::Document { .. } => "recipient cannot view the document",
             Visibility::Position(_) => "recipient cannot view the position",
+            Visibility::Anyone => "recipient is not active",
         }
     }
 }

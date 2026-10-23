@@ -46,7 +46,7 @@ pub const SYNC_JOB: &str = "directory.entra_sync";
 pub const TICK_JOB: &str = "directory.entra_sync_tick";
 /// Postgres advisory lock: one sync at a time ("PDMSENTR").
 pub const LOCK_KEY: i64 = 0x5044_4d53_454e_5452;
-const CURSOR: &str = "entra.users";
+pub(crate) const CURSOR: &str = "entra.users";
 const BASE_SELECT: &str = "id,displayName,mail,userPrincipalName,accountEnabled,userType";
 
 /// Stored as `sync_cursors.last_summary`; missing fields default, so a

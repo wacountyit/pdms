@@ -532,3 +532,25 @@ fn visibility_round_trips_labels_and_orders() {
     assert!(Visibility::CountyWide.inherits_broad_grants());
     assert!(!Visibility::Restricted.inherits_broad_grants());
 }
+
+#[test]
+fn sharepoint_management_is_for_org_admins_only() {
+    let admin = with_org_role(user(ALICE, &[]), "admin");
+    assert!(has_capability(&admin, Capability::ManageSharePoint));
+    for key in [
+        "auditor",
+        "records_officer",
+        "appointments_clerk",
+        "legal_counsel",
+    ] {
+        let p = with_org_role(user(BOB, &[]), key);
+        assert!(!has_capability(&p, Capability::ManageSharePoint), "{key}");
+    }
+    let mut scoped = user(CAROL, &[OPS]);
+    scoped.roles.push(RoleHolding {
+        role_id: ROLES[0],
+        role_key: "admin".into(),
+        department_id: Some(OPS),
+    });
+    assert!(!has_capability(&scoped, Capability::ManageSharePoint));
+}

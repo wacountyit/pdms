@@ -9,20 +9,20 @@
 > - **Task 1:** don't add a new `ENTRA_CURSOR` constant; make `entra_sync::CURSOR` (`"entra.users"`) `pub(crate)` and reuse it.
 > - **Task 2:** don't redefine `certificate()` or `sp_core`; import `mock_graph::certificate` and copy P3's `core_with`/`sp_core` pattern (or move them to a shared helper).
 > - **Task 3:** in `directory/sync.rs` there are no `before`/`after` sets: queue the folder-access run when `want_depts != have_depts` (the early return at `sync.rs:72`). For the Entra sync, don't hook `run_job` and `sync_one`: queue it inside `entra_sync::set_idp_department` (on its `conn`) whenever it changes a membership. That also covers `pdms sync-directory` and mapping edits in `entra_values.rs`.
-> - **Task 4:** reuse P3's `sharepoint::files::flag_changed` (make it `pub(crate)` from `sharepoint`) instead of writing a second `sharepoint.changed_outside` event, so the action has one shape. A file already flagged by a download must still reach administrators: the change check flags it (sets `changed_by`/`changed_at` and notifies) when `changed_by IS NULL` (owner question 3 below).
+> - **Task 4:** reuse P3's `sharepoint::files::flag_changed` (make it `pub(crate)` from `sharepoint`) instead of writing a second `sharepoint.changed_outside` event, so the action has one shape. A file already flagged by a download must still reach administrators: the change check flags it (sets `changed_by`/`changed_at` and notifies) when `changed_by IS NULL` (owner answer 3 below).
 > - **Task 5:** Graph failures in restore, accept and re-check go through `sharepoint::unavailable(…)` (`CoreError::Unavailable`), so the page shows a message instead of an error page (D-102).
 > - **Task 6:** `integrity.rs` computes `files_checked` as `blobs - sharepoint_files_skipped`: count local files separately; remove P3's `sharepoint_files_skipped` audit context and report field once SharePoint files are checked; add `sharepoint_file` to the `Problem.kind` doc comment.
 > - **Task 7 (pages):** follow R2's admin page pattern (R2 spec §5.2; `admin/entra.html`, `admin/deleted.html`): `{% block heading %}` with `header.page-head`, `<h1>{{ l.title }}</h1>`, `.page-lede`, `.page-actions` ("Check for changes now" the only primary button); sections as `section.panel` with `.panel-head`; run status as `dl.facts`; tables in `.table-wrap`; `p.empty` for empty lists; "not turned on" as `flash-info role="status"`, flagged files as `flash-error role="alert"`. The handler calls `.admin_tab("sharepoint")`; the menu item goes in the *Integrations* group of `Layout::admin_groups()` (`views.rs`), not `base.html`. The Entra page section is a `section.panel`. The document-page notice goes in `templates/documents/show.html` inside `header.doc-head`, after `.doc-title-row` and before `nav.on-this-page`, as a `p.flash`. Add `/admin/sharepoint` to `every_admin_page_uses_the_admin_pattern` (`tests/shell.rs`) and to `tools/ui-screenshots/shoot.py`.
-> - **Task 8 (installer and Compose):** the Outlook anchors are gone (D-087): add `PDMS_GRAPH__CERTIFICATE_FILE` after `PDMS_EMAIL__SMTP_PASSWORD_FILE`, the `graph_certificate` secret after `smtp_password`, and to both secrets lists; in `install.sh` drop `outlook` from the `--configure` lists, add the new variables after the existing `PDMS_INSTALL_*` help lines, extend the `for f in oidc_client_secret smtp_password` loop, and insert the step before the "Removed: Outlook calendar sync" comment. Today's installer also shows the Caddy ports and the Entra redirect URI; keep both. How `[storage] backend` is set, and the certificate file name and thumbprint, wait on owner questions 1 and 2. ADMIN_GUIDE's manual Compose edit for the certificate (Entra sync step 3) must get an "undo this before `git pull`" note, because the installer now does it.
+> - **Task 8 (installer and Compose):** the Outlook anchors are gone (D-087): add `PDMS_GRAPH__CERTIFICATE_FILE` after `PDMS_EMAIL__SMTP_PASSWORD_FILE`, the `graph_certificate` secret after `smtp_password`, and to both secrets lists; in `install.sh` drop `outlook` from the `--configure` lists, add the new variables after the existing `PDMS_INSTALL_*` help lines, extend the `for f in oidc_client_secret smtp_password` loop, and insert the step before the "Removed: Outlook calendar sync" comment. Today's installer also shows the Caddy ports and the Entra redirect URI; keep both. How `[storage] backend` is set, and the certificate file name and thumbprint, follow owner answers 1 and 2 below. ADMIN_GUIDE's manual Compose edit for the certificate (Entra sync step 3) must get an "undo this before `git pull`" note, because the installer now does it.
 > - **Task 9 (docs):** ADMIN_GUIDE already has "SharePoint storage" in §4 (from P3): update it (site grant, `delta_interval_minutes`, the integrity and known-gap bullets, the `[storage] backend` row) rather than adding a section in §12, and rewrite Entra step 3. ARCHITECTURE: add a §12 row `9 (0014_sharepoint_access, P4)` in the current style. DECISIONS: add D-104 to D-110, and edit the status lines of D-082, D-084 and D-089 by hand (the plan's `sed` no longer fits, and would wrongly change D-083). ROADMAP: §0.3 row 1, §0.1, §0.5, §0.6, and the §4 orphans row (as CLAUDE.md describes); the plan's `1b`/`2a` rows don't exist. Index: `0014`, D-104 to D-110. After P4, `tests/sharepoint.rs` has 27 tests plus 3 ignored live tests.
 >
-> **Questions for the owner** (answer before the task that needs them; recorded as a decision when answered):
-> 1. **How SharePoint storage is switched on (Task 8):** the plan's `config/pdms.env` (`PDMS_STORAGE__BACKEND`, loaded with Compose `env_file`, needs Compose ≥ 2.24), or the installer's existing `[storage]` block (the ClamAV one) owning all of `[storage]`, including `backend`.
-> 2. **Certificate (Task 8):** one file name for the public certificate (P2's `secrets/graph_certificate.crt`, or the plan's `config/pdms-service.cer`), and the SHA-256 thumbprint that the Entra page shows, or SHA-1 as well (the Entra admin center lists SHA-1).
-> 3. **"Changed outside PDMS" (Task 4):** one audit shape for both the download check and the change check, and should a change first found by a download also notify administrators?
-> 4. **Installer steps (Task 8):** should `--configure sharepoint` also turn on the Entra sync, or stay separate (the sync already works without SharePoint)?
-> 5. **Status page and Restricted documents (Task 7):** for a document the administrator cannot open, the page shows its ID with the title and path hidden. Is the ID acceptable (D-085)?
-> 6. **Document-page notice (Task 7):** wording and severity (alert or status) for ordinary viewers, given that P3 already stops downloads of a changed file.
+> **The owner's answers (2026-10-23).** They go into DECISIONS in Task 9: answer 1 replaces this plan's `config/pdms.env` decision (D-108), and the others are recorded with the decision they touch.
+> 1. **Switching SharePoint storage on (Task 8):** the installer's existing `[storage]` block (today written by the ClamAV step) owns all of `[storage]`, including `backend`. No `config/pdms.env`, no Compose `env_file`, no Compose 2.24 requirement. A hand-written `[storage] backend` outside the managed block is detected and left alone, with a warning.
+> 2. **Certificate (Task 8):** keep P2's `secrets/graph_certificate` and its public half `secrets/graph_certificate.crt` (no `config/pdms-service.cer`). Show both thumbprints: SHA-256 (what Administration → Entra ID sync shows) and SHA-1 (what the Entra admin center lists).
+> 3. **"Changed outside PDMS" (Task 4):** one audit shape, P3's (`flag_changed`: category system, outcome failure, context `source`, `item_id`, `detail`), for the download check and the change check. A change first found by a download also notifies administrators.
+> 4. **Installer steps (Task 8):** `--configure sharepoint` stays separate from the Entra sync. Both use the same certificate; the SharePoint step generates it only if it is missing.
+> 5. **Restricted documents on the status page (Task 7):** for a document the administrator cannot open, the page shows "A Restricted document" and the version number only: no ID, title or path. "Restore original" still works.
+> 6. **Document-page notice (Task 7):** a status message, not an alert, for everyone who can see the document: "A file of this document was changed outside PDMS. Downloads of it are paused until an administrator checks it." Administrators also see a link to Administration → SharePoint.
 
 **Goal:** Finish SharePoint storage so it can run in the county:
 
@@ -139,7 +139,9 @@ Five inputs the spec implies but its happy path doesn't exercise. Each has a tes
     - `pub(crate) async fn parts(core: &Core) -> CoreResult<(&GraphClient, &Resolved)>`;
   - `notifications::dispatch::Visibility::Anyone`.
 
-- [ ] **Step 1: Confirm the P2/P3 names this plan uses.** Run:
+> **As built (2026-10-23):** `status::parts` and `status::record_ok` are added in Task 2 instead, where they are first used (an unused function fails `clippy -D warnings`). `ENTRA_CURSOR` reuses `entra_sync::CURSOR`, now `pub(crate)`. The test file puts the SPDX lines first.
+
+- [x] **Step 1: Confirm the P2/P3 names this plan uses.** Run:
 
 ```bash
 grep -n "pub fn graph\|pub async fn resolved\|pub struct Resolved\|pub fn area_id" crates/pdms-core/src/sharepoint/mod.rs
@@ -152,7 +154,7 @@ grep -n "pub struct SpState\|pub const DRIVE\|pub(super) fn route\|pub(super) fn
 
 Expected: every name is found, and `sharepoint_files` has `item_id`, `list_item_id`, `name`, `quick_xor_hash`, `size`, `last_known_path`, `state`, and `checked_at`. If a name differs, use the real name everywhere in this plan's code, and record it in the index in Task 9.
 
-- [ ] **Step 2: Write the migration.** Create `migrations/0014_sharepoint_access.sql`:
+- [x] **Step 2: Write the migration.** Create `migrations/0014_sharepoint_access.sql`:
 
 ```sql
 -- SharePoint folder access, changes made outside PDMS, and the status panel
@@ -203,7 +205,7 @@ GRANT SELECT, INSERT, UPDATE ON sharepoint_files TO pdms_app;
 Apply it: `sqlx migrate run --source migrations`
 Expected: `Applied 14/migrate sharepoint access`.
 
-- [ ] **Step 3: Write the failing capability test.** Append to `crates/pdms-authz/src/tests.rs`:
+- [x] **Step 3: Write the failing capability test.** Append to `crates/pdms-authz/src/tests.rs`:
 
 ```rust
 #[test]
@@ -227,7 +229,7 @@ fn sharepoint_management_is_for_org_admins_only() {
 Run: `cargo test -p pdms-authz sharepoint_management_is_for_org_admins_only`
 Expected: compile error `no variant named ManageSharePoint`.
 
-- [ ] **Step 4: Add the capability.** In `crates/pdms-authz/src/capability.rs`, add to `enum Capability` after `ManageIntegrations`:
+- [x] **Step 4: Add the capability.** In `crates/pdms-authz/src/capability.rs`, add to `enum Capability` after `ManageIntegrations`:
 
 ```rust
     /// SharePoint status, department-folder access, and resolving files that
@@ -249,7 +251,7 @@ In `granted_by`, extend the first arm so it reads:
 Run: `cargo test -p pdms-authz`
 Expected: `test result: ok.` with 0 failed.
 
-- [ ] **Step 5: Let notices skip the document check.** In `crates/pdms-core/src/notifications/dispatch.rs`, add a variant to `pub(crate) enum Visibility`:
+- [x] **Step 5: Let notices skip the document check.** In `crates/pdms-core/src/notifications/dispatch.rs`, add a variant to `pub(crate) enum Visibility`:
 
 ```rust
     /// Not about a document or a position: the caller chose the recipients,
@@ -260,7 +262,7 @@ Expected: `test result: ok.` with 0 failed.
 
 In `Visibility::allows`, add the arm `Visibility::Anyone => true,`. In `Visibility::denied_reason`, add `Visibility::Anyone => "recipient is not active",`.
 
-- [ ] **Step 6: Write the failing status test.** Create `crates/pdms-core/tests/sharepoint_ops.rs`:
+- [x] **Step 6: Write the failing status test.** Create `crates/pdms-core/tests/sharepoint_ops.rs`:
 
 ```rust
 #![allow(
@@ -343,7 +345,7 @@ async fn graph_sign_in_failures_reach_admins_once_an_hour() {
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: compile error `could not find status in sharepoint`.
 
-- [ ] **Step 7: Implement `status.rs`.** Create `crates/pdms-core/src/sharepoint/status.rs`:
+- [x] **Step 7: Implement `status.rs`.** Create `crates/pdms-core/src/sharepoint/status.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -534,7 +536,7 @@ pub async fn report_failure(core: &Core, name: &str, err: &RunError) -> CoreResu
 
 In `crates/pdms-core/src/sharepoint/mod.rs`, add `pub mod status;` below the existing module declarations.
 
-- [ ] **Step 8: Run the tests and confirm they pass.**
+- [x] **Step 8: Run the tests and confirm they pass.**
 
 ```bash
 cargo test -p pdms-core --test sharepoint_ops
@@ -543,7 +545,7 @@ cargo test -p pdms-core --test notifications
 
 Expected: `test graph_sign_in_failures_reach_admins_once_an_hour ... ok`, and both binaries report `test result: ok.`
 
-- [ ] **Step 9: Commit.**
+- [x] **Step 9: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -554,6 +556,8 @@ git commit -m "P4: migration 0014, ManageSharePoint, run records and admin notic
 
 ---
 ### Task 2: Department staff get read access on their folder
+
+> **From Task 1:** add `status::parts` and `status::record_ok` (their code is in Task 1, Step 7) to `status.rs` here, with the `use super::{Resolved, SharePoint};` and `GraphClient` imports they need.
 
 **Files:**
 - Modify: `crates/pdms-core/tests/mock_graph/sp.rs` (P3's SharePoint part of P2's mock Graph)

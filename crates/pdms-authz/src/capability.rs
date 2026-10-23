@@ -42,6 +42,9 @@ pub enum Capability {
     ViewAccessReports,
     /// Webhooks, integration providers, and everyone's API tokens.
     ManageIntegrations,
+    /// SharePoint status, department-folder access, and resolving files that
+    /// were changed directly in SharePoint.
+    ManageSharePoint,
 }
 
 impl Capability {
@@ -52,7 +55,8 @@ impl Capability {
             | Capability::ManageSettings
             | Capability::ManageDocumentSchema
             | Capability::ManageTags
-            | Capability::RestoreDeletedDocuments => &[ADMIN],
+            | Capability::RestoreDeletedDocuments
+            | Capability::ManageSharePoint => &[ADMIN],
             Capability::ManageRetention => &[ADMIN, RECORDS_OFFICER],
             Capability::ViewAudit | Capability::VerifyAudit => &[ADMIN, AUDITOR],
             Capability::ExportAudit => &[AUDITOR],
