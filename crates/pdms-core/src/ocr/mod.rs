@@ -12,6 +12,7 @@
 //! no text.
 
 pub mod dates;
+pub mod setup;
 pub mod text;
 
 use std::fmt;

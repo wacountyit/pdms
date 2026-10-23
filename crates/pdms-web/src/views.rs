@@ -177,10 +177,13 @@ impl Layout {
 
         let mut system = Vec::new();
         if self.can_settings {
-            system.push(link("branding", "Branding"));
+            system.extend([link("branding", "Branding"), link("email", "Email")]);
         }
-        if self.can_integrations {
+        if self.can_integrations || self.can_settings {
             system.push(link("ocr", "Text extraction (OCR)"));
+        }
+        if self.can_settings {
+            system.push(link("virus-scanning", "Virus scanning"));
         }
         [
             ("People and access", people),

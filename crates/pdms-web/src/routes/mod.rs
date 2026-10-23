@@ -16,4 +16,5 @@ pub mod ops;
 pub mod schedule;
 pub mod sharepoint_admin;
 pub mod sign_in;
+pub mod system_settings;
 pub mod workflow;

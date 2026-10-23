@@ -154,6 +154,14 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 
 ## Phase 5: Email, OCR and virus scanning
 
+> **As built (2026-10-23):**
+> - Core: `notifications::mail_setup` (`candidate`, `save`, `send_test`), `ocr::setup` (`save`, `test`, `DEFAULT_URL`), `scanning` (`save`, `test`, `DEFAULT_ADDR`). Shared in `settings`: `Check` (the test result), `record_test` (`settings.tested` with the area and result only) and `unless_locked`.
+> - The test email uses the form's values with the saved password when none is typed; the address defaults to the administrator's own and isn't stored. The `file` transport (development) stays file-only.
+> - Turning OCR or scanning on keeps a saved address, else uses the Compose one (`http://ocr:8080`, `clamav:3310`). The OCR test calls the service's `/healthz`; the scanner test writes the EICAR file to the spool directory, scans it, and deletes it. The EICAR string is kept in two halves in the source.
+> - The OCR page stays visible to `ManageIntegrations`; its Settings panel needs `ManageSettings`. The menu's *System* group has Email and Virus scanning.
+> - Not changed here: the installer still writes `[email]`, `[ocr] sidecar_url` and `[storage] clamav_addr` into the file, which locks them on the pages. Phase 6 reduces the installer and moves existing settings; ADMIN_GUIDE says to delete the lines meanwhile.
+> - Tests: `tests/system_settings.rs` (7, core: Mailpit, a fake OCR service, a fake clamd) and `tests/system_settings.rs` (3, web); the pages are in the admin-pattern test and the screenshot list.
+
 - **Email page `/admin/email`:** on or off (`email.transport` smtp or disabled), host, port, security, username, password (write-only), from, reply-to. **Send a test email** to an address typed on the page (audited, without the address list being stored). The mailer is rebuilt live.
 - **OCR page (existing `/admin/ocr`):** a **Settings** panel: read text in files, OCR for scans (the sidecar address stays `http://ocr:8080` unless locked), suggest dates. **Test** reaches the OCR service. If its container isn't running, the page says to re-run the installer and include it.
 - **Virus scanning page `/admin/virus-scanning`:** on or off (the address stays `clamav:3310` unless locked), refuse uploads when the scanner is down. **Test** sends the EICAR test string and expects it to be found. If the container is missing, the page says so.

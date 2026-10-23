@@ -306,7 +306,14 @@ struct OcrPage {
     l: Layout,
     enabled: bool,
     url: String,
+    text_extraction: bool,
     suggest_dates: bool,
+    /// The Settings panel, for people who can manage settings (S1).
+    can_settings: bool,
+    text_locked: bool,
+    url_locked: bool,
+    dates_locked: bool,
+    check: Option<pdms_core::settings::Check>,
 }
 
 pub async fn ocr_page(
@@ -314,13 +321,37 @@ pub async fn ocr_page(
     user: CurrentUser,
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
-    user.require(&state, Capability::ManageIntegrations, "/admin/ocr")
-        .await?;
+    ocr_render(&state, &user, flash, None).await
+}
+
+/// `check`: the result of the Settings panel's **Test**.
+pub(crate) async fn ocr_render(
+    state: &AppState,
+    user: &CurrentUser,
+    flash: FlashMsg,
+    check: Option<pdms_core::settings::Check>,
+) -> AppResult<Html<String>> {
+    if !user.can(Capability::ManageSettings) {
+        user.require(state, Capability::ManageIntegrations, "/admin/ocr")
+            .await?;
+    }
+    let config = state.core.config();
+    let file = state.core.file_config();
     let page = OcrPage {
-        l: Layout::new(&state, &user, flash, "Text extraction (OCR)", "admin").admin_tab("ocr"),
+        l: Layout::new(state, user, flash, "Text extraction (OCR)", "admin").admin_tab("ocr"),
         enabled: state.core.ocr().is_some(),
-        url: state.core.config().ocr.sidecar_url.clone(),
-        suggest_dates: state.core.config().ocr.suggest_dates,
+        url: if config.ocr.sidecar_url.is_empty() {
+            pdms_core::ocr::setup::DEFAULT_URL.to_owned()
+        } else {
+            config.ocr.sidecar_url.clone()
+        },
+        text_extraction: config.ocr.text_extraction,
+        suggest_dates: config.ocr.suggest_dates,
+        can_settings: user.can(Capability::ManageSettings),
+        text_locked: file.locked.contains("ocr.text_extraction"),
+        url_locked: file.locked.contains("ocr.sidecar_url"),
+        dates_locked: file.locked.contains("ocr.suggest_dates"),
+        check,
     };
     Ok(Html(page.render()?))
 }

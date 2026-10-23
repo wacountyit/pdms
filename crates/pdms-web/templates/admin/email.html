@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">PDMS sends reminders, review requests and notices by email through your mail server. With email off, people still see every notice in PDMS.</p>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+{% if file_transport %}<p class="flash flash-info" role="status">The configuration file writes emails to files instead of sending them (<code>[email] transport = "file"</code>, for development).</p>
+{% else if sending %}<p class="flash flash-ok" role="status">Email is on: PDMS sends email through <code>{{ host }}</code>.</p>
+{% else %}<p class="flash flash-info" role="status">Email is off. Emails are not queued while it is off.</p>{% endif %}
+
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2></div>
+  <p class="help">For Exchange Online: <code>smtp.office365.com</code>, port 587, STARTTLS, and a mailbox allowed to send with SMTP AUTH; or an internal relay with no sign-in. <strong>Send test email</strong> uses what is typed here, without saving it.</p>
+  <form method="post" action="/admin/email" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="on" value="true"{% if on %} checked{% endif %}{% if self.is_locked("email.transport") %} disabled{% endif %}> Send email</label>
+    {% if self.is_locked("email.transport") %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="em-host">SMTP server</label>
+    <div><input id="em-host" name="host" value="{{ host }}" size="36" autocomplete="off" spellcheck="false"{% if self.is_locked("email.smtp_host") %} disabled aria-describedby="em-host-locked"{% endif %}>
+    {% if self.is_locked("email.smtp_host") %}<p class="help" id="em-host-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="em-port">Port</label>
+    <div><input id="em-port" name="port" type="number" min="1" max="65535" value="{{ port }}"{% if self.is_locked("email.smtp_port") %} disabled aria-describedby="em-port-locked"{% endif %}>
+    {% if self.is_locked("email.smtp_port") %}<p class="help" id="em-port-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="em-sec">Security</label>
+    <div><select id="em-sec" name="security"{% if self.is_locked("email.smtp_security") %} disabled aria-describedby="em-sec-locked"{% endif %}>
+      <option value="starttls"{% if security == "starttls" %} selected{% endif %}>STARTTLS (usually port 587)</option>
+      <option value="tls"{% if security == "tls" %} selected{% endif %}>TLS (usually port 465)</option>
+      <option value="none"{% if security == "none" %} selected{% endif %}>None (a relay on a trusted network only)</option>
+    </select>
+    {% if self.is_locked("email.smtp_security") %}<p class="help" id="em-sec-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="em-user">Username</label>
+    <div><input id="em-user" name="username" value="{{ username }}" size="36" autocomplete="off" spellcheck="false" aria-describedby="em-user-help"{% if self.is_locked("email.smtp_username") %} disabled{% endif %}>
+    <p class="help" id="em-user-help">Leave empty for a relay that doesn't ask for a sign-in.{% if self.is_locked("email.smtp_username") %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <label for="em-pass">Password</label>
+    <div><input id="em-pass" name="password" type="password" size="36" autocomplete="new-password" aria-describedby="em-pass-help"{% if self.is_locked("email.smtp_password") %} disabled{% endif %}>
+    <p class="help" id="em-pass-help">{% if self.is_locked("email.smtp_password") %}Set in the configuration file, so it can't be changed here.{% else if password_saved %}A password is saved; leave this empty to keep it.{% else %}PDMS stores it encrypted and never shows it again.{% endif %}</p></div>
+    <label for="em-from">From</label>
+    <div><input id="em-from" name="from" value="{{ from }}" size="44" placeholder="Records System &lt;pdms@example.org&gt;" autocomplete="off" spellcheck="false"{% if self.is_locked("email.from") %} disabled aria-describedby="em-from-locked"{% endif %}>
+    {% if self.is_locked("email.from") %}<p class="help" id="em-from-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="em-reply">Reply-to</label>
+    <div><input id="em-reply" name="reply_to" value="{{ reply_to }}" size="44" autocomplete="off" spellcheck="false" aria-describedby="em-reply-help"{% if self.is_locked("email.reply_to") %} disabled{% endif %}>
+    <p class="help" id="em-reply-help">Optional: where replies go, for example the records office.{% if self.is_locked("email.reply_to") %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button></div>
+    <label for="em-to">Send a test email to</label>
+    <div><input id="em-to" name="test_to" type="email" value="{{ test_to }}" size="36" autocomplete="email"></div>
+    <span></span><div class="toolbar"><button type="submit" class="button" formaction="/admin/email/test">Send test email</button></div>
+  </form>
+  {% if let Some(c) = check %}
+  <h3>Test result</h3>
+  <div role="status">
+  <ul class="checklist">
+    {% for (ok, line) in c.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
+  </ul>
+  {% if c.ok %}<p>Save to use these settings. Enter the password again before saving if you typed a new one.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

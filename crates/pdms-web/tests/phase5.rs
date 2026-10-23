@@ -243,7 +243,7 @@ async fn ocr_page_is_for_integration_managers() {
     let page = a.get("/admin/ocr").await;
     assert_eq!(page.status, StatusCode::OK);
     assert!(page.body.contains("<h1>Text extraction (OCR)</h1>"));
-    assert!(page.body.contains("docker compose --profile ocr up -d"));
+    assert!(page.body.contains("./install.sh --configure ocr"));
     assert!(
         !page.body.contains("Outlook"),
         "the Outlook sync is gone (D-087)"

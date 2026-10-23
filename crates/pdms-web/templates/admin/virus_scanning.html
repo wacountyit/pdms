@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">Every uploaded file can be scanned by ClamAV before PDMS stores it. A file with a virus is refused.</p>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+{% if on %}<p class="flash flash-ok" role="status">Uploads are scanned by ClamAV at <code>{{ addr }}</code>.</p>
+{% else %}<p class="flash flash-info" role="status">Uploads are not scanned.</p>{% endif %}
+
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2></div>
+  <p class="help">ClamAV runs in its own container, which the installer includes when you answer yes to virus scanning (<code>./install.sh --configure clamav</code>). <strong>Test</strong> sends the EICAR test file, which is harmless and which every virus scanner reports, and expects ClamAV to find it.</p>
+  <form method="post" action="/admin/virus-scanning" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="on" value="true"{% if on %} checked{% endif %}{% if addr_locked %} disabled{% endif %}> <span>Scan uploads with ClamAV at <code>{{ addr }}</code></span></label>
+    {% if addr_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="required" value="true"{% if required %} checked{% endif %}{% if required_locked %} disabled{% endif %}> Refuse uploads while ClamAV can't be reached</label>
+    <p class="help">Recommended. Off, files are stored unscanned while ClamAV is down.{% if required_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button><button type="submit" class="button" formaction="/admin/virus-scanning/test">Test</button></div>
+  </form>
+  {% if let Some(c) = check %}
+  <h3>Test result</h3>
+  <div role="status">
+  <ul class="checklist">
+    {% for (ok, line) in c.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
+  </ul>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

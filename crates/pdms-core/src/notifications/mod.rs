@@ -6,6 +6,7 @@ pub mod actions;
 pub mod delivery;
 pub(crate) mod dispatch;
 pub mod inbox;
+pub mod mail_setup;
 pub mod mailer;
 pub mod planner;
 pub mod rules;

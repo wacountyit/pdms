@@ -12,18 +12,40 @@
   <div class="panel-head"><h2 id="ocr-h">Status</h2>{% if enabled %}<span class="status status-good">On</span>{% else %}<span class="status status-neutral">Off</span>{% endif %}</div>
   <dl class="facts">
     <dt>Scanned PDFs and images</dt><dd>{% if enabled %}Read by the OCR service at <code>{{ url }}</code>{% else %}Not read: the OCR service is not set up{% endif %}</dd>
-    <dt>Ordinary PDFs and Word documents</dt><dd>Always read; their text is searchable</dd>
+    <dt>Ordinary PDFs and Word documents</dt><dd>{% if text_extraction %}Read; their text is searchable{% else %}Not read: text extraction is off{% endif %}</dd>
     <dt>Date suggestions</dt><dd>{% if suggest_dates %}On: dates found in a file are offered on the document page, and nothing changes until someone confirms them{% else %}Off{% endif %}</dd>
   </dl>
 </section>
-{% if !enabled %}
+{% if can_settings %}
+<section class="panel" aria-labelledby="settings-h">
+  <div class="panel-head"><h2 id="settings-h">Settings</h2></div>
+  <p class="help">The OCR service runs in its own container, which the installer includes when you answer yes to OCR (<code>./install.sh --configure ocr</code>). <strong>Test</strong> checks that PDMS can reach it. Files uploaded before OCR was on are read when someone chooses “Read the file again” on the document page.</p>
+  <form method="post" action="/admin/ocr" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="text_extraction" value="true"{% if text_extraction %} checked{% endif %}{% if text_locked %} disabled{% endif %}> Read the text in uploaded files, so it can be searched</label>
+    {% if text_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="ocr" value="true"{% if enabled %} checked{% endif %}{% if url_locked %} disabled{% endif %}> <span>Read scanned PDFs and images with the OCR service at <code>{{ url }}</code></span></label>
+    {% if url_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span>
+    <div><label class="check"><input type="checkbox" name="suggest_dates" value="true"{% if suggest_dates %} checked{% endif %}{% if dates_locked %} disabled{% endif %}> Suggest dates found in files</label>
+    {% if dates_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button><button type="submit" class="button" formaction="/admin/ocr/test">Test</button></div>
+  </form>
+  {% if let Some(c) = check %}
+  <h3>Test result</h3>
+  <div role="status">
+  <ul class="checklist">
+    {% for (ok, line) in c.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
+  </ul>
+  </div>
+  {% endif %}
+</section>
+{% else if !enabled %}
 <section class="panel" aria-labelledby="turn-on-h">
   <h2 id="turn-on-h">Turn on OCR</h2>
-  <ol class="steps-list">
-    <li>Start the OCR service: <code>docker compose --profile ocr up -d</code>, or run <code>./install.sh --configure ocr</code>.</li>
-    <li>Set <code>[ocr] sidecar_url = "http://ocr:8080"</code> in the configuration file, then restart PDMS.</li>
-    <li>Use “Read the file again” on a document page to read a file uploaded before OCR was on.</li>
-  </ol>
+  <p>An administrator turns OCR on under <strong>Settings</strong> on this page, after the OCR service is installed (<code>./install.sh --configure ocr</code>).</p>
 </section>
 {% endif %}
 {% endblock %}

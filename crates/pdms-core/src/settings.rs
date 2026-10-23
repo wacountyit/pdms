@@ -477,3 +477,54 @@ mod tests {
         );
     }
 }
+
+/// What a settings page's **Test** found: each step, and whether all passed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Check {
+    pub ok: bool,
+    pub lines: Vec<(bool, String)>,
+}
+
+impl Check {
+    pub fn passed(lines: Vec<(bool, String)>) -> Check {
+        Check { ok: true, lines }
+    }
+
+    /// The steps so far, then the one that failed.
+    pub fn failed(mut lines: Vec<(bool, String)>, why: impl Into<String>) -> Check {
+        lines.push((false, why.into()));
+        Check { ok: false, lines }
+    }
+}
+
+/// Audit a settings test (`settings.tested`): the area and the result,
+/// never the values tried.
+pub async fn record_test(core: &Core, ctx: &Ctx, area: &str, ok: bool) -> CoreResult<()> {
+    pdms_audit::record(
+        &core.db,
+        vec![
+            AuditEvent::new(
+                Category::Admin,
+                "settings.tested",
+                ctx.actor.clone(),
+                "settings",
+            )
+            .outcome(if ok {
+                pdms_audit::Outcome::Success
+            } else {
+                pdms_audit::Outcome::Failure
+            })
+            .context("area", area.to_owned()),
+        ],
+    )
+    .await?;
+    Ok(())
+}
+
+/// A `Set` change for `key`, or nothing when the configuration file sets it.
+pub fn unless_locked(core: &Core, key: &str, value: Value) -> Option<Change> {
+    (!core.file_config().locked.contains(key)).then(|| Change {
+        key: key.into(),
+        value: NewValue::Set(value),
+    })
+}

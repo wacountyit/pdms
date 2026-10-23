@@ -60,7 +60,8 @@ pub fn router(state: AppState) -> Router {
     }
     use routes::{
         admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
-        integrations, microsoft365, ops, schedule, sharepoint_admin, sign_in, workflow,
+        integrations, microsoft365, ops, schedule, sharepoint_admin, sign_in, system_settings,
+        workflow,
     };
 
     let admin_routes = Router::new()
@@ -132,6 +133,16 @@ pub fn router(state: AppState) -> Router {
         .route("/microsoft-365/test", post(microsoft365::test))
         .route("/sign-in", get(sign_in::page).post(sign_in::save))
         .route("/sign-in/test", post(sign_in::test))
+        .route(
+            "/email",
+            get(system_settings::email_page).post(system_settings::email_save),
+        )
+        .route("/email/test", post(system_settings::email_test))
+        .route(
+            "/virus-scanning",
+            get(system_settings::scan_page).post(system_settings::scan_save),
+        )
+        .route("/virus-scanning/test", post(system_settings::scan_test))
         .route("/microsoft-365/certificates", post(microsoft365::generate))
         .route(
             "/microsoft-365/certificates/{id}/activate",
@@ -231,7 +242,11 @@ pub fn router(state: AppState) -> Router {
             "/webhooks/{id}",
             get(integrations::webhook_page).post(integrations::update_webhook),
         )
-        .route("/ocr", get(collab::ocr_page))
+        .route(
+            "/ocr",
+            get(collab::ocr_page).post(system_settings::ocr_save),
+        )
+        .route("/ocr/test", post(system_settings::ocr_test))
         // The Outlook calendar sync was removed (D-087); its page's OCR part
         // moved to /admin/ocr.
         .route(

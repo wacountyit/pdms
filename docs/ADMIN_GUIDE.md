@@ -188,12 +188,13 @@ Every change is recorded in the audit log with before and after values.
 **Finding an admin page.** Administration has a menu of its own, beside the
 page (on a phone, behind **Administration: …** at the top), in five groups:
 - *People and access:* Users, Departments, Groups, Roles, Access grants,
-  Identity provider mappings, Entra ID sync;
+  Identity provider mappings;
+- *Microsoft 365:* Connection, Sign-in, Entra ID sync, SharePoint;
 - *Documents and records:* Document types, Custom fields, Tags, Retention,
   Deleted documents;
 - *Notifications:* Notification rules, Delivery log;
 - *Integrations:* Webhooks, API;
-- *System:* Branding, Text extraction (OCR).
+- *System:* Branding, Email, Text extraction (OCR), Virus scanning.
 
 You see only the pages your roles allow.
 
@@ -555,8 +556,17 @@ consistent for everyone who filters by it:
 | `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage, or `sharepoint` to keep document files in a SharePoint library (below; `./install.sh --configure sharepoint` sets it) |
 | `[storage] max_upload_bytes` | 100 MB | |
 | `[storage.s3] endpoint, bucket, region, access_key_id, prefix` | | Any S3-compatible service: AWS, SeaweedFS, MinIO, and appliance S3 endpoints. Put the secret in a file and set `PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE`. Enable bucket versioning or object lock if available |
-| `[storage] clamav_addr` | empty (off) | e.g. `clamav:3310` with `docker compose --profile clamav up -d`. The bundled `deploy/clamav/clamd.conf` raises clamd's size limits to match uploads |
+| `[storage] clamav_addr` | empty (off) | Set on **Administration → Virus scanning** (below). The bundled `deploy/clamav/clamd.conf` raises clamd's size limits to match uploads |
 | `[storage] clamav_required` | `true` | When scanning is on and clamd is unreachable, uploads are refused (fail closed) |
+
+**Virus scanning.** ClamAV runs in its own container (about 1 GB of memory),
+which the installer includes when you answer yes to virus scanning
+(`./install.sh --configure clamav`). On **Administration → Virus scanning**,
+turn scanning on (PDMS uses the container at `clamav:3310`) and choose
+whether uploads are refused while ClamAV can't be reached. **Test** sends
+the EICAR test file, which is harmless and which every virus scanner
+reports, and expects ClamAV to find it; it says so when the container isn't
+running. A save applies to the next upload, without a restart.
 
 Accepted file types are decided from the file's content: PDF, Word, Excel,
 PowerPoint (current and 97–2003), OpenDocument, RTF, images, text/CSV, and
@@ -752,25 +762,22 @@ about it. That delivery is recorded as skipped.
 
 ### Email setup
 
-Until email is configured, reminders still appear in the in-app notification
-center. For Exchange Online, edit `config/pdms.toml`:
+Until email is on, reminders still appear in the in-app notification
+center; emails are not queued while it is off. Set email up on
+**Administration → Email** (under *System*): the SMTP server, port,
+security, username, password (stored encrypted, never shown again), From and
+Reply-to. For Exchange Online: `smtp.office365.com`, port 587, STARTTLS, and
+the mailbox as the username. **Send test email** sends one message to the
+address you type (your own by default) with the values on the page, without
+saving them; the audit log records the result, not the address. **Save**
+applies at once, without a restart.
 
-```toml
-[email]
-transport = "smtp"
-from = "Example Org PDMS <pdms@yourdomain.org>"
-smtp_host = "smtp.office365.com"
-smtp_port = 587
-smtp_security = "starttls"
-smtp_username = "pdms@yourdomain.org"
-```
-
-Put the mailbox password in `secrets/smtp_password` and restart:
-`docker compose up -d app worker`.
+The same values can be set in `[email]` in `config/pdms.toml` and
+`secrets/smtp_password`; there they win and show read-only on the page.
 - **SMTP AUTH:** the mailbox needs SMTP AUTH enabled in Exchange Online.
 - **Relay connector:** if you relay through an Exchange connector or a local
-  relay instead, leave `smtp_username` empty and use the relay's host and
-  port (`smtp_security = "none"` only on a trusted network).
+  relay instead, leave the username empty and use the relay's host and
+  port (security "None" only on a trusted network).
 
 To run planning immediately (it runs every 15 minutes anyway):
 `docker compose run --rm app run-scheduler`.
@@ -982,15 +989,23 @@ owner is told when there are dates to confirm.
   on).
 
 **OCR for scanned documents (optional).** Because Rust has no mature OCR
-engine, OCR runs in a separate container (OCRmyPDF with Tesseract):
-1. `docker compose --profile ocr up -d` (builds and starts `ocr`);
-2. in `config/pdms.toml` set `[ocr] sidecar_url = "http://ocr:8080"`;
-3. `docker compose up -d app worker`.
+engine, OCR runs in a separate container (OCRmyPDF with Tesseract), which
+the installer includes when you answer yes to OCR (`./install.sh
+--configure ocr`). Then, on **Administration → Text extraction (OCR)**
+(under *System*), tick **Read scanned PDFs and images** under **Settings**
+and save; PDMS uses the container at `http://ocr:8080`. **Test** checks that
+PDMS can reach it, and says so when the container isn't running. The same
+panel turns reading text in files and date suggestions on and off. Changes
+apply to files uploaded from then on, without a restart.
 English is installed; other Tesseract languages can be added by extending
 `deploy/ocr/Dockerfile` and setting `PDMS_OCR_LANGUAGES` (for example
 `eng+spa`). Without OCR everything else works; scanned files simply have no
-searchable text. **Administration → Text extraction (OCR)** (under *System*)
-shows whether OCR is on and how to turn it on.
+searchable text.
+
+On installs set up before these pages, the installer wrote these settings
+into `config/pdms.toml` (`[email]`, `[ocr] sidecar_url`, `[storage]
+clamav_addr`), so they show read-only on the pages. Change them in the file,
+or delete the lines to manage them on the pages.
 
 **The Outlook calendar sync was removed (D-087).** The calendar is PDMS's own
 look-ahead. People who want the dates in Outlook subscribe to their calendar

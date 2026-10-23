@@ -34,6 +34,7 @@ pub mod notifications;
 pub mod ocr;
 pub mod reports;
 pub mod reviews;
+pub mod scanning;
 pub mod schedule;
 pub mod settings;
 pub mod sharepoint;
