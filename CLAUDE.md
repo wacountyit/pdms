@@ -36,6 +36,11 @@ The README ("Layout") describes each crate.
      lists what can start next. The
      [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md)
      records what each plan produced.
+   - **Settings in Administration (S1) is done** (2026-10-23). Sign-in,
+     email, Microsoft 365, SharePoint, the Entra sync, OCR and virus
+     scanning are set up on admin pages; the installer is for the first
+     installation. The settings registry is `pdms-core::settings::SETTINGS`;
+     a value in the configuration file wins and shows read-only (D-111).
    - **UI redesign R2 is done** (2026-10-22). Its
      [spec](docs/superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §5.2
      is the pattern every new admin page follows.

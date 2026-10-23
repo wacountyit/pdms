@@ -407,8 +407,28 @@ calls `Core::reload`, which swaps the snapshot in; if the new settings can't
 be built, the running ones stay. The web server applies them live. The
 worker is rebuilt (`maintenance::run_worker`): it stops cleanly, letting
 running jobs finish, and starts again with the new settings, because which
-jobs it registers depends on them (D-112). `pdms settings show` lists every
-setting, its value (secrets only as set or not set), and where it comes from.
+jobs it registers depends on them (D-112). Microsoft sign-in lives in the
+web process: `AppState` keeps the provider with a fingerprint of the
+settings it was built from, rebuilds it after a settings change that touches
+them, and retries a failed discovery every 5 minutes (D-115).
+
+The "PDMS Service" certificate is made in PDMS (`graph::certs`): its private
+key is an `app_secrets` row, the public certificate is downloaded from the
+Connection page, and a renewal waits as `pending` until it is switched to
+(D-113). Each page's **Test** (`sharepoint::setup`, `auth::oidc_setup`,
+`notifications::mail_setup`, `ocr::setup`, `scanning`, `graph::certs`)
+changes nothing outside PDMS except the one test email, and is audited as
+`settings.tested` with the area and result only.
+
+`pdms settings` is the command-line fallback: `show` lists every setting,
+its value (secrets only as set or not set) and where it comes from; `set`,
+`set-secret` and `test` do what the pages do, as the system actor; `import`
+(`settings_import`) copies what an earlier installer wrote into its blocks
+of `config/pdms.toml` into the database, which `./install.sh` runs when it
+moves settings on an upgrade (D-116). The installer keeps only what PDMS
+can't start without or can't change from inside its container (the address,
+ports, database, master key, first administrator, which optional containers
+run).
 
 ## 11. Non-Rust components
 

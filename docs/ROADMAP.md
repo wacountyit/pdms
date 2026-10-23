@@ -122,6 +122,31 @@ Last updated 2026-10-23.
 
   It adds migration `0014` and decisions D-104 to D-110. The live test on a
   real SharePoint site is the next step (§0.5).
+- **S1, settings in Administration** (2026-10-23, by WACountyIT, built
+  directly on `main` in seven phases):
+  - Microsoft sign-in, email, the Microsoft 365 connection (with the
+    "PDMS Service" certificate made in PDMS), SharePoint storage, the Entra
+    ID user sync, OCR and virus scanning are set up, tested and changed on
+    admin pages, and a save applies at once in both processes, without a
+    restart;
+  - values in `config/pdms.toml` or `PDMS_*` variables still win and show
+    read-only; secrets are stored encrypted with the master key;
+  - the rules that keep files readable (SharePoint on only while no file is
+    stored locally, the site fixed while SharePoint holds files) and the
+    sign-in lockout rule;
+  - `pdms settings set|set-secret|test|import` as the fallback;
+  - the installer reduced to first-install steps, and an upgrade offers once
+    to move the settings an earlier installer wrote into Administration.
+
+  It adds migration `0015` and decisions D-111 to D-116. On `main` on
+  2026-10-23 it gives 540 passed, 0 failed, and 5 ignored. The
+  [spec](superpowers/specs/2026-10-23-admin-settings-design.md) and
+  [plan](superpowers/plans/2026-10-23-admin-settings.md) describe it.
+- **Upgrading after S1:** `git pull && ./install.sh` as usual. It offers to
+  move the sign-in, email, SharePoint, OCR and virus-scanning settings into
+  Administration (back up first: they then live in the database, encrypted
+  with the master key). Answer yes on the test server, so the SharePoint
+  live test is set up from the admin pages.
 - **Upgrading after P4:** run `./install.sh` after `git pull`, as usual. It
   creates `secrets/graph_certificate` (empty unless Microsoft Graph is set
   up), which Docker Compose now expects; `docker compose up` alone stops with
@@ -150,7 +175,7 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
-| **S1, settings in Administration** (S1) | WACountyIT | Spec: **Done** (approved 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md)). Plan: **Done** ([plan](superpowers/plans/2026-10-23-admin-settings.md), 7 phases). Phase 1 (foundation: settings storage, the configuration file wins, encryption, live apply, worker rebuild, `pdms settings show`; migration `0015`): **Done**. Phase 2 (Administration → Microsoft 365 → Connection: the app's IDs, the certificate made in PDMS, the connection test, the expiry reminder): **Done**. Phase 3 (SharePoint storage settings with the read-only test and the on and off switch; Entra ID sync settings and preview; D-114): **Done**. Phase 4 (Administration → Microsoft 365 → Sign-in, live rebuild of the sign-in provider, the lockout rule; D-115): **Done**. Phase 5 (Administration → Email with a test email, the OCR Settings panel, Administration → Virus scanning with the EICAR test): **Done**. Phase 6 (`pdms settings set|set-secret|test|import`, the installer reduced to first-install steps, moving existing settings on upgrade; D-116): **Done**. Phase 7 (records and the full check): **Not started** | Phase 7 next | 2026-10-23 |
+| (none) | | | | |
 
 §0.5 lists what can start next.
 
@@ -193,7 +218,7 @@ taken up.
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
-| S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Planned**: spec approved and [plan](superpowers/plans/2026-10-23-admin-settings.md) written 2026-10-23 | [spec](superpowers/specs/2026-10-23-admin-settings-design.md) |
+| S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Done** (2026-10-23; migration `0015`, D-111 to D-116) | [spec](superpowers/specs/2026-10-23-admin-settings-design.md), [plan](superpowers/plans/2026-10-23-admin-settings.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
@@ -234,17 +259,15 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **S1, settings in Administration** (claimed, §0.1a). The owner asked for it
-   before the SharePoint live test, so SharePoint can be set up and tested from
-   the admin page. Spec first, then a plan, then phases.
-2. **SharePoint live test on the test server.** Everything is built; this is
-   the owner's step once the items "Waiting on the county" (§0.3) are ready:
+1. **SharePoint live test on the test server.** Everything is built, and
+   since S1 it is set up and tested from the admin pages; this is the
+   owner's step once the items "Waiting on the county" (§0.3) are ready:
    follow [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test
    server" (it resets the test server), then work through §1.2. Set
    sub-projects 1 and 2 to **Done** when they pass.
-3. **Security fixes.** The owner holds the findings and hands them out one
+2. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-4. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
    imports into, is merged.
 
 ### 0.6 Which work touches which files
@@ -252,20 +275,20 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 Two pieces of work that share a row can conflict. When you claim something,
 add a column for it with what it changes in each row, and check the other
 columns first. If your work and claimed work share a row, agree the order
-with the owner first. (P3 and P4 are done, so their columns were removed on
-2026-10-23; nothing else is claimed.) Paths are under `crates/pdms-web/`
+with the owner first. (P3, P4 and S1 are done, so their columns were removed
+on 2026-10-23; nothing else is claimed.) Paths are under `crates/pdms-web/`
 unless they start with `crates/` or name a top-level folder.
 
 | Files | (no claimed work) |
 | --- | --- |
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`) | |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | |
 | Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | |
 | Route table: `src/lib.rs`, `src/routes/mod.rs` | |
 | Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | |
 | Web errors and API: `src/error.rs`, `src/routes/api.rs` | |
 | Web tests: `crates/pdms-web/tests/` | |
 | `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | |
-| `crates/pdms-core/src/config.rs` and `maintenance.rs` (the worker's jobs) | |
+| `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | |
 | `migrations/` | |
 | `.sqlx/` | |
 | `config/`, `install.sh`, `docker-compose.yml` | |
@@ -348,6 +371,13 @@ Denied access attempts**.
 - [ ] Create an API token with read scope; `GET /api/v1/documents` returns only what that user can see; revoking the token stops it.
 - [ ] A webhook to a test endpoint (e.g. a temporary request bin on your network) receives signed events.
 
+**Settings in Administration**
+- [ ] Each settings page's **Test** reports a working setup as OK and a wrong value (tenant, site, SMTP server, a stopped OCR or ClamAV container) as a problem in plain words, and changes nothing.
+- [ ] A save applies at once in the web server and the worker, without a restart (for example, a test email after changing the SMTP settings; a new reminder email after turning email on).
+- [ ] A value in `config/pdms.toml` shows read-only on its page; deleting it there and restarting makes it editable.
+- [ ] The upgrade offer moves the old settings: afterwards everything works as before, and `docker compose run --rm app settings show` lists them as `database`.
+- [ ] Renewing the Microsoft 365 certificate on the Connection page (make, upload, **Use this certificate**) has no outage.
+
 **Audit and operations**
 - [ ] The audit log shows every action above with who/when/what; **Verify** reports the chain intact; CSV/JSON export works.
 - [ ] Backup and **restore drill** on the test server (docs/BACKUP.md): restore ends with "Integrity verified: no problems found."
@@ -429,7 +459,7 @@ Things that work but are limited, or were deliberately left for later:
 | Testing | Browser end-to-end tests (Playwright) from the original plan were not built; the web is tested at the HTTP level. | Catches front-end regressions earlier. | M |
 | Scaling | Login and API rate limits live in memory per app instance; one app instance is assumed. | Fine for a single organization; matters only for multiple app instances. | M |
 | OCR | English only; date suggestions are keyword-based and miss unusual wording. | Spanish documents, odd contract language. | S–M |
-| Settings | Most settings live in `config/pdms.toml` (installer or a text editor), not in an admin screen. | IT staff need shell access for some changes. | M |
+| Settings | Sign-in, email, Microsoft 365, SharePoint, the Entra sync, OCR and virus scanning are set up in Administration (S1). The time zone, upload size limit, API and rate limits, S3 storage and audit forwarding are still set in `config/pdms.toml`, and the address, ports and database in the installer. | Rarely changed, but they need shell access; the same pattern can bring them to the pages later. | S |
 | SharePoint storage | **Orphans are listed, not removed.** If a save fails after its file was uploaded, the file stays in SharePoint; the change check lists it under "Files PDMS does not track" after ten minutes, and an administrator deletes it there (D-102, D-106). A folder moved by a change that then failed is put back by the next mirror run. | An administrator has to clean up the rare failed save by hand. | S |
 | SharePoint storage | **No migration between storage backends.** Turning SharePoint on doesn't move files already stored locally or in S3, and they can't be read afterwards. | Turn it on before real documents are added; the test server is reset when it is switched (D-102). | M |
 | Audit | No archival of old audit entries (nothing is purged; forwarding gives an external copy). | Only matters after many years of heavy use. | S |
@@ -448,7 +478,7 @@ Ordered by likely value; adjust after the pilot. Where these overlap the sub-pro
 4. **Position reminder rules screen**, and per-user notification preferences (daily digest instead of individual emails).
 5. **Saved searches and "watch this document"**, so people can follow documents they do not own.
 6. **Release engineering:** versioned releases and a changelog, a published container image, `cargo audit`/`cargo deny` and an image scan in CI, and Playwright smoke tests.
-7. **Admin settings screen** for the common settings (email, reminder defaults, OCR on/off), so routine changes need no shell access.
+7. ~~**Admin settings screen** for the common settings (email, reminder defaults, OCR on/off), so routine changes need no shell access.~~ **Done by S1** (2026-10-23), except reminder defaults, which were already under Administration → Notification rules.
 
 ### Later
 

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-23
 - **Spec:** [2026-10-23-admin-settings-design.md](../specs/2026-10-23-admin-settings-design.md), approved by the owner on 2026-10-23.
-- **Status:** in progress. Phases 1 and 2 done (2026-10-23).
+- **Status:** done (2026-10-23). All seven phases built; 540 tests pass, 5 ignored.
 - **How it is built:** directly on `main`, one phase at a time. Each phase ends with the checks below, its ROADMAP §0.1a state, and commit and push commands for the owner. Commit messages start with `S1:`.
 - **Numbers:** migration `0015_settings.sql`; decisions from D-111 (both the next free on `main` on 2026-10-23).
 - **Checks after every phase:** `cargo fmt --all`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace`; `cargo sqlx prepare --workspace --check -- --all-targets` when queries changed; `bash -n install.sh` when the installer changed; the screenshot tool for every page a phase adds or changes (dark and light).
@@ -194,6 +194,8 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 ---
 
 ## Phase 7: Records and the full check
+
+> **As built (2026-10-23):** ROADMAP §0.1 (S1 entry and the upgrade note), §0.1a row removed, §0.3 S1 **Done**, §0.5 (the SharePoint live test is first), §0.6 (the new route and core files), §1.2 (settings checks), §4 (the Settings gap narrowed to the out-of-scope settings), §5 item 7 done. ARCHITECTURE §10 (the sign-in provider, certificates, tests, `pdms settings`, the installer's scope); §12 already had migration `0015`. CLAUDE.md "Start here". DECISIONS needed no status changes (D-111 to D-116 are Accepted) and none of the "Open questions" defaults moved to these pages. The plan has no checkboxes. The full check and screenshots of every page in both themes were run.
 
 - ROADMAP: §0.3 S1 to **Done**, §0.1 entry with the test count, §0.1a row removed, §0.5 and §0.6, §4 (the "Settings" gap closed for these areas; the out-of-scope settings listed), §5 "Next" item 7 marked as done by S1.
 - ARCHITECTURE §10 and §12 (migration `0015`); README; CLAUDE.md "Start here".
