@@ -391,36 +391,28 @@ queued run is skipped. **Full resync** reads every account again.
 
 **Setup.**
 
-1. Create the certificate in the `secrets/` directory on the host (never in
-   the `pdmsdata` volume, which holds documents and is backed up as one
-   archive). Run it from the PDMS install directory, either with the host
-   binary:
-   `pdms gen-graph-cert --out secrets/graph_certificate`
-   or through Docker (the container runs as an unprivileged user, so run it
-   as yourself and mount `secrets/`):
-   `docker compose run --rm --user "$(id -u):$(id -g)" -v "$PWD/secrets:/out" app gen-graph-cert --out /out/graph_certificate`
-   Options: `--days N` (30 to 1095, default two years) and `--name CN`. It
-   writes the secret certificate and key to `secrets/graph_certificate`
-   (mode 0600) and the public certificate to `secrets/graph_certificate.crt`.
-   It never overwrites an existing file, and it prints the `.crt` path and
-   the certificate thumbprint. Then make the key readable by the containers,
-   as the installer does for the other secret files inside the private
-   `secrets/` directory: `chmod 644 secrets/graph_certificate`.
-2. In Entra ID, register an app **PDMS Service**, add the Microsoft Graph
-   **application** permission `User.Read.All`, grant admin consent, and
-   upload `secrets/graph_certificate.crt` (the public certificate, from the
-   host) under **Certificates & secrets**. There is no client secret.
-3. Set `[graph] tenant_id` and `client_id` in `config/pdms.toml` (with
-   SharePoint storage, `./install.sh --configure sharepoint` writes them for
-   you). Docker Compose mounts `secrets/graph_certificate` for PDMS; an empty
-   file means Microsoft Graph is not set up.
+1. In Entra ID, register an app **PDMS Service**, add the Microsoft Graph
+   **application** permission `User.Read.All`, and grant admin consent. There
+   is no client secret: PDMS signs in with a certificate.
+2. On **Administration → Microsoft 365 → Connection**, choose **Make a new
+   certificate**, then **Download** it and upload the `.crt` to the app
+   registration under **Certificates & secrets → Certificates**. The private
+   key never leaves PDMS (it is stored encrypted in the database). Enter the
+   **Directory (tenant) ID** and **Application (client) ID**, choose **Test
+   these IDs**, then **Save**. PDMS uses the connection at once, without a
+   restart.
+
+   A certificate in `secrets/graph_certificate`, or IDs in `[graph]` in
+   `config/pdms.toml`, win over the page and show read-only there. Docker
+   Compose always mounts `secrets/graph_certificate`; an empty file means
+   "not set in the file". (`pdms gen-graph-cert --out secrets/graph_certificate`
+   still makes a file certificate for installs that prefer it.)
 
    **If you followed an earlier version of this guide** and added the
    certificate to `docker-compose.yml` by hand, undo that edit before
    upgrading (`git checkout docker-compose.yml`), or `git pull` stops with a
    conflict. The file now has those lines itself.
-
-   Then set:
+3. Turn the sync on. Set:
 
    ```toml
    [entra_sync]
@@ -432,13 +424,13 @@ queued run is skipped. **Full resync** reads every account again.
    then press **Sync now**. `pdms sync-directory` runs a sync from the command
    line; `pdms sync-directory --full` reads every account again. Both refuse
    to run while `enabled = false`.
-4. Renew the certificate before it expires: create a new one, upload its
-   `.crt` to the app registration, replace the file, and restart. The
-   **Certificate thumbprint** on **Administration → Entra ID sync** is the one
-   PDMS is using: after the restart it should equal the SHA-256 thumbprint
-   `pdms gen-graph-cert` printed for the new certificate (Entra ID may list a
-   different, SHA-1 thumbprint). Then remove the old certificate from the app
-   registration.
+4. Renew the certificate before it expires (administrators get a reminder
+   30 days before): on the Connection page choose **Make a new certificate**,
+   upload its `.crt` to the app registration, then choose **Use this
+   certificate**. The old one keeps working until then, so there is no
+   outage. Then remove the old certificate from the app registration. The
+   page shows both thumbprints: Entra lists the SHA-1 one; **Administration →
+   Entra ID sync** shows the SHA-256 one.
 
 ## 4. Documents
 

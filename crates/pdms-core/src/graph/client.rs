@@ -258,6 +258,12 @@ impl GraphClient {
         json_body(self.send(method, path, Some(&v)).await?).await
     }
 
+    /// Request an app-only token: proves the tenant, client ID and
+    /// certificate are right and the certificate is uploaded.
+    pub async fn sign_in(&self) -> Result<(), GraphError> {
+        self.token().await.map(|_| ())
+    }
+
     async fn token(&self) -> Result<String, GraphError> {
         let mut cached = self.inner.token.lock().await;
         if let Some((t, until)) = cached.as_ref()

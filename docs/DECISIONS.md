@@ -1033,6 +1033,21 @@ first said. Processes hear of a change through `NOTIFY pdms_settings` and
 check `settings_version` every 60 seconds; if stored settings can't be
 built, the running ones stay and the error is logged.
 
+### D-113 The "PDMS Service" certificate is made in PDMS — Accepted (2026-10-23)
+Administrators make the certificate on **Administration → Microsoft 365 →
+Connection** (RSA-2048, two years). Its private key is stored encrypted in
+`app_secrets` and never leaves PDMS; only the public certificate can be
+downloaded. The first certificate is active at once, and PDMS signs in with
+it as soon as the tenant and client IDs are saved (before that, Microsoft
+Graph stays off rather than half set up). A later certificate waits as
+pending until **Use this certificate**, so it can be uploaded to Entra first:
+renewal has no outage, and the old private key is deleted when it is
+replaced. A certificate in `secrets/graph_certificate` still wins (D-111).
+The connection test signs in with the newest certificate and reads one user,
+without saving anything, and reports a missing `User.Read.All` as a note,
+because SharePoint storage doesn't need it. Administrators are reminded 30
+days before the active certificate expires.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |

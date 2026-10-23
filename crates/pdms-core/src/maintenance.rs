@@ -187,7 +187,22 @@ pub fn worker(core: &Core) -> Worker {
             crate::integrations::forward::FORWARD_JOB,
             Duration::from_secs(30),
         )
-        .every(API_LOG_PURGE, Duration::from_secs(24 * 3600));
+        .every(API_LOG_PURGE, Duration::from_secs(24 * 3600))
+        .handle(crate::graph::certs::EXPIRY_JOB, {
+            let core = core.clone();
+            move |_| {
+                let core = core.clone();
+                async move {
+                    crate::graph::certs::remind_expiry(&core)
+                        .await
+                        .map_err(|e| e.to_string())
+                }
+            }
+        })
+        .every(
+            crate::graph::certs::EXPIRY_JOB,
+            Duration::from_secs(24 * 3600),
+        );
     use crate::directory::entra_sync;
     let worker = worker
         .handle(entra_sync::SYNC_JOB, {

@@ -4,6 +4,7 @@
 //! small client for JSON, delta queries, uploads, and downloads.
 
 pub mod cert;
+pub mod certs;
 mod client;
 mod error;
 

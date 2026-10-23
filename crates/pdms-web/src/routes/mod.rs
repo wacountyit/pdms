@@ -11,6 +11,7 @@ pub mod doc_admin;
 pub mod documents;
 pub mod exports;
 pub mod integrations;
+pub mod microsoft365;
 pub mod ops;
 pub mod schedule;
 pub mod sharepoint_admin;

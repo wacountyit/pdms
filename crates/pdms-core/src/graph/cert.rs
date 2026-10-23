@@ -167,6 +167,29 @@ pub fn generate(common_name: &str, valid_days: u32) -> Result<GeneratedCertifica
     })
 }
 
+/// The SHA-1 thumbprint as the Entra admin center lists it: upper-case hex.
+pub fn sha1_thumbprint(der: &[u8]) -> String {
+    use sha1::Digest as _;
+    hex::encode_upper(sha1::Sha1::digest(der))
+}
+
+/// The DER of the first certificate in `pem`.
+pub fn certificate_der(pem: &str) -> Result<Vec<u8>, GraphError> {
+    pem_blocks(pem)?
+        .into_iter()
+        .find(|(label, _)| label == "CERTIFICATE")
+        .map(|(_, der)| der)
+        .ok_or_else(|| GraphError::Auth("no certificate in the PEM".into()))
+}
+
+/// The public certificate block of `pem` (certificate and key), for upload.
+pub fn public_pem(pem: &str) -> Option<String> {
+    let start = pem.find("-----BEGIN CERTIFICATE-----")?;
+    let end_marker = "-----END CERTIFICATE-----";
+    let end = pem[start..].find(end_marker)? + start + end_marker.len();
+    Some(format!("{}\n", &pem[start..end]))
+}
+
 /// `(label, DER)` for every PEM block in `text`.
 fn pem_blocks(text: &str) -> Result<Vec<(String, Vec<u8>)>, GraphError> {
     let mut out = Vec::new();

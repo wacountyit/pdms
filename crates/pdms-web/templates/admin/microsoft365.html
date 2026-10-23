@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block heading %}
+<header class="page-head">
+  <div>
+    <h1>{{ l.title }}</h1>
+    <p class="page-lede">The "PDMS Service" app registration PDMS signs in to Microsoft 365 with. The Entra ID user sync and SharePoint storage use it. Register the app first (<code>docs/SHAREPOINT_SETUP.md</code>, B1 and B2), then enter its IDs and make its certificate here.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="/admin/microsoft-365/test" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button primary">Test connection</button></form>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+{% if connected %}<p class="flash flash-ok" role="status">Connected: PDMS signs in with the certificate <code>{{ thumbprint }}</code> (SHA-256).</p>
+{% else %}<p class="flash flash-info" role="status">Not connected yet. Enter the IDs and make a certificate below.</p>{% endif %}
+
+<section class="panel" aria-labelledby="ids-h">
+  <div class="panel-head"><h2 id="ids-h">App registration</h2></div>
+  <p class="help">From the app registration's <strong>Overview</strong> page in the Entra admin center. <strong>Test connection</strong> tries the IDs below (or the saved ones) without saving them.</p>
+  <form method="post" action="/admin/microsoft-365" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <label for="ms-tenant">Directory (tenant) ID</label>
+    <div><input id="ms-tenant" name="tenant_id" value="{{ tenant_id }}" maxlength="36" size="38" autocomplete="off" spellcheck="false"{% if tenant_locked %} disabled aria-describedby="ms-tenant-locked"{% endif %}>
+    {% if tenant_locked %}<p class="help" id="ms-tenant-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <label for="ms-client">Application (client) ID</label>
+    <div><input id="ms-client" name="client_id" value="{{ client_id }}" maxlength="36" size="38" autocomplete="off" spellcheck="false"{% if client_locked %} disabled aria-describedby="ms-client-locked"{% endif %}>
+    {% if client_locked %}<p class="help" id="ms-client-locked">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
+    <span></span><div class="toolbar"><button type="submit" class="button primary">Save</button><button type="submit" class="button" formaction="/admin/microsoft-365/test">Test these IDs</button></div>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="cert-h">
+  <div class="panel-head"><h2 id="cert-h">Certificate</h2>{% if !certs.is_empty() %}<span class="muted small">{{ certs.len() }}</span>{% endif %}</div>
+  {% if file_certificate %}<p class="flash flash-info" role="status">The configuration file provides the certificate (<code>secrets/graph_certificate</code>), so PDMS uses that one. Certificates made here are used once that file is empty.</p>{% endif %}
+  <p class="help">PDMS signs in with a certificate instead of a password. Its private key never leaves PDMS: download the public certificate and upload it under <strong>Certificates &amp; secrets → Certificates</strong> in the app registration. The Entra admin center lists the SHA-1 thumbprint. To renew, make a new certificate, upload it, then choose <strong>Use this certificate</strong>: there is no outage.</p>
+  {% if certs.is_empty() %}<p class="empty">No certificate yet.</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Certificates</caption>
+    <thead><tr><th scope="col">State</th><th scope="col">Thumbprints</th><th scope="col">Expires</th><th scope="col">Made</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for c in certs %}
+      <tr>
+        <td>{% if c.active %}{% if connected %}<span class="status status-good">In use</span>{% else %}<span class="status status-info">In use once the IDs are saved</span>{% endif %}{% else %}<span class="status status-info">Waiting</span>{% endif %}</td>
+        <td><span class="small">SHA-1</span> <code class="small">{{ c.sha1 }}</code><br><span class="small">SHA-256</span> <code class="small">{{ c.sha256 }}</code></td>
+        <td class="nowrap">{{ c.expires }}</td>
+        <td class="small">{{ c.created }}</td>
+        <td>
+          <a class="button small" href="/admin/microsoft-365/certificates/{{ c.id }}.crt">Download<span class="visually-hidden"> certificate {{ c.sha1 }}</span></a>
+          {% if !c.active %}
+          <form method="post" action="/admin/microsoft-365/certificates/{{ c.id }}/activate" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small">Use this certificate</button></form>
+          {% endif %}
+          {% if !c.active %}
+          <form method="post" action="/admin/microsoft-365/certificates/{{ c.id }}/retire" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button small danger">Discard</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/microsoft-365/certificates" class="inline-form"><input type="hidden" name="_csrf" value="{{ l.csrf }}"><button type="submit" class="button">Make a new certificate</button></form>
+</section>
+{% endblock %}

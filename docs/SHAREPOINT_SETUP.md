@@ -128,42 +128,48 @@ Then choose **Grant admin consent**. Do not add `Sites.ReadWrite.All` or
 `Files.ReadWrite.All`: `Sites.Selected` limits PDMS to the one site you grant
 in B5.
 
-### B3. Run the installer on the PDMS server
+### B3. Connect PDMS to the app
+
+Sign in to PDMS as an administrator and open **Administration → Microsoft 365
+→ Connection**:
+
+1. Choose **Make a new certificate**. PDMS makes the certificate it signs in
+   with; its private key never leaves PDMS (it is stored encrypted in the
+   database). The page shows its expiry date and two thumbprints: SHA-1 (what
+   the Entra admin center lists) and SHA-256.
+2. Choose **Download** to save the public certificate (`pdms-service.crt`).
+3. Enter the **Directory (tenant) ID** and **Application (client) ID** from
+   B1, and choose **Save** once the certificate is uploaded (B4). **Test
+   these IDs** tries them first without saving.
+
+### B4. Upload the certificate
+
+In the app registration, choose **Certificates & secrets → Certificates →
+Upload certificate** and pick `pdms-service.crt`. Check that the thumbprint
+Entra lists matches the SHA-1 thumbprint on the Connection page. Then choose
+**Test connection** there: it should say "Signed in to Microsoft Graph as the
+PDMS Service app".
+
+### B4b. Turn SharePoint storage on
+
+For now this is still an installer step; it moves to **Administration →
+SharePoint** in the next update.
 
 ```sh
 ./install.sh --configure sharepoint
 ```
 
-It asks for the site address, the tenant ID (it suggests the one used for
-sign-in), and the client ID. It then:
-
-- creates the certificate PDMS signs in with, if there is none yet:
-  `secrets/graph_certificate` (private; never copy it off the server except
-  in backups). The Entra ID user sync uses the same certificate, so if you
-  already set that up, nothing new is created;
-- writes the public part to `secrets/graph_certificate.crt` and prints its
-  expiry date and two thumbprints: SHA-1 (what the Entra admin center lists)
-  and SHA-256 (what **Administration → Entra ID sync** shows);
-- sets `[storage] backend = "sharepoint"`, and restarts PDMS.
-
-On an install that already has documents, it asks you to confirm first:
-files already stored on the server are not moved to SharePoint, and PDMS
-cannot open them once SharePoint storage is on. Turn SharePoint on before
-real documents are added; on the test server, reset it first (rollout, at
-the end of this guide).
-
-The Entra ID user sync is a separate step: see "Entra ID user sync" in the
-administrator guide. SharePoint storage works without it, but then nobody
-gets read access to the department folders (B8).
-
-Copy `secrets/graph_certificate.crt` to your workstation, for example with
-`scp`.
-
-### B4. Upload the certificate
-
-In the app registration, choose **Certificates & secrets → Certificates →
-Upload certificate** and pick `graph_certificate.crt`. Check that the
-thumbprint Entra lists matches the SHA-1 thumbprint the installer printed.
+Give it the same tenant and client IDs as the Connection page. On an install
+that already has documents, it asks you to confirm first: files already
+stored on the server are not moved to SharePoint, and PDMS cannot open them
+once SharePoint storage is on. Turn SharePoint on before real documents are
+added; on the test server, reset it first (rollout, at the end of this
+guide). The installer writes the IDs into `config/pdms.toml`, so they then
+show read-only on the Connection page. It can't see the certificate made on
+the page, so it also makes a file certificate in `secrets/graph_certificate`,
+which would win over the page's. Until this step moves to the admin page,
+empty that file afterwards so PDMS keeps the certificate you uploaded:
+`: > secrets/graph_certificate && docker compose up -d --force-recreate app worker`.
 
 ### B5. Give the app full control of this one site
 
@@ -275,24 +281,22 @@ mailbox).
 
 ### C1. Renew the certificate (every two years)
 
-The installer prints the expiry date; set a reminder 30 days before it. To
-renew without an outage, add the new certificate to the app before PDMS uses
-it:
+Administrators get a reminder 30 days before the certificate expires. To
+renew without an outage, on **Administration → Microsoft 365 → Connection**:
 
-```sh
-cd /path/to/pdms
-d=$(mktemp -d secrets/renew.XXXX)
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PDMS Service" \
-  -keyout "$d/key.pem" -out "$d/cert.pem"
-# Upload $d/cert.pem to the app registration now (B4). Keep the old certificate there.
-cat "$d/cert.pem" "$d/key.pem" > secrets/graph_certificate && chmod 644 secrets/graph_certificate
-cp "$d/cert.pem" secrets/graph_certificate.crt && rm -rf "$d"
-docker compose up -d --force-recreate app worker
-```
+1. Choose **Make a new certificate**. It waits; PDMS keeps signing in with
+   the current one.
+2. **Download** the new certificate and upload it to the app registration
+   (B4). Keep the old one there for now.
+3. Choose **Test connection** (it tries the newest certificate), then **Use
+   this certificate**. PDMS switches at once; the old certificate's private
+   key is deleted.
+4. Delete the old certificate from the app registration.
 
-Then choose **Check for changes now** on **Administration → SharePoint**,
-check that **Administration → Entra ID sync** shows the new SHA-256
-thumbprint, and delete the old certificate from the app registration.
+If the certificate comes from `secrets/graph_certificate` instead (set up
+with the installer or `pdms gen-graph-cert`), replace that file with a new
+certificate and key and run `docker compose up -d --force-recreate app worker`,
+after uploading the new public certificate.
 
 ### C2. When something looks wrong
 

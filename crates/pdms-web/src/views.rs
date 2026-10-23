@@ -132,7 +132,6 @@ impl Layout {
                 link("roles", "Roles"),
                 link("grants", "Access grants"),
                 link("idp", "Identity provider mappings"),
-                link("entra", "Entra ID sync"),
             ]);
         }
         let mut records = Vec::new();
@@ -158,13 +157,21 @@ impl Layout {
         if self.can_settings {
             notices.push(link("notifications", "Delivery log"));
         }
+        let mut microsoft = Vec::new();
+        if self.can_settings {
+            microsoft.push(link("microsoft-365", "Connection"));
+        }
+        if self.can_directory {
+            microsoft.push(link("entra", "Entra ID sync"));
+        }
+        if self.can_sharepoint {
+            microsoft.push(link("sharepoint", "SharePoint"));
+        }
         let mut integrations = Vec::new();
         if self.can_integrations {
             integrations.extend([link("webhooks", "Webhooks"), link("api", "API")]);
         }
-        if self.can_sharepoint {
-            integrations.push(link("sharepoint", "SharePoint"));
-        }
+
         let mut system = Vec::new();
         if self.can_settings {
             system.push(link("branding", "Branding"));
@@ -174,6 +181,7 @@ impl Layout {
         }
         [
             ("People and access", people),
+            ("Microsoft 365", microsoft),
             ("Documents and records", records),
             ("Notifications", notices),
             ("Integrations", integrations),

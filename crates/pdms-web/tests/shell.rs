@@ -188,6 +188,7 @@ async fn every_admin_page_uses_the_admin_pattern() {
         ("/admin/api", "api"),
         ("/admin/ocr", "ocr"),
         ("/admin/sharepoint", "sharepoint"),
+        ("/admin/microsoft-365", "microsoft-365"),
     ] {
         let r = b.get(path).await;
         assert_eq!(r.status, StatusCode::OK, "{path}");

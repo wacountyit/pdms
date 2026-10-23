@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-23
 - **Spec:** [2026-10-23-admin-settings-design.md](../specs/2026-10-23-admin-settings-design.md), approved by the owner on 2026-10-23.
-- **Status:** in progress. Phase 1 done (2026-10-23).
+- **Status:** in progress. Phases 1 and 2 done (2026-10-23).
 - **How it is built:** directly on `main`, one phase at a time. Each phase ends with the checks below, its ROADMAP §0.1a state, and commit and push commands for the owner. Commit messages start with `S1:`.
 - **Numbers:** migration `0015_settings.sql`; decisions from D-111 (both the next free on `main` on 2026-10-23).
 - **Checks after every phase:** `cargo fmt --all`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace`; `cargo sqlx prepare --workspace --check -- --all-targets` when queries changed; `bash -n install.sh` when the installer changed; the screenshot tool for every page a phase adds or changes (dark and light).
@@ -77,6 +77,17 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 ---
 
 ## Phase 2: Microsoft 365 connection
+
+> **As built (2026-10-23):**
+> - **The first certificate is `active` at once**, not pending; it is used as soon as both IDs are saved (`settings::effective` applies it only when the tenant and client IDs are set, so making a certificate first leaves Graph off rather than half set up). Later certificates are `pending` until **Use this certificate**. Using the newest pending one when none was active would have let a second certificate take over without that step.
+> - The certificate reaches the configuration as a pseudo-setting (`graph.certificate`) from `certs::effective_pem`, skipped when the file has a certificate.
+> - `graph::cert` gained `sha1_thumbprint`, `certificate_der` and `public_pem`; `GraphClient::sign_in` requests a token without another call. New dependency `sha1` (already in the tree).
+> - The test reads `GET /users?$top=1&$select=id`; a refusal there is a note ("needs User.Read.All"), not a failure. The mock Graph answers `GET /users`.
+> - The download route is `/admin/microsoft-365/certificates/<id>.crt` (file name `pdms-service.crt`).
+> - The menu group *Microsoft 365* holds Connection (`ManageSettings`), Entra ID sync and SharePoint; they left *People and access* and *Integrations*.
+> - A `.nowrap` utility class keeps the expiry date on one line.
+> - Until Phase 3, SHAREPOINT_SETUP.md B4b still switches SharePoint on with the installer, and says to empty the file certificate it makes, so the page's certificate is used.
+> - Tests: `tests/graph_certs.rs` (6, core) and `tests/microsoft365.rs` (2, web); the page is in the admin-pattern test and the screenshot list.
 
 **Goal:** the "PDMS Service" app is set up on a new page, with the certificate made in PDMS.
 

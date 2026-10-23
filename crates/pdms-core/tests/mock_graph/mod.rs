@@ -276,6 +276,7 @@ async fn handle(
     }
     match (method, api) {
         (Method::GET, "/users/delta") => users_delta(&mut s, &base, &query),
+        (Method::GET, "/users") => json_resp(200, json!({ "value": [] })),
         (Method::GET, p) if p.starts_with("/users/") => match s.users.get(&p["/users/".len()..]) {
             Some(u) => json_resp(200, u.clone()),
             None => graph_error(404, "Request_ResourceNotFound"),

@@ -190,18 +190,35 @@ pub async fn load_overrides(db: &PgPool, keys: &Keys) -> CoreResult<BTreeMap<Str
             out.insert(r.key, Value::String(text));
         }
     }
+    if let Some(pem) = crate::graph::certs::effective_pem(db, keys).await? {
+        out.insert(CERTIFICATE.to_owned(), Value::String(pem));
+    }
     Ok(out)
 }
+
+/// Not a registry key: the certificate made in PDMS (D-113), applied by
+/// [`effective`] only when the file has none and the IDs are set.
+const CERTIFICATE: &str = "graph.certificate";
 
 /// The file configuration with the stored values applied to every setting
 /// the file doesn't lock, checked as a whole.
 pub fn effective(file: &Config, overrides: &BTreeMap<String, Value>) -> CoreResult<Config> {
     let mut config = file.clone();
     for (key, value) in overrides {
-        if config.locked.contains(key) {
+        if config.locked.contains(key) || key == CERTIFICATE {
             continue;
         }
         config = set(&config, key, value.clone())?;
+    }
+    // The certificate made in PDMS signs in only once both IDs are set, so
+    // making one before the IDs are known leaves Microsoft Graph off rather
+    // than half-configured. A certificate in the file wins.
+    if let Some(pem) = overrides.get(CERTIFICATE)
+        && config.graph.certificate.is_empty()
+        && !config.graph.tenant_id.is_empty()
+        && !config.graph.client_id.is_empty()
+    {
+        config = set(&config, CERTIFICATE, pem.clone())?;
     }
     config
         .validate()

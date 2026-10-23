@@ -60,7 +60,7 @@ pub fn router(state: AppState) -> Router {
     }
     use routes::{
         admin, api, appointments, audit, auth, branding, collab, doc_admin, documents, exports,
-        integrations, ops, schedule, sharepoint_admin, workflow,
+        integrations, microsoft365, ops, schedule, sharepoint_admin, workflow,
     };
 
     let admin_routes = Router::new()
@@ -123,6 +123,24 @@ pub fn router(state: AppState) -> Router {
             post(branding::upload_seal).layer(upload_limit),
         )
         .route("/branding/seal/remove", post(branding::remove_seal))
+        .route(
+            "/microsoft-365",
+            get(microsoft365::page).post(microsoft365::save),
+        )
+        .route("/microsoft-365/test", post(microsoft365::test))
+        .route("/microsoft-365/certificates", post(microsoft365::generate))
+        .route(
+            "/microsoft-365/certificates/{id}/activate",
+            post(microsoft365::activate),
+        )
+        .route(
+            "/microsoft-365/certificates/{id}/retire",
+            post(microsoft365::retire),
+        )
+        .route(
+            "/microsoft-365/certificates/{file}",
+            get(microsoft365::download),
+        )
         .route(
             "/branding/reset",
             get(branding::reset_confirm).post(branding::reset),
