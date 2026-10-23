@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sharepoint_foreign_grants (department_id, permission_id, granted_to, roles)\n             VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3b91cba1498ac99b14de5f06c5496d8194ca751f85400bcc5c3d35fbf6da1ac"
+}

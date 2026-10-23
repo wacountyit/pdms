@@ -73,6 +73,9 @@ pub async fn reconcile_idp_memberships(
     if want_depts == have_depts && want_groups == have_groups && want_roles == have_roles {
         return Ok(None);
     }
+    if want_depts != have_depts {
+        crate::sharepoint::access::enqueue_reconcile(&mut *conn).await?;
+    }
 
     let before = snapshot(conn, user_id).await?;
 

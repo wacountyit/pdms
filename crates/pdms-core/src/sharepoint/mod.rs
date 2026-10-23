@@ -9,10 +9,12 @@
 //! moves that narrow who can browse a document: those happen before the
 //! change is saved (spec §7.3).
 
+pub mod access;
 mod files;
 mod folders;
 pub mod layout;
 mod mirror;
+mod ops;
 pub mod quickxor;
 pub mod status;
 
@@ -25,6 +27,7 @@ use crate::config::SharePointConfig;
 use crate::error::{CoreError, CoreResult};
 use crate::graph::GraphClient;
 
+pub use access::RECONCILE_JOB;
 pub use files::{UploadTarget, UploadedFile};
 pub(crate) use files::{open, record_upload, spool_copy, upload_staged};
 pub use folders::{DocumentFolder, department_folder_id};
@@ -34,6 +37,7 @@ pub use mirror::{
     MIRROR_JOB, MIRROR_SWEEP_JOB, apply_placement_now, enqueue_mirror, mirror_document,
     mirror_sweep, register_jobs,
 };
+pub use ops::register_ops_jobs;
 
 /// Shown when an upload cannot reach SharePoint.
 pub const UPLOAD_UNAVAILABLE: &str = "File storage (SharePoint) is unavailable right now, so nothing was saved. Try again in a few minutes.";

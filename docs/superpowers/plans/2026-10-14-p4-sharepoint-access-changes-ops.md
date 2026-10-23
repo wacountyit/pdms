@@ -580,7 +580,12 @@ git commit -m "P4: migration 0014, ManageSharePoint, run records and admin notic
   - re-export `pdms_core::sharepoint::RECONCILE_JOB`;
   - mock helpers `MockGraph::{human_edit, human_rename, human_delete, restore_from_recycle_bin, human_upload, app_upload, add_group_permission, readers, content_of, invites, expire_delta, deny}`.
 
-- [ ] **Step 1: Extend the mock Graph with what SharePoint does beyond P3's needs.** P3's SharePoint endpoints live in `crates/pdms-core/tests/mock_graph/sp.rs`, a child of P2's mock. The mock needs a change feed, version history, permissions, a recycle bin, people editing SharePoint directly, and refused sign-in. Edit `sp.rs`:
+> **As built (2026-10-23):**
+> - Migration `0014` grants the app SELECT, INSERT and DELETE on `sharepoint_folder_access`, not UPDATE, so a new grant deletes any earlier row and inserts the new one in the same transaction instead of `ON CONFLICT … DO UPDATE`.
+> - The run also covers departments that already have a `Departments/` folder (`sharepoint_department_folders`), so access added by hand is still reported once nobody in the department has access any more. The plan's query skipped them.
+> - The tests import `mock_graph::certificate` instead of defining their own.
+
+- [x] **Step 1: Extend the mock Graph with what SharePoint does beyond P3's needs.** P3's SharePoint endpoints live in `crates/pdms-core/tests/mock_graph/sp.rs`, a child of P2's mock. The mock needs a change feed, version history, permissions, a recycle bin, people editing SharePoint directly, and refused sign-in. Edit `sp.rs`:
 
 (a) Change the import from `super` to `use super::{CLIENT, MockGraph, MockState, graph_error, json_resp};`.
 
@@ -1016,7 +1021,7 @@ fn invite(sp: &mut SpState, id: &str, body: &[u8]) -> Response {
 Run: `cargo test -p pdms-core --test sharepoint && cargo test -p pdms-core --test graph`
 Expected: P2's and P3's tests still pass (`test result: ok.`). The mock still answers everything it answered before.
 
-- [ ] **Step 2: Write the failing tests.** In `crates/pdms-core/tests/sharepoint_ops.rs`:
+- [x] **Step 2: Write the failing tests.** In `crates/pdms-core/tests/sharepoint_ops.rs`:
 
 - below `mod common;`, add `mod mock_graph;`;
 - replace the `use` block with:
@@ -1179,7 +1184,7 @@ fn changes_in_one_minute_share_one_run_just_after_it() {
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: compile error `could not find access in sharepoint`.
 
-- [ ] **Step 3: Implement `access.rs`.** Create `crates/pdms-core/src/sharepoint/access.rs`:
+- [x] **Step 3: Implement `access.rs`.** Create `crates/pdms-core/src/sharepoint/access.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1506,12 +1511,12 @@ async fn department(
 
 In `sharepoint/mod.rs`, add `pub mod access;` next to `pub mod status;`, and `pub use access::RECONCILE_JOB;` with the other `pub use` lines.
 
-- [ ] **Step 4: Run the tests and confirm they pass.**
+- [x] **Step 4: Run the tests and confirm they pass.**
 
 Run: `cargo test -p pdms-core --test sharepoint_ops`
 Expected: `department_members_get_read_access_on_their_folder`, `one_unresolvable_person_does_not_block_the_rest`, `folder_access_reports_sign_in_failures`, `plan_adds_and_removes_by_person`, `changes_in_one_minute_share_one_run_just_after_it`, and the Task 1 test all `... ok`.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets
@@ -1537,7 +1542,9 @@ git commit -m "sharepoint: grant department staff read access on their folder"
   - P3: `sharepoint::register_jobs(worker, core)`, which ends `maintenance::worker()`.
 - Produces: `pub fn pdms_core::sharepoint::register_ops_jobs(worker: Worker, core: &Core) -> Worker`. The `RECONCILE_JOB` handler is **always** registered: directory changes queue the job whether or not SharePoint is on, and a job kind without a handler would go dead. The nightly schedule is added only with SharePoint storage. Task 4 adds the change check here.
 
-- [ ] **Step 1: Write the failing tests.** Append to `crates/pdms-core/tests/sharepoint_ops.rs`:
+> **As built (2026-10-23):** as the pre-flight says, the Entra sync queues the run inside `entra_sync::set_idp_department` whenever a membership changes (which also covers `pdms sync-directory` and mapping edits), not in `run_job` and `sync_one`. `directory/sync.rs` queues it when `want_depts != have_depts`. The Entra test maps "Road and Bridge" to a department first, because a sync that changes no membership queues nothing.
+
+- [x] **Step 1: Write the failing tests.** Append to `crates/pdms-core/tests/sharepoint_ops.rs`:
 
 ```rust
 async fn queued_runs(core: &Core) -> i64 {
@@ -1592,7 +1599,7 @@ async fn a_successful_sync_queues_a_folder_access_run() {
 Run: `cargo test -p pdms-core --test sharepoint_ops membership_changes && cargo test -p pdms-core --test entra_sync a_successful_sync`
 Expected: both FAIL. No `sharepoint.reconcile_access` jobs are queued (`assertion failed … got 0`).
 
-- [ ] **Step 2: Queue the run where memberships change.** All inserts go inside the existing transaction, before the `pdms_audit::append`.
+- [x] **Step 2: Queue the run where memberships change.** All inserts go inside the existing transaction, before the `pdms_audit::append`.
 
 In `crates/pdms-core/src/directory/admin.rs`:
 
@@ -1646,7 +1653,7 @@ In `crates/pdms-core/src/directory/entra_sync.rs` (P2):
 
 (People that `apply` departs go through `set_user_status`, which already queues the run.)
 
-- [ ] **Step 3: Register the job.** Create `crates/pdms-core/src/sharepoint/ops.rs`:
+- [x] **Step 3: Register the job.** Create `crates/pdms-core/src/sharepoint/ops.rs`:
 
 ```rust
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1690,7 +1697,7 @@ In `crates/pdms-core/src/maintenance.rs`, replace the last line of `worker()`, `
     crate::sharepoint::register_ops_jobs(crate::sharepoint::register_jobs(worker, core), core)
 ```
 
-- [ ] **Step 4: Run the tests and confirm they pass.**
+- [x] **Step 4: Run the tests and confirm they pass.**
 
 ```bash
 cargo test -p pdms-core --test sharepoint_ops
@@ -1700,7 +1707,7 @@ cargo test -p pdms-core --test directory
 
 Expected: all `test result: ok.` with 0 failed.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 cargo sqlx prepare --workspace -- --all-targets

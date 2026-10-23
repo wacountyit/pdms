@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT permission_id FROM sharepoint_folder_access WHERE department_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permission_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_folder_access",
+            "name": "permission_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "987f31fd3521898f17cf58d6beaf432752afd6b1dfe52179e1e099e68ea3fb8d"
+}

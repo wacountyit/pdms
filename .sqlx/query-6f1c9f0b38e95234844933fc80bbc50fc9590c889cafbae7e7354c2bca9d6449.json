@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sharepoint_foreign_grants WHERE department_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6f1c9f0b38e95234844933fc80bbc50fc9590c889cafbae7e7354c2bca9d6449"
+}

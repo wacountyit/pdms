@@ -214,5 +214,5 @@ pub fn worker(core: &Core) -> Worker {
     } else {
         worker
     };
-    crate::sharepoint::register_jobs(worker, core)
+    crate::sharepoint::register_ops_jobs(crate::sharepoint::register_jobs(worker, core), core)
 }

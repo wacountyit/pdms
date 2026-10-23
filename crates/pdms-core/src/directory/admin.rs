@@ -395,6 +395,7 @@ pub async fn set_user_status(
     )
     .execute(&mut *tx)
     .await?;
+    crate::sharepoint::access::enqueue_reconcile(&mut *tx).await?;
     let revoked = if status == UserStatus::Active {
         0
     } else {
@@ -552,6 +553,7 @@ async fn insert_membership(
     )
     .execute(&mut *conn)
     .await?;
+    crate::sharepoint::access::enqueue_reconcile(&mut *conn).await?;
     Ok(
         event(ctx, Category::Permission, "department.member_added", "user")
             .object(user_id, Some(user_name))
@@ -596,6 +598,7 @@ pub async fn remove_department_member(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(CoreError::NotFound)?;
+    crate::sharepoint::access::enqueue_reconcile(&mut *tx).await?;
     pdms_audit::append(
         &mut tx,
         vec![

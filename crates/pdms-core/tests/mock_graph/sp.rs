@@ -12,14 +12,14 @@ use axum::response::{IntoResponse, Response};
 use pdms_core::sharepoint::quickxor::QuickXorHash;
 use serde_json::{Map, Value, json};
 
-use super::{MockGraph, MockState, graph_error, json_resp};
+use super::{CLIENT, MockGraph, MockState, graph_error, json_resp};
 
 pub const SITE_URL: &str = "https://contoso.sharepoint.com/sites/PDMSTest";
 pub const SITE: &str = "site-1";
 pub const DRIVE: &str = "drive-1";
 pub const LIST: &str = "list-1";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SpItem {
     pub id: String,
     pub name: String,
@@ -28,6 +28,13 @@ pub struct SpItem {
     pub content: Vec<u8>,
     pub fields: Map<String, Value>,
     pub list_item: String,
+    /// Earlier contents, oldest first: SharePoint's version history. `content` is current.
+    pub history: Vec<Vec<u8>>,
+    /// Who created / last changed it: `None` is PDMS's app, `Some(name)` a person.
+    pub created_by: Option<String>,
+    pub modified_by: Option<String>,
+    /// Direct permissions: (permission id, user email, SharePoint group name).
+    pub perms: Vec<(String, Option<String>, Option<String>)>,
 }
 
 struct Session {
@@ -45,6 +52,15 @@ pub struct SpState {
     /// While set, SharePoint requests whose "METHOD path" (path without
     /// `/v1.0`) starts with this prefix get HTTP 500.
     fail_prefix: Option<String>,
+    /// Deleted items (the site recycle bin), by id.
+    recycle: BTreeMap<String, SpItem>,
+    /// The change feed: (sequence number, item id).
+    changes: Vec<(u64, String)>,
+    seq: u64,
+    /// The next delta request that carries a token gets HTTP 410.
+    expire_delta: bool,
+    /// Every sharing invitation, as "invite <email> requireSignIn=… sendInvitation=… roles=…".
+    invites: Vec<String>,
 }
 
 impl SpState {
@@ -57,6 +73,7 @@ impl SpState {
             content: vec![],
             fields: Map::new(),
             list_item: "sp-li-root".into(),
+            ..Default::default()
         });
     }
 
@@ -80,12 +97,45 @@ impl SpState {
         Some(current)
     }
 
+    fn touch(&mut self, id: &str) {
+        self.seq += 1;
+        let seq = self.seq;
+        self.changes.push((seq, id.to_owned()));
+    }
+
+    /// Graph's `parentReference.path`: `/drives/{id}/root:` plus the folders above.
+    fn parent_path(&self, i: &SpItem) -> String {
+        let mut names = Vec::new();
+        let mut cur = i.parent.clone();
+        while let Some(p) = cur {
+            match self.items.get(&p) {
+                Some(it) if it.id != "root" => {
+                    names.push(it.name.clone());
+                    cur = it.parent.clone();
+                }
+                _ => break,
+            }
+        }
+        names.reverse();
+        let mut s = format!("/drives/{DRIVE}/root:");
+        for n in names {
+            s.push('/');
+            s.push_str(&n);
+        }
+        s
+    }
+
     fn json(&self, i: &SpItem) -> Value {
         let mut v = json!({
             "id": i.id, "name": i.name, "size": i.content.len(),
-            "parentReference": {"id": i.parent, "driveId": DRIVE},
+            "parentReference": {"id": i.parent, "driveId": DRIVE, "path": self.parent_path(i)},
             "listItem": {"id": i.list_item},
+            "createdBy": identity(i.created_by.as_deref()),
+            "lastModifiedBy": identity(i.modified_by.as_deref()),
         });
+        if i.id == "root" {
+            v["root"] = json!({});
+        }
         if i.folder {
             v["folder"] = json!({"childCount": 0});
         } else {
@@ -107,8 +157,10 @@ impl SpState {
             content,
             fields: Map::new(),
             list_item,
+            ..Default::default()
         };
         let out = self.json(&item);
+        self.touch(&id);
         self.items.insert(id, item);
         out
     }
@@ -161,6 +213,104 @@ impl MockGraph {
 
     pub fn heal(&self) {
         self.state.lock().unwrap().sp.fail_prefix = None;
+    }
+
+    /// Someone edits a file in SharePoint: a new version, by that person.
+    pub fn human_edit(&self, id: &str, bytes: &[u8], who: &str) {
+        let mut s = self.state.lock().unwrap();
+        let item = s.sp.items.get_mut(id).unwrap();
+        let old = std::mem::replace(&mut item.content, bytes.to_vec());
+        item.history.push(old);
+        item.modified_by = Some(who.to_owned());
+        s.sp.touch(id);
+    }
+
+    /// Someone renames a file or folder in SharePoint.
+    pub fn human_rename(&self, id: &str, name: &str, who: &str) {
+        let mut s = self.state.lock().unwrap();
+        let item = s.sp.items.get_mut(id).unwrap();
+        item.name = name.to_owned();
+        item.modified_by = Some(who.to_owned());
+        s.sp.touch(id);
+    }
+
+    /// Someone deletes an item; it goes to the recycle bin.
+    pub fn human_delete(&self, id: &str, who: &str) {
+        let mut s = self.state.lock().unwrap();
+        let mut item = s.sp.items.remove(id).unwrap();
+        item.modified_by = Some(who.to_owned());
+        s.sp.recycle.insert(id.to_owned(), item);
+        s.sp.touch(id);
+    }
+
+    /// A site owner restores an item from the recycle bin (same id).
+    pub fn restore_from_recycle_bin(&self, id: &str) {
+        let mut s = self.state.lock().unwrap();
+        let item = s.sp.recycle.remove(id).unwrap();
+        s.sp.items.insert(id.to_owned(), item);
+        s.sp.touch(id);
+    }
+
+    /// Someone uploads their own file into a folder path. Returns its id.
+    pub fn human_upload(&self, folder: &str, name: &str, bytes: &[u8], who: &str) -> String {
+        let mut s = self.state.lock().unwrap();
+        s.sp.ensure_root();
+        let parent = s.sp.at(folder).unwrap().id.clone();
+        let v = s.sp.insert(&parent, name.to_owned(), false, bytes.to_vec());
+        let id = v["id"].as_str().unwrap().to_owned();
+        let item = s.sp.items.get_mut(&id).unwrap();
+        item.created_by = Some(who.to_owned());
+        item.modified_by = Some(who.to_owned());
+        id
+    }
+
+    /// A file PDMS's app put there whose save never committed. Returns its id.
+    pub fn app_upload(&self, folder: &str, name: &str, bytes: &[u8]) -> String {
+        let mut s = self.state.lock().unwrap();
+        s.sp.ensure_root();
+        let parent = s.sp.at(folder).unwrap().id.clone();
+        let v = s.sp.insert(&parent, name.to_owned(), false, bytes.to_vec());
+        v["id"].as_str().unwrap().to_owned()
+    }
+
+    /// A permission someone added by hand (a SharePoint group with edit rights).
+    pub fn add_group_permission(&self, id: &str, group: &str) {
+        let mut s = self.state.lock().unwrap();
+        let pid = s.sp.id("sp-perm");
+        s.sp.items
+            .get_mut(id)
+            .unwrap()
+            .perms
+            .push((pid, None, Some(group.to_owned())));
+    }
+
+    /// Emails with a direct permission on an item, sorted.
+    pub fn readers(&self, id: &str) -> Vec<String> {
+        let s = self.state.lock().unwrap();
+        let mut v: Vec<String> = s.sp.items[id]
+            .perms
+            .iter()
+            .filter_map(|p| p.1.clone())
+            .collect();
+        v.sort();
+        v
+    }
+
+    pub fn content_of(&self, id: &str) -> Vec<u8> {
+        self.state.lock().unwrap().sp.items[id].content.clone()
+    }
+
+    pub fn invites(&self) -> Vec<String> {
+        self.state.lock().unwrap().sp.invites.clone()
+    }
+
+    pub fn expire_delta(&self) {
+        self.state.lock().unwrap().sp.expire_delta = true;
+    }
+
+    /// Refuse PDMS's sign-in (every API call gets HTTP 401) until called with `false`.
+    pub fn deny(&self, on: bool) {
+        self.state.lock().unwrap().min_token = if on { usize::MAX } else { 0 };
     }
 }
 
@@ -238,7 +388,10 @@ pub(super) fn route(
                     for (k, val) in v.as_object().unwrap() {
                         item.fields.insert(k.clone(), val.clone());
                     }
-                    json_resp(200, Value::Object(item.fields.clone()))
+                    item.modified_by = None;
+                    let (id, fields) = (item.id.clone(), item.fields.clone());
+                    sp.touch(&id);
+                    json_resp(200, Value::Object(fields))
                 }
                 None => graph_error(404, "itemNotFound"),
             }
@@ -304,9 +457,60 @@ pub(super) fn route(
         }
         ("PATCH", ["drives", DRIVE, "items", id]) => move_item(sp, id, body),
         ("DELETE", ["drives", DRIVE, "items", id]) => {
-            sp.items.remove(*id);
+            if let Some(mut item) = sp.items.remove(*id) {
+                item.modified_by = None;
+                sp.recycle.insert((*id).to_owned(), item);
+                sp.touch(id);
+            }
             StatusCode::NO_CONTENT.into_response()
         }
+        ("GET", ["drives", DRIVE, "root"]) => {
+            let root = sp.items["root"].clone();
+            json_resp(200, sp.json(&root))
+        }
+        ("GET", ["drives", DRIVE, "root", "delta"]) => delta(sp, base, None),
+        ("GET", ["drives", DRIVE, "root", "delta", token]) => delta(sp, base, token.parse().ok()),
+        ("GET", ["drives", DRIVE, "items", id, "versions"]) => versions(sp, id),
+        ("GET", ["drives", DRIVE, "items", id, "versions", v, "content"]) => {
+            if sp.items.contains_key(*id) {
+                let mut r = StatusCode::FOUND.into_response();
+                r.headers_mut().insert(
+                    header::LOCATION,
+                    format!("{base}/blob/{id}~{v}").parse().unwrap(),
+                );
+                r
+            } else {
+                graph_error(404, "itemNotFound")
+            }
+        }
+        (
+            "POST",
+            [
+                "drives",
+                DRIVE,
+                "items",
+                id,
+                "versions",
+                v,
+                "restoreVersion",
+            ],
+        ) => restore_version(sp, id, v),
+        ("POST", ["drives", DRIVE, "items", id, "invite"]) => invite(sp, id, body),
+        ("GET", ["drives", DRIVE, "items", id, "permissions"]) => match sp.items.get(*id) {
+            Some(i) => {
+                let v: Vec<Value> = i.perms.iter().map(perm_json).collect();
+                json_resp(200, json!({"value": v}))
+            }
+            None => graph_error(404, "itemNotFound"),
+        },
+        ("DELETE", ["drives", DRIVE, "items", id, "permissions", p]) => match sp.items.get_mut(*id)
+        {
+            Some(i) if i.perms.iter().any(|x| x.0 == *p) => {
+                i.perms.retain(|x| x.0 != *p);
+                StatusCode::NO_CONTENT.into_response()
+            }
+            _ => graph_error(404, "itemNotFound"),
+        },
         _ => return None,
     };
     Some(r)
@@ -354,10 +558,19 @@ pub(super) fn upload(
     ))
 }
 
-/// A pre-authenticated download `/blob/<item>`; `None` if not a SharePoint item.
+/// A pre-authenticated download `/blob/<item>` or `/blob/<item>~<version>`;
+/// `None` if not a SharePoint item.
 pub(super) fn blob(s: &MockState, item: &str) -> Option<Response> {
-    let i = s.sp.items.get(item)?;
-    Some((StatusCode::OK, i.content.clone()).into_response())
+    let (id, version) = match item.split_once('~') {
+        Some((i, v)) => (i, Some(v)),
+        None => (item, None),
+    };
+    let i = s.sp.items.get(id)?;
+    let content = match version {
+        Some(v) => version_content(i, v)?,
+        None => i.content.clone(),
+    };
+    Some((StatusCode::OK, content).into_response())
 }
 
 fn create_folder(sp: &mut SpState, parent: &str, body: &[u8]) -> Response {
@@ -391,6 +604,150 @@ fn move_item(sp: &mut SpState, id: &str, body: &[u8]) -> Response {
     let item = sp.items.get_mut(id).unwrap();
     item.parent = Some(parent);
     item.name = name;
+    item.modified_by = None;
     let item = item.clone();
+    sp.touch(id);
     json_resp(200, sp.json(&item))
+}
+
+/// Graph's identity set for a change: PDMS's app (the mock's client id), or a person.
+fn identity(person: Option<&str>) -> Value {
+    match person {
+        None => json!({
+            "application": {"id": CLIENT, "displayName": "PDMS Service"},
+            "user": {"displayName": "SharePoint App"}
+        }),
+        Some(n) => json!({"user": {
+            "displayName": n,
+            "email": format!("{}@county.example", n.to_lowercase().replace(' ', "."))
+        }}),
+    }
+}
+
+fn perm_json(p: &(String, Option<String>, Option<String>)) -> Value {
+    match (&p.1, &p.2) {
+        (Some(e), _) => {
+            json!({"id": p.0, "roles": ["read"], "grantedToV2": {"user": {"email": e, "displayName": e}}})
+        }
+        (None, g) => {
+            json!({"id": p.0, "roles": ["write"], "grantedToV2": {"siteGroup": {"displayName": g}}})
+        }
+    }
+}
+
+/// The change feed. The mock's delta link carries its token in the path.
+fn delta(sp: &mut SpState, base: &str, token: Option<u64>) -> Response {
+    if token.is_some() && sp.expire_delta {
+        sp.expire_delta = false;
+        return graph_error(410, "resyncChangesApplyDifferences");
+    }
+    let ids: Vec<String> = match token {
+        None => sp
+            .items
+            .keys()
+            .filter(|k| k.as_str() != "root")
+            .cloned()
+            .collect(),
+        Some(t) => {
+            let mut v: Vec<String> = Vec::new();
+            for (_, id) in sp.changes.iter().filter(|(s, _)| *s > t) {
+                v.retain(|x| x != id);
+                v.push(id.clone());
+            }
+            v
+        }
+    };
+    let value: Vec<Value> = ids
+        .iter()
+        .filter_map(|id| match sp.items.get(id) {
+            Some(i) => {
+                // The real feed leaves out paths.
+                let mut v = sp.json(i);
+                if let Some(p) = v["parentReference"].as_object_mut() {
+                    p.remove("path");
+                }
+                Some(v)
+            }
+            None => sp.recycle.get(id).map(|i| {
+                json!({"id": i.id, "deleted": {"state": "deleted"},
+                       "lastModifiedBy": identity(i.modified_by.as_deref())})
+            }),
+        })
+        .collect();
+    let link = format!("{base}/v1.0/drives/{DRIVE}/root/delta/{}", sp.seq);
+    json_resp(200, json!({"value": value, "@odata.deltaLink": link}))
+}
+
+fn versions(sp: &SpState, id: &str) -> Response {
+    let Some(i) = sp.items.get(id) else {
+        return graph_error(404, "itemNotFound");
+    };
+    let mut all: Vec<&Vec<u8>> = i.history.iter().collect();
+    all.push(&i.content);
+    // Newest first, as Graph lists them; version "N.0" is the Nth content.
+    let value: Vec<Value> = all
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(n, c)| json!({"id": format!("{}.0", n + 1), "size": c.len()}))
+        .collect();
+    json_resp(200, json!({"value": value}))
+}
+
+/// The bytes of version "N.0" (1 is the oldest).
+fn version_content(i: &SpItem, v: &str) -> Option<Vec<u8>> {
+    let n: usize = v.split('.').next()?.parse().ok()?;
+    if n == i.history.len() + 1 {
+        Some(i.content.clone())
+    } else {
+        i.history.get(n.checked_sub(1)?).cloned()
+    }
+}
+
+fn restore_version(sp: &mut SpState, id: &str, v: &str) -> Response {
+    let Some(content) = sp.items.get(id).and_then(|i| version_content(i, v)) else {
+        return graph_error(404, "itemNotFound");
+    };
+    let item = sp.items.get_mut(id).unwrap();
+    let old = std::mem::replace(&mut item.content, content);
+    item.history.push(old);
+    item.modified_by = None;
+    sp.touch(id);
+    StatusCode::NO_CONTENT.into_response()
+}
+
+fn invite(sp: &mut SpState, id: &str, body: &[u8]) -> Response {
+    let v: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let email = v["recipients"][0]["email"]
+        .as_str()
+        .unwrap_or("")
+        .to_lowercase();
+    sp.invites.push(format!(
+        "invite {email} requireSignIn={} sendInvitation={} roles={}",
+        v["requireSignIn"], v["sendInvitation"], v["roles"]
+    ));
+    if !sp.items.contains_key(id) {
+        return graph_error(404, "itemNotFound");
+    }
+    if email.is_empty() || email.ends_with("@nobody.example") {
+        return graph_error(400, "invalidRequest");
+    }
+    let fresh = sp.id("sp-perm");
+    let item = sp.items.get_mut(id).unwrap();
+    let existing = item
+        .perms
+        .iter()
+        .find(|p| p.1.as_deref() == Some(email.as_str()))
+        .map(|p| p.0.clone());
+    let pid = match existing {
+        Some(p) => p,
+        None => {
+            item.perms.push((fresh.clone(), Some(email.clone()), None));
+            fresh
+        }
+    };
+    json_resp(
+        200,
+        json!({"value": [perm_json(&(pid, Some(email), None))]}),
+    )
 }

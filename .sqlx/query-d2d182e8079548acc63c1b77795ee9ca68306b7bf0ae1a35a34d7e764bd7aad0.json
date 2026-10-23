@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sync_cursors (name, delta_link, last_run, last_error) VALUES ($1, $2, now(), NULL)\n         ON CONFLICT (name) DO UPDATE\n            SET delta_link = coalesce(EXCLUDED.delta_link, sync_cursors.delta_link),\n                last_run = now(), last_error = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d2d182e8079548acc63c1b77795ee9ca68306b7bf0ae1a35a34d7e764bd7aad0"
+}

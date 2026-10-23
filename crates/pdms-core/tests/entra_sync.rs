@@ -1414,3 +1414,33 @@ async fn first_sign_in_that_races_a_sync_still_succeeds() {
         Ok((id, "Alice".to_owned()))
     );
 }
+
+#[tokio::test]
+async fn a_successful_sync_queues_a_folder_access_run() {
+    let m = MockGraph::start().await;
+    m.add_user(member(
+        OID_A,
+        "Alice Ops",
+        "alice@county.example",
+        Some("Road and Bridge"),
+    ));
+    let (core, _db) = synced(&m).await;
+    // Only a sync that changes a department membership queues the run.
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    entra_values::upsert(&core.db, &system(), "Road and Bridge", rb)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM jobs WHERE kind = 'sharepoint.reconcile_access'")
+        .execute(&core.db)
+        .await
+        .unwrap();
+    entra_sync::run_job(&core, &json!({})).await.unwrap();
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM jobs WHERE kind = 'sharepoint.reconcile_access'")
+            .fetch_one(&core.db)
+            .await
+            .unwrap();
+    assert!(n >= 1, "{n}");
+}

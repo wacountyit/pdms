@@ -716,6 +716,8 @@ pub(super) async fn set_idp_department(
     if have == want {
         return Ok(None);
     }
+    // SharePoint folder access follows department membership (P4).
+    crate::sharepoint::access::enqueue_reconcile(&mut *conn).await?;
     for d in have.difference(&want) {
         sqlx::query!(
             "DELETE FROM department_members WHERE user_id = $1 AND department_id = $2 AND source = 'idp'",

@@ -13,10 +13,11 @@ use pdms_authz::role_keys;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
+use super::{Resolved, SharePoint};
 use crate::Core;
 use crate::context::Ctx;
 use crate::error::{CoreError, CoreResult};
-use crate::graph::GraphError;
+use crate::graph::{GraphClient, GraphError};
 use crate::notifications::actions::{self, Notice};
 use crate::notifications::dispatch::Visibility;
 
@@ -89,6 +90,35 @@ impl From<RunError> for CoreError {
             RunError::Core(c) => c,
         }
     }
+}
+
+/// The Graph client and the resolved library, when SharePoint storage is on.
+pub(crate) async fn parts(core: &Core) -> CoreResult<(&GraphClient, &Resolved)> {
+    let sp: &SharePoint = core
+        .sharepoint
+        .as_ref()
+        .ok_or_else(|| CoreError::Conflict("SharePoint storage is not turned on.".into()))?;
+    let resolved = sp.resolved().await?;
+    Ok((sp.graph(), resolved))
+}
+
+/// Record a successful run; `delta_link` replaces the stored link when given.
+pub(crate) async fn record_ok(
+    conn: &mut PgConnection,
+    name: &str,
+    delta_link: Option<&str>,
+) -> CoreResult<()> {
+    sqlx::query!(
+        "INSERT INTO sync_cursors (name, delta_link, last_run, last_error) VALUES ($1, $2, now(), NULL)
+         ON CONFLICT (name) DO UPDATE
+            SET delta_link = coalesce(EXCLUDED.delta_link, sync_cursors.delta_link),
+                last_run = now(), last_error = NULL",
+        name,
+        delta_link
+    )
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 /// Record a failed run (the stored delta link is kept).
