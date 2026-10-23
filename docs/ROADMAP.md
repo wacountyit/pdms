@@ -150,8 +150,9 @@ only place that shows work in flight.
 
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
+| **S1, settings in Administration** (S1) | WACountyIT | Spec: **In progress** (written 2026-10-23, [spec](superpowers/specs/2026-10-23-admin-settings-design.md); waiting for the owner's approval). Plan, build: **Not started** | Spec written; next, the owner's approval, then the plan | 2026-10-23 |
 
-Nothing is claimed. §0.5 lists what can start next.
+§0.5 lists what can start next.
 
 ### 0.2 Direction (decided 2026-10-14)
 
@@ -192,6 +193,7 @@ taken up.
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
+| S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Designing**: spec written 2026-10-23, waiting for approval | [spec](superpowers/specs/2026-10-23-admin-settings-design.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
@@ -232,14 +234,17 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **SharePoint live test on the test server.** Everything is built; this is
+1. **S1, settings in Administration** (claimed, §0.1a). The owner asked for it
+   before the SharePoint live test, so SharePoint can be set up and tested from
+   the admin page. Spec first, then a plan, then phases.
+2. **SharePoint live test on the test server.** Everything is built; this is
    the owner's step once the items "Waiting on the county" (§0.3) are ready:
    follow [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test
    server" (it resets the test server), then work through §1.2. Set
    sub-projects 1 and 2 to **Done** when they pass.
-2. **Security fixes.** The owner holds the findings and hands them out one
+3. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+4. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
    imports into, is merged.
 
 ### 0.6 Which work touches which files
