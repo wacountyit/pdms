@@ -22,9 +22,7 @@ build takes several minutes).
 | Name and time zone | Shown in titles, emails, and calendars; the time zone (detected from the host) drives reminder scheduling. |
 | Source code URL | Where users can get this installation's source code, as the AGPL-3.0 requires for software used over a network (defaults to the git remote). Linked from every page as **Source code**. |
 | Secrets | Generated once and never overwritten: PostgreSQL superuser, owner, and app passwords (256-bit, hex), and the 512-bit master key. One file each in `secrets/` (directory `0700`), mounted as Docker secrets, never written to `.env` or the configuration. |
-| Microsoft Entra ID | Optional (needs HTTPS): tenant ID, client ID, client secret (hidden), and the redirect URI to register: `<public URL>/auth/oidc/callback`. If Microsoft cannot be reached, local sign-in keeps working and the problem is logged. |
-| Email | Optional: SMTP host, security (STARTTLS 587, TLS 465, or none for a trusted relay), port, username, password (hidden), from address. |
-| OCR, virus scanning | Optional extra containers (each about 1 GB). |
+| OCR service, virus scanner | Whether to include each optional container (each about 1 GB). Turning them on and off is done under Administration (section 5). |
 | First administrator | Email, username (default `sysadmin`; preset `PDMS_INSTALL_ADMIN_USERNAME`; checked against the username rules below and shown in the summary), and name. The password is generated and shown once at the end, with the **authenticator (TOTP) secret**: add it to an authenticator app right away. |
 
 Files it writes:
@@ -36,13 +34,42 @@ Files it writes:
 | `config/Caddyfile` | With the bundled proxy. |
 | `secrets/` | Passwords and keys. Back them up securely (see BACKUP.md). |
 
+**Then, in the browser.** Sign in with the first administrator and set up
+the rest under **Administration**: Microsoft sign-in (section 2), email,
+the Microsoft 365 connection, SharePoint storage and the Entra ID user sync,
+OCR and virus scanning. Each page has a **Test** and applies a save at once,
+without a restart. `docker compose run --rm app settings show` lists every
+such setting and where its value comes from; for a server whose admin pages
+can't be reached (for example when sign-in is broken and no break-glass
+account is left), the same command has `set KEY VALUE`, `set-secret KEY`
+(the value on standard input) and `test AREA`, with the same checks and
+audit as the pages.
+
 **Later changes.** `./install.sh --configure <part>` redoes one part (comma-separated
-for several): `network`, `database-port`, `sso`, `smtp`, `ocr`, `clamav`, or
-`admin` (resets the break-glass administrator). The services are
-restarted only if a setting actually changed. Running `./install.sh` with no
-options asks only about parts that are not set up yet, so it is also the
-upgrade step. Settings written by hand (or by an earlier installer) are kept;
-only `--configure` replaces them.
+for several): `network`, `database-port`, `source`, `ocr` or `clamav` (which
+containers to include), `admin` (resets the break-glass administrator), or
+`move-settings` (below). The services are restarted only if a setting
+actually changed. Running `./install.sh` with no options asks only about
+parts that are not set up yet, so it is also the upgrade step. Settings
+written by hand are kept. `--configure sso`, `smtp` and `sharepoint` are no
+longer part of the installer: they say which admin page has the setting.
+
+**Upgrading an install made before the admin pages.** Earlier installers
+wrote sign-in, email, SharePoint, OCR and virus-scanning settings into
+blocks of `config/pdms.toml` and into `secrets/`. Settings in the file win
+and show read-only on the pages (D-111), so on the first upgrade the
+installer offers once to **move them into Administration**. On yes, after
+the database migration it runs `pdms settings import`, which copies what
+those blocks set into the database (passwords, the client secret and the
+Graph certificate's key encrypted with the master key; the certificate file
+becomes the active certificate on the Connection page). Then it removes the
+blocks from `config/pdms.toml` (keeping a copy as
+`config/pdms.toml.before-move`), empties `secrets/oidc_client_secret`,
+`secrets/smtp_password` and `secrets/graph_certificate`, and restarts. If
+the import fails, nothing is removed. Settings you wrote by hand outside the
+blocks stay in the file and stay read-only; the import lists them. On no,
+nothing changes; `./install.sh --configure move-settings` moves them later
+(D-116).
 
 **Unattended installs:** `./install.sh --non-interactive` with
 `PDMS_INSTALL_*` variables (`./install.sh --help` lists them).
@@ -553,7 +580,7 @@ consistent for everyone who filters by it:
 
 | Setting (`config/pdms.toml`) | Default | Notes |
 |---|---|---|
-| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage, or `sharepoint` to keep document files in a SharePoint library (below; `./install.sh --configure sharepoint` sets it) |
+| `[storage] backend` | `local` | Files in the `pdmsdata` Docker volume (`/var/lib/pdms/blobs`). Set `s3` to use object storage. SharePoint storage is switched on Administration → SharePoint (below) |
 | `[storage] max_upload_bytes` | 100 MB | |
 | `[storage.s3] endpoint, bucket, region, access_key_id, prefix` | | Any S3-compatible service: AWS, SeaweedFS, MinIO, and appliance S3 endpoints. Put the secret in a file and set `PDMS_STORAGE__S3__SECRET_ACCESS_KEY_FILE`. Enable bucket versioning or object lock if available |
 | `[storage] clamav_addr` | empty (off) | Set on **Administration → Virus scanning** (below). The bundled `deploy/clamav/clamd.conf` raises clamd's size limits to match uploads |
@@ -615,13 +642,10 @@ stay in `local_path`.
 
 The page needs the `manage_settings` capability for the Settings panel; the
 rest of the page needs `manage_sharepoint`. Values set in `config/pdms.toml`
-show read-only and win over the page (D-111). `./install.sh --configure
-sharepoint` still writes `[sharepoint]` and `[storage] backend =
-"sharepoint"` into the file; settings from the page are easier to change. An
-install made by an older installer has `backend = "local"` in its
-`[storage]` block, which locks the switch on the page: delete that line
-(`local` is the default) and restart PDMS. PDMS refuses to start with
-`backend = "sharepoint"` and no Microsoft 365 connection.
+show read-only and win over the page (D-111); an install made by an earlier
+installer moves them into Administration when it upgrades (section 1). PDMS
+refuses to start with `backend = "sharepoint"` and no Microsoft 365
+connection.
 
 **How it works:**
 - **Layout.** `Departments/`, `County-wide/` or `Restricted/` (from the
@@ -1004,8 +1028,8 @@ searchable text.
 
 On installs set up before these pages, the installer wrote these settings
 into `config/pdms.toml` (`[email]`, `[ocr] sidecar_url`, `[storage]
-clamav_addr`), so they show read-only on the pages. Change them in the file,
-or delete the lines to manage them on the pages.
+clamav_addr`); the upgrade offers to move them into Administration
+(section 1). Until then they show read-only on the pages.
 
 **The Outlook calendar sync was removed (D-087).** The calendar is PDMS's own
 look-ahead. People who want the dates in Outlook subscribe to their calendar

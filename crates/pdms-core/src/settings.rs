@@ -263,6 +263,21 @@ pub enum NewValue {
 /// nothing stored, when a setting is unknown or locked, when the merged
 /// configuration is invalid, or when its services can't be built.
 pub async fn save(core: &Core, ctx: &Ctx, changes: Vec<Change>) -> CoreResult<()> {
+    store(core, ctx, changes, false).await
+}
+
+/// Like [`save`], but also for settings the configuration file sets: their
+/// stored values apply once the file stops setting them. Used by
+/// `pdms settings import` (spec §9).
+pub(crate) async fn save_for_import(
+    core: &Core,
+    ctx: &Ctx,
+    changes: Vec<Change>,
+) -> CoreResult<()> {
+    store(core, ctx, changes, true).await
+}
+
+async fn store(core: &Core, ctx: &Ctx, changes: Vec<Change>, file_set_ok: bool) -> CoreResult<()> {
     ctx.require(Capability::ManageSettings)?;
     if changes.is_empty() {
         return Ok(());
@@ -273,7 +288,7 @@ pub async fn save(core: &Core, ctx: &Ctx, changes: Vec<Change>) -> CoreResult<()
     for c in &changes {
         let d = find(&c.key)
             .ok_or_else(|| CoreError::validation(format!("unknown setting {}", c.key)))?;
-        if file.locked.contains(d.key) {
+        if file.locked.contains(d.key) && !file_set_ok {
             return Err(CoreError::validation(format!(
                 "{} is set in the configuration file, so it can't be changed here",
                 d.key

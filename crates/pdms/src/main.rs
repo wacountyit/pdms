@@ -37,6 +37,23 @@ enum SettingsCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Set one setting, with the same checks and audit as the admin pages
+    /// (for example `settings set email.smtp_port 587`).
+    Set { key: String, value: String },
+    /// Set a password or secret, read from standard input.
+    SetSecret { key: String },
+    /// Run an admin page's test: microsoft-365, sign-in, sharepoint, entra,
+    /// email (with --to), ocr or virus-scanning.
+    Test {
+        area: String,
+        /// The address for the email test.
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Copy the settings an earlier installer wrote into config/pdms.toml
+    /// (and its secret files) into the database. The installer runs this
+    /// when it moves settings into Administration.
+    Import,
 }
 
 #[derive(Subcommand)]
@@ -169,7 +186,8 @@ async fn main() -> ExitCode {
         }
     };
     init_logging(&config);
-    match run(cli.command, config).await {
+    let config_path = pdms_core::config::file_path(cli.config.as_deref());
+    match run(cli.command, config, config_path).await {
         Ok(code) => code,
         Err(e) => {
             tracing::error!(error = format!("{e:#}"), "command failed");
@@ -179,14 +197,16 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run(command: Command, config: Config) -> anyhow::Result<ExitCode> {
+async fn run(
+    command: Command,
+    config: Config,
+    config_path: Option<PathBuf>,
+) -> anyhow::Result<ExitCode> {
     match command {
         Command::GenSecret | Command::Healthcheck { .. } | Command::GenGraphCert { .. } => {}
-        Command::Settings {
-            command: SettingsCommand::Show { json },
-        } => {
+        Command::Settings { command } => {
             let core = connect(config).await?;
-            settings_show(&core, json).await?;
+            return settings_command(&core, command, config_path.as_deref()).await;
         }
         Command::CheckConfig => {
             config.master_key().context("secret_key")?;
@@ -397,6 +417,185 @@ async fn healthcheck(addr: SocketAddr) -> ExitCode {
         Ok(Ok(true)) => ExitCode::SUCCESS,
         _ => ExitCode::FAILURE,
     }
+}
+
+async fn settings_command(
+    core: &Core,
+    command: SettingsCommand,
+    config_path: Option<&std::path::Path>,
+) -> anyhow::Result<ExitCode> {
+    use pdms_core::settings::{self, Change, Kind, NewValue};
+    let ctx = Ctx::system("settings-cli");
+    let set = |key: &str, value: serde_json::Value| {
+        vec![Change {
+            key: key.to_owned(),
+            value: NewValue::Set(value),
+        }]
+    };
+    match command {
+        SettingsCommand::Show { json } => settings_show(core, json).await?,
+        SettingsCommand::Set { key, value } => {
+            let d = settings::find(&key).with_context(|| format!("unknown setting {key}"))?;
+            let value = match d.kind {
+                Kind::Secret => bail!("{key} is a secret: use `settings set-secret {key}`"),
+                Kind::Bool => match value.to_ascii_lowercase().as_str() {
+                    "true" | "yes" | "on" | "1" => serde_json::Value::Bool(true),
+                    "false" | "no" | "off" | "0" => serde_json::Value::Bool(false),
+                    _ => bail!("{key} is true or false"),
+                },
+                Kind::Number => serde_json::Value::from(
+                    value
+                        .trim()
+                        .parse::<u64>()
+                        .with_context(|| format!("{key} is a whole number"))?,
+                ),
+                Kind::Choice(options) => {
+                    if !options.contains(&value.as_str()) {
+                        bail!("{key} is one of: {}", options.join(", "));
+                    }
+                    serde_json::Value::String(value)
+                }
+                Kind::Text => serde_json::Value::String(value),
+            };
+            settings::save(core, &ctx, set(&key, value)).await?;
+            println!("Saved {key}.");
+        }
+        SettingsCommand::SetSecret { key } => {
+            let d = settings::find(&key).with_context(|| format!("unknown setting {key}"))?;
+            if d.kind != Kind::Secret {
+                bail!("{key} is not a secret: use `settings set {key} VALUE`");
+            }
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut text)?;
+            let text = text.trim_end_matches(['\r', '\n']).to_owned();
+            settings::save(core, &ctx, set(&key, serde_json::Value::String(text))).await?;
+            println!("Saved {key} (encrypted).");
+        }
+        SettingsCommand::Test { area, to } => {
+            let check = settings_test(core, &ctx, &area, to.as_deref()).await?;
+            for (ok, line) in &check.lines {
+                println!("{} {line}", if *ok { "OK     " } else { "PROBLEM" });
+            }
+            if !check.ok {
+                return Ok(ExitCode::FAILURE);
+            }
+        }
+        SettingsCommand::Import => {
+            let path = config_path.context("no configuration file to import from")?;
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("reading {}", path.display()))?;
+            let r = pdms_core::settings_import::import(core, &text).await?;
+            if r.imported.is_empty() && r.certificate.is_none() {
+                println!("Nothing to import: these settings are already in the database.");
+            }
+            for k in &r.imported {
+                println!("imported      {k}");
+            }
+            if let Some(t) = &r.certificate {
+                println!("imported      the Microsoft Graph certificate ({t}) as the active one");
+            }
+            for k in &r.already_stored {
+                println!("already set   {k} (kept the value in the database)");
+            }
+            for k in &r.stay_in_file {
+                println!(
+                    "in the file   {k} (written by hand: change it in the file, or delete it there to manage it in Administration)"
+                );
+            }
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The test behind each admin page's **Test** button, with the saved settings.
+async fn settings_test(
+    core: &Core,
+    ctx: &Ctx,
+    area: &str,
+    to: Option<&str>,
+) -> anyhow::Result<pdms_core::settings::Check> {
+    use pdms_core::settings::Check;
+    let config = core.config();
+    Ok(match area {
+        "microsoft-365" => {
+            let o = pdms_core::graph::certs::test_connection(
+                core,
+                ctx,
+                &config.graph.tenant_id,
+                &config.graph.client_id,
+            )
+            .await?;
+            let lines = o.lines.into_iter().map(|l| (o.ok, l)).collect();
+            Check { ok: o.ok, lines }
+        }
+        "sign-in" => {
+            let o = &config.auth.oidc;
+            let form = pdms_core::auth::oidc_setup::SignInForm {
+                enabled: o.enabled,
+                tenant: o.issuer_url.clone(),
+                client_id: o.client_id.clone(),
+                client_secret: String::new(),
+                display_name: o.display_name.clone(),
+                auto_provision: o.auto_provision,
+            };
+            let t = pdms_core::auth::oidc_setup::test(core, ctx, &form).await?;
+            Check {
+                ok: t.ok,
+                lines: t.lines,
+            }
+        }
+        "sharepoint" => {
+            let p = pdms_core::sharepoint::setup::test(
+                core,
+                ctx,
+                &config.sharepoint.site_url,
+                &config.sharepoint.library,
+            )
+            .await?;
+            Check {
+                ok: p.ok,
+                lines: p.lines,
+            }
+        }
+        "entra" => {
+            let rows = pdms_core::directory::entra_sync::preview(core, ctx).await?;
+            let lines = rows
+                .into_iter()
+                .map(|r| {
+                    let what = match (r.skipped, r.maps_to) {
+                        (Some(why), _) => format!("skipped: {why}"),
+                        (None, Some(d)) => format!("department {d}"),
+                        (None, None) => "no mapped department".to_owned(),
+                    };
+                    (
+                        true,
+                        format!("{} <{}> [{}]: {what}", r.name, r.email, r.department),
+                    )
+                })
+                .collect();
+            Check::passed(lines)
+        }
+        "email" => {
+            let to = to.context("the email test needs --to ADDRESS")?;
+            let e = &config.email;
+            let form = pdms_core::notifications::mail_setup::EmailForm {
+                on: true,
+                host: e.smtp_host.clone(),
+                port: e.smtp_port,
+                security: e.smtp_security,
+                username: e.smtp_username.clone(),
+                password: String::new(),
+                from: e.from.clone(),
+                reply_to: e.reply_to.clone(),
+            };
+            pdms_core::notifications::mail_setup::send_test(core, ctx, &form, to).await?
+        }
+        "ocr" => pdms_core::ocr::setup::test(core, ctx).await?,
+        "virus-scanning" => pdms_core::scanning::test(core, ctx).await?,
+        other => bail!(
+            "unknown area {other}: microsoft-365, sign-in, sharepoint, entra, email, ocr or virus-scanning"
+        ),
+    })
 }
 
 async fn settings_show(core: &Core, json: bool) -> anyhow::Result<()> {

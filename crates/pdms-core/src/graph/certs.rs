@@ -130,6 +130,37 @@ async fn info(conn: &mut sqlx::PgConnection, id: Uuid) -> CoreResult<Certificate
 pub async fn generate(core: &Core, ctx: &Ctx) -> CoreResult<CertificateInfo> {
     ctx.require(Capability::ManageSettings)?;
     let g = cert::generate("PDMS Service", VALID_DAYS).map_err(CoreError::internal)?;
+    keep(core, ctx, g).await
+}
+
+/// Keep an existing certificate and key (`secrets/graph_certificate` from an
+/// earlier install, PEM: certificate then key) as if it had been made here
+/// (requires `ManageSettings`); with no active certificate yet it is active.
+pub async fn import_pem(core: &Core, ctx: &Ctx, pem: &str) -> CoreResult<CertificateInfo> {
+    ctx.require(Capability::ManageSettings)?;
+    let bad = |e: &dyn std::fmt::Display| {
+        CoreError::validation(format!("the certificate file can't be read: {e}"))
+    };
+    cert::Credential::from_pem(pem).map_err(|e| bad(&e))?;
+    let der = cert::certificate_der(pem).map_err(|e| bad(&e))?;
+    let (_, parsed) = x509_parser::parse_x509_certificate(&der).map_err(|e| bad(&e))?;
+    let not_after = chrono::DateTime::from_timestamp(parsed.validity().not_after.timestamp(), 0)
+        .ok_or_else(|| bad(&"its expiry date is out of range"))?;
+    let certificate_pem = cert::public_pem(pem).ok_or_else(|| bad(&"no certificate in it"))?;
+    let g = cert::GeneratedCertificate {
+        pem: pem.trim().to_owned() + "\n",
+        certificate_pem,
+        thumbprint: cert::thumbprint(&der),
+        not_after,
+    };
+    keep(core, ctx, g).await
+}
+
+async fn keep(
+    core: &Core,
+    ctx: &Ctx,
+    g: cert::GeneratedCertificate,
+) -> CoreResult<CertificateInfo> {
     let der = cert::certificate_der(&g.certificate_pem).map_err(CoreError::internal)?;
     let id = Uuid::now_v7();
     let ciphertext = core

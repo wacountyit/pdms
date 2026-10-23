@@ -741,6 +741,18 @@ fn locked_settings(
         .collect()
 }
 
+/// The configuration file [`Config::load`] reads: `path`, else `PDMS_CONFIG`,
+/// else `config/pdms.toml` if it exists.
+pub fn file_path(path: Option<&Path>) -> Option<PathBuf> {
+    path.map(Path::to_path_buf)
+        .or_else(|| std::env::var_os("PDMS_CONFIG").map(PathBuf::from))
+        .or_else(|| {
+            Path::new(DEFAULT_CONFIG_PATH)
+                .exists()
+                .then(|| PathBuf::from(DEFAULT_CONFIG_PATH))
+        })
+}
+
 impl Config {
     /// Load from `path` (or `PDMS_CONFIG`, or `config/pdms.toml` if present) and the environment.
     pub fn load(path: Option<&Path>) -> Result<Config, ConfigError> {

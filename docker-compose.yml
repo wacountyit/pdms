@@ -10,16 +10,16 @@
 #             delivery with retries, nightly audit verification
 #
 #   caddy     optional reverse proxy with automatic HTTPS (profile "caddy")
-#   clamav    optional virus scanner: `docker compose --profile clamav up -d`
-#             and set storage.clamav_addr = "clamav:3310" in config/pdms.toml
-#   ocr       optional OCR for scanned files (OCRmyPDF/Tesseract):
-#             `docker compose --profile ocr up -d` and set
-#             ocr.sidecar_url = "http://ocr:8080" in config/pdms.toml
+#   clamav    optional virus scanner (profile "clamav"; ./install.sh --configure
+#             clamav includes it), turned on under Administration -> Virus scanning
+#   ocr       optional OCR for scanned files, OCRmyPDF/Tesseract (profile "ocr";
+#             ./install.sh --configure ocr includes it), turned on under
+#             Administration -> Text extraction (OCR)
 #
 # Files live in the `pdmsdata` volume (local storage backend). To keep document
-# files in SharePoint, run ./install.sh --configure sharepoint
-# (docs/SHAREPOINT_SETUP.md). For S3-compatible object storage, set
-# [storage] backend = "s3" in config/pdms.toml.
+# files in SharePoint, use Administration -> SharePoint (docs/SHAREPOINT_SETUP.md).
+# For S3-compatible object storage, set [storage] backend = "s3" in
+# config/pdms.toml.
 
 name: pdms
 

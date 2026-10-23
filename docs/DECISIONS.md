@@ -1081,6 +1081,25 @@ every change can be saved; with it off (`[auth.local] enabled = false`, a
 file-only setting), Microsoft sign-in can't be turned off on the page and a
 change is saved only when it passes the test.
 
+### D-116 The installer after S1, and moving existing settings — Accepted (2026-10-23)
+The installer keeps what PDMS can't start without or can't change from
+inside its container: the address and proxy, the database port, the name and
+time zone, the source URL, the first administrator, and which optional
+containers run (OCR, the virus scanner; Compose profiles recorded in `.env`
+as `PDMS_INCLUDE_OCR` and `PDMS_INCLUDE_CLAMAV`). Sign-in, email and
+SharePoint left it: `--configure sso|smtp|sharepoint` say which admin page
+has the setting. On an upgrade that has the blocks earlier installers wrote
+(`sso`, `smtp`, `sharepoint`, `ocr`, `storage`, `clamav`), it offers once
+to move them into Administration: `pdms settings import` copies what those
+blocks set (not the defaults they wrote out, not values already stored, and
+not hand-written settings outside them) into the database, secrets encrypted,
+and makes the certificate file the active certificate (activating it if
+certificates were already made on the page, so the one in use stays in use).
+Only after that succeeds does the installer remove the blocks, keep a copy of
+the file, empty the moved secret files and restart. Declined, it asks no more
+(`--configure move-settings` moves them later). `pdms settings set`,
+`set-secret` and `test` are the fallback when the pages can't be reached.
+
 ## Open questions (configurable defaults; not blocking)
 
 | Question | Default chosen |

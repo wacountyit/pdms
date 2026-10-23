@@ -173,6 +173,13 @@ Prints every registry key: the effective value (secrets as `set` or `not set`) a
 
 ## Phase 6: Upgrade and the installer
 
+> **As built (2026-10-23):**
+> - `pdms settings set|set-secret|test|import` in `crates/pdms/src/main.rs` (system actor). `test` takes `microsoft-365`, `sign-in`, `sharepoint`, `entra` (the preview), `email --to ADDRESS`, `ocr` or `virus-scanning`, and exits 1 when the test fails.
+> - `pdms-core::settings_import`: finds the managed blocks by their markers and reads them with Figment; copies the keys they set with the current values, skipping defaults the installer wrote out and keys already stored; the block's secret only when that block is there; the certificate file as the active certificate (activated when the page had made others). `settings::save_for_import` stores keys the file still sets. New direct dependency `x509-parser` (already in `Cargo.lock` through `rcgen`) for the certificate's expiry date.
+> - Installer: the `sso`, `smtp` and `sharepoint` steps and their helpers are gone; `--configure` with only those prints the admin page and exits. OCR and ClamAV are "Include …?" questions recorded as `PDMS_INCLUDE_OCR` / `PDMS_INCLUDE_CLAMAV` (an upgrade infers them from the old blocks). The move is offered once (`PDMS_SETTINGS_MOVED` = `yes` or `declined`; `--configure move-settings`; `PDMS_INSTALL_MOVE_SETTINGS`, default yes) and runs after the migration; the import failing stops the installer before anything is removed. It keeps `config/pdms.toml.before-move` and squeezes blank lines.
+> - Tests: `tests/settings_import.rs` (5, core). The installer was checked with a scratch harness (a fake `docker` that records its calls) for a fresh install, an upgrade with the move, a re-run, declining and moving later, the removed options, a hand-written `[auth.oidc]` (its secret is kept), a failed import, and `--configure ocr`; it is not committed, as in P4.
+> - D-116 (D-115 was taken by the sign-in lockout rule).
+
 - **`pdms settings`** gains `set KEY VALUE`, `set-secret KEY` (value from standard input), `test AREA`, and `import`. They use the same checks and audit as the pages, as the system actor.
 - **`pdms settings import`:** for each in-scope key that the installer's managed blocks set (`sso`, `smtp`, `sharepoint`, `ocr`, `storage`/`clamav`) and that the database doesn't have yet, copy it into the database; import a non-empty `secrets/graph_certificate` as the active certificate; print what was imported.
 - **Installer:**

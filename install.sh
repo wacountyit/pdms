@@ -4,17 +4,18 @@
 # PDMS installer.
 #
 #   ./install.sh                     first install, or finish anything not yet set up
-#   ./install.sh --configure smtp    redo one part later (repeatable, comma-separated):
-#                                    network, database-port, source, sso, smtp,
-#                                    sharepoint, ocr, clamav, admin
+#   ./install.sh --configure network redo one part later (repeatable, comma-separated):
+#                                    network, database-port, source, ocr, clamav,
+#                                    admin, move-settings
 #   ./install.sh --non-interactive   take answers from PDMS_INSTALL_* variables (see --help)
 #
 # What it does: checks prerequisites, finds free ports, asks how users will
 # reach the system (bundled Caddy with automatic HTTPS, your own reverse
 # proxy, or local testing), generates strong random secrets (database
-# passwords, the master key), optionally sets up Microsoft Entra ID sign-in,
-# email, OCR, and virus scanning, then builds and
-# starts everything and creates the first administrator.
+# passwords, the master key), asks whether to include the optional OCR and
+# virus-scanning containers, then builds and starts everything and creates
+# the first administrator. Microsoft sign-in, email, SharePoint, the Entra ID
+# user sync, OCR and virus scanning are then set up under Administration.
 #
 # Re-running is safe: nothing already set up is changed or asked again, and
 # secrets are never regenerated. Secrets live in secrets/ (one file each,
@@ -55,15 +56,9 @@ takes its default or is skipped:
   PDMS_INSTALL_DB_PORT      expose PostgreSQL on 127.0.0.1 at this port, or "yes" for the first free one (blank: don't)
   PDMS_INSTALL_ADMIN_EMAIL, PDMS_INSTALL_ADMIN_USERNAME (default: sysadmin), PDMS_INSTALL_ADMIN_NAME,
   PDMS_INSTALL_ADMIN_PASSWORD (blank: generated)
-  PDMS_INSTALL_TENANT_ID, PDMS_INSTALL_CLIENT_ID, PDMS_INSTALL_CLIENT_SECRET
-  PDMS_INSTALL_SMTP_HOST, PDMS_INSTALL_SMTP_PORT, PDMS_INSTALL_SMTP_SECURITY (starttls|tls|none),
-  PDMS_INSTALL_SMTP_USERNAME, PDMS_INSTALL_SMTP_PASSWORD, PDMS_INSTALL_SMTP_FROM
-  PDMS_INSTALL_OCR, PDMS_INSTALL_CLAMAV               yes | no (default: no)
-  PDMS_INSTALL_SHAREPOINT_SITE_URL  SharePoint site for document files (blank: files stay on this server;
-                                    "none" switches SharePoint storage off again)
-  PDMS_INSTALL_GRAPH_TENANT_ID, PDMS_INSTALL_GRAPH_CLIENT_ID   the "PDMS Service" app registration
-  PDMS_INSTALL_SWITCH_STORAGE       yes: an existing install switches its document files to SharePoint
-  PDMS_INSTALL_STOP_SHAREPOINT      yes: a blank site URL switches SharePoint storage off again
+  PDMS_INSTALL_OCR, PDMS_INSTALL_CLAMAV   include the OCR / virus-scanning container: yes | no (default: no)
+  PDMS_INSTALL_MOVE_SETTINGS              an upgrade moves the settings an earlier installer wrote
+                                          into Administration: yes | no (default: yes)
 EOF
       exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
@@ -71,6 +66,28 @@ EOF
   shift
 done
 configuring() { [[ ",$CONFIGURE," == *",$1,"* ]]; }
+
+# These steps moved into Administration (S1): say where, instead of asking.
+moved_to() {
+  case "$1" in
+    sso)        echo "Microsoft sign-in: Administration -> Microsoft 365 -> Sign-in" ;;
+    smtp)       echo "Email: Administration -> Email" ;;
+    sharepoint) echo "SharePoint storage: Administration -> Microsoft 365 -> Connection, then -> SharePoint" ;;
+  esac
+}
+remaining=""
+for opt in ${CONFIGURE//,/ }; do
+  if [[ -n "$(moved_to "$opt")" ]]; then
+    printf '   --configure %s is no longer part of the installer. %s.\n' "$opt" "$(moved_to "$opt")"
+  else
+    remaining+="${remaining:+,}$opt"
+  fi
+done
+if [[ -n "$CONFIGURE" && -z "$remaining" ]]; then
+  echo "   Sign in to PDMS as an administrator to change these settings."
+  exit 0
+fi
+CONFIGURE=$remaining
 
 # --- helpers ------------------------------------------------------------------
 say()  { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
@@ -179,11 +196,6 @@ write_block() {
   rm -f "$tmp" "$tmp.block"
 }
 
-# Should section NAME (TOML table TABLE) be asked about? Only when it is not
-# set up yet -- neither a managed block nor a hand-written table -- or when
-# --configure NAME asks for it.
-needs() { configuring "$1" || { ! has_block "$1" && ! has_table "$2"; }; }
-
 # toml_value TABLE KEY -- a plain string or bare value from config/pdms.toml.
 toml_value() {
   [[ -f $CONFIG ]] || return 0
@@ -200,36 +212,6 @@ remove_block() {
     index($0, start) == 1 { skip = 1; next }
     skip && index($0, end) == 1 { skip = 0; next }
     !skip { print }' "$CONFIG" > "$tmp" && cat "$tmp" > "$CONFIG" && rm -f "$tmp"
-}
-
-# [storage] is one managed block, "storage", written by the SharePoint and the
-# virus-scanning steps: one TOML table cannot be split across two blocks. Older
-# installs kept [storage] in the "clamav" block; it is moved the first time.
-clamav_block_has_storage() {
-  has_block clamav && awk '/^# >>> install.sh:clamav/ { f = 1; next } /^# <<< install.sh:clamav/ { f = 0 }
-    f && /^\[storage\]/ { found = 1 } END { exit !found }' "$CONFIG"
-}
-custom_storage() { has_table storage && ! has_block storage && ! clamav_block_has_storage; }
-storage_backend() { local b; b=$(toml_value storage backend); echo "${b:-local}"; }
-write_storage_block() { # write_storage_block BACKEND CLAMAV_ADDR
-  if has_block clamav; then remove_block clamav; env_set PDMS_CLAMAV_DECIDED yes; fi
-  # "local" is the default, so it is left out: a backend in this file can't be
-  # switched on Administration -> SharePoint.
-  local backend_line="# Where document files live is set on Administration -> SharePoint."
-  [[ "$1" != local ]] && backend_line="# Where document files live (./install.sh --configure sharepoint).
-backend = $(toml "$1")"
-  write_block storage "sharepoint or clamav" <<EOF
-[storage]
-$backend_line
-# Virus scanning: "clamav:3310" turns it on (./install.sh --configure clamav).
-clamav_addr = $(toml "$2")
-EOF
-}
-
-# Whether Microsoft Entra ID sign-in is turned on in the configuration.
-sso_enabled() {
-  [[ -f "$CONFIG" ]] && awk '/^\[auth\.oidc\]/ { f = 1; next } /^\[/ { f = 0 }
-    f && /^enabled[[:space:]]*=[[:space:]]*true/ { found = 1 } END { exit !found }' "$CONFIG"
 }
 
 # Entra ID sends people back to exactly this address after they sign in. It
@@ -549,209 +531,6 @@ done
 note "Database passwords (256-bit) and the master key (512-bit) are random and stay in secrets/."
 note "The directory is private to you; files are readable so containers can mount them."
 
-# --- 5. Microsoft Entra ID single sign-on ---------------------------------------------
-if needs sso auth.oidc; then
-  say "Microsoft Entra ID sign-in (optional)"
-  if [[ "$PUBLIC_URL_NOW" == http://* ]]; then
-    note "Skipped: Entra ID requires an https:// address. Re-run with --configure sso after"
-    note "setting up HTTPS (--configure network)."
-    tenant=""
-  else
-    note "Users sign in with their organization accounts. Leave the tenant blank to skip"
-    note "(the local administrator still works) and set it up later on the admin page"
-    note "Administration -> Microsoft 365 -> Sign-in, which can also test it."
-    note "First register an app in the Entra admin center (App registrations), and under"
-    note "Authentication add a platform of type Web with exactly this redirect URI:"
-    note ""
-    note "    $(redirect_uri)"
-    note ""
-    note "It must match character for character, including the port, or Microsoft refuses"
-    note "the sign-in (AADSTS50011). If the app is already registered, add it there."
-    ask TENANT_ID "Directory (tenant) ID" ""
-    tenant=$TENANT_ID
-  fi
-  has_table auth.oidc && ! has_block sso && remove_table auth.oidc
-  if [[ -n "$tenant" ]]; then
-    ask CLIENT_ID "Application (client) ID" ""
-    ask_secret CLIENT_SECRET "Client secret value"
-    [[ -n "$CLIENT_ID" && -n "$CLIENT_SECRET" ]] || fail "the client ID and secret are required for sign-in"
-    printf '%s' "$CLIENT_SECRET" > secrets/oidc_client_secret
-    write_block sso <<EOF
-[auth.oidc]
-# Microsoft Entra ID. Client secret: secrets/oidc_client_secret.
-enabled = true
-issuer_url = $(toml "https://login.microsoftonline.com/$tenant/v2.0")
-client_id = $(toml "$CLIENT_ID")
-display_name = "Microsoft"
-EOF
-    echo "   Entra ID sign-in configured. Map Entra groups to departments and roles under"
-    echo "   Administration -> Identity provider mappings after signing in."
-    echo "   Check the app registration lists this redirect URI (type Web): $(redirect_uri)"
-  else
-    write_block sso <<'EOF'
-[auth.oidc]
-# Not set up here: use Administration -> Microsoft 365 -> Sign-in (or --configure sso).
-enabled = false
-EOF
-  fi
-fi
-
-# --- 6. email ------------------------------------------------------------------------
-if needs smtp email; then
-  say "Email (optional)"
-  note "Reminders and \"action needed\" notices go out by email (they also appear in the app)."
-  note "Leave the host blank to skip; add it later with --configure smtp."
-  ask SMTP_HOST "SMTP host (e.g. smtp.office365.com)" ""
-  has_table email && ! has_block smtp && remove_table email
-  if [[ -n "$SMTP_HOST" ]]; then
-    if [[ -n "${PDMS_INSTALL_SMTP_SECURITY:-}" ]]; then security=$PDMS_INSTALL_SMTP_SECURITY
-    elif $NON_INTERACTIVE; then security=starttls
-    else
-      note "Connection security: 1) STARTTLS (port 587, Exchange Online)  2) Implicit TLS (465)  3) None (trusted internal relay)"
-      read -r -p "   Choice [1/2/3, default 1]: " s || s=1
-      case "$s" in 2) security=tls ;; 3) security=none ;; *) security=starttls ;; esac
-    fi
-    case "$security" in tls) dport=465 ;; none) dport=25 ;; *) security=starttls; dport=587 ;; esac
-    ask SMTP_PORT "SMTP port" "$dport"
-    ask SMTP_USERNAME "SMTP username (blank for an unauthenticated relay)" ""
-    if [[ -n "$SMTP_USERNAME" ]]; then
-      ask_secret SMTP_PASSWORD "SMTP password"
-      printf '%s' "$SMTP_PASSWORD" > secrets/smtp_password
-    else
-      : > secrets/smtp_password
-    fi
-    domain=$(env_get PDMS_DOMAIN)
-    ask SMTP_FROM "From address" "${SMTP_USERNAME:-pdms@${domain:-example.org}}"
-    write_block smtp <<EOF
-[email]
-# Password (if any): secrets/smtp_password.
-transport = "smtp"
-from = $(toml "$ORG_NAME <$SMTP_FROM>")
-smtp_host = $(toml "$SMTP_HOST")
-smtp_port = $SMTP_PORT
-smtp_security = $(toml "$security")
-smtp_username = $(toml "$SMTP_USERNAME")
-EOF
-    echo "   Email configured."
-  else
-    write_block smtp <<EOF
-[email]
-# Not set up (reminders still appear in the app). Run ./install.sh --configure smtp.
-transport = "disabled"
-from = $(toml "$ORG_NAME <pdms@example.org>")
-EOF
-  fi
-fi
-
-# --- 6b. SharePoint document storage (Microsoft Graph) ---------------------------------
-if needs sharepoint sharepoint; then
-  say "SharePoint document storage (optional)"
-  note "PDMS can keep every document file in a dedicated SharePoint site, where staff can"
-  note "browse their department's files read-only. Set up the site and the \"PDMS Service\""
-  note "app registration first: docs/SHAREPOINT_SETUP.md. Leave the site URL blank to keep"
-  note "files on this server."
-  was_sharepoint=no; [[ "$(storage_backend)" == sharepoint ]] && was_sharepoint=yes
-  # [graph] is shared with the Entra ID user sync. A hand-written one is adopted
-  # (its values become the defaults); [entra_sync] is never touched here.
-  graph_tenant=$(toml_value graph tenant_id)
-  graph_client=$(toml_value graph client_id)
-  current_site=$(toml_value sharepoint site_url)
-  if [[ -n "$current_site" ]]; then
-    note "Answer \"none\" to stop using SharePoint for document files."
-    ask SHAREPOINT_SITE_URL "SharePoint site URL" "$current_site"
-  else
-    ask SHAREPOINT_SITE_URL "SharePoint site URL (e.g. https://contoso.sharepoint.com/sites/PDMSRecords)" ""
-  fi
-  [[ "$SHAREPOINT_SITE_URL" == none ]] && SHAREPOINT_SITE_URL=""
-  SHAREPOINT_SITE_URL=${SHAREPOINT_SITE_URL%/}
-  if [[ -n "$SHAREPOINT_SITE_URL" ]]; then
-    [[ "$SHAREPOINT_SITE_URL" =~ ^https://[A-Za-z0-9.-]+\.sharepoint\.(com|us)/sites/[A-Za-z0-9._-]+$ ]] \
-      || fail "the site URL must look like https://<tenant>.sharepoint.com/sites/<name>"
-    sso_tenant=$(sed -n 's#^issuer_url = "https://login.microsoftonline.com/\([^/]*\)/v2.0"#\1#p' "$CONFIG" | head -1)
-    ask GRAPH_TENANT_ID "Directory (tenant) ID" "${graph_tenant:-$sso_tenant}"
-    ask GRAPH_CLIENT_ID "Application (client) ID of the PDMS Service app" "$graph_client"
-    guid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-    [[ "$GRAPH_TENANT_ID" =~ $guid && "$GRAPH_CLIENT_ID" =~ $guid ]] \
-      || fail "the tenant and client IDs are GUIDs like 01234567-89ab-cdef-0123-456789abcdef"
-    if [[ $was_sharepoint == no && "$(env_get PDMS_ADMIN_CREATED)" == yes ]]; then
-      warn "files already stored on this server are not moved to SharePoint, and PDMS cannot open"
-      note "them once SharePoint storage is on. Turn it on before real documents are added; on a"
-      note "test server, reset it first (docs/SHAREPOINT_SETUP.md)."
-      yes_no SWITCH_STORAGE "Switch document storage to SharePoint now?" n
-      [[ $SWITCH_STORAGE == yes ]] || fail "keeping document files on this server; nothing was changed"
-    fi
-    # The same certificate as the Entra ID user sync (pdms gen-graph-cert writes
-    # the same two files). Created only when missing: RSA-2048, two years.
-    if [[ ! -s secrets/graph_certificate ]]; then
-      tmpd=$(mktemp -d)
-      openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 730 -subj "/CN=PDMS Service" \
-        -keyout "$tmpd/key.pem" -out "$tmpd/cert.pem" 2>/dev/null
-      cat "$tmpd/cert.pem" "$tmpd/key.pem" > secrets/graph_certificate
-      cp "$tmpd/cert.pem" secrets/graph_certificate.crt
-      rm -rf "$tmpd"
-      echo "   generated secrets/graph_certificate (valid for 2 years)"
-    fi
-    chmod 644 secrets/graph_certificate
-    [[ -s secrets/graph_certificate.crt ]] || openssl x509 -in secrets/graph_certificate -out secrets/graph_certificate.crt
-    chmod 644 secrets/graph_certificate.crt
-    sha256=$(openssl x509 -in secrets/graph_certificate.crt -outform der | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-    sha1=$(openssl x509 -in secrets/graph_certificate.crt -noout -fingerprint -sha1 | sed 's/^.*=//; s/://g')
-    expires=$(openssl x509 -in secrets/graph_certificate.crt -noout -enddate | sed 's/^notAfter=//')
-    note "Upload secrets/graph_certificate.crt to the PDMS Service app registration"
-    note "(Certificates & secrets -> Certificates). It expires $expires."
-    note "  SHA-1 thumbprint (the Entra admin center lists this): $sha1"
-    note "  SHA-256 thumbprint (Administration -> Entra ID sync shows this): $sha256"
-    for t in graph sharepoint; do
-      if has_table "$t" && ! has_block sharepoint; then
-        remove_table "$t"; note "replaced the hand-written [$t] settings with the ones above"
-      fi
-    done
-    write_block sharepoint <<EOF
-[graph]
-# The "PDMS Service" app registration (docs/SHAREPOINT_SETUP.md), shared with the
-# Entra ID user sync. Certificate and key: secrets/graph_certificate (a Docker
-# secret); upload its public half, secrets/graph_certificate.crt, to Entra.
-tenant_id = $(toml "$GRAPH_TENANT_ID")
-client_id = $(toml "$GRAPH_CLIENT_ID")
-
-[sharepoint]
-# Document files live here ([storage] backend = "sharepoint").
-site_url = $(toml "$SHAREPOINT_SITE_URL")
-library = "Documents"
-EOF
-    if custom_storage; then
-      warn "your [storage] settings in $CONFIG are hand-written; set backend = \"sharepoint\" there yourself."
-    else
-      write_storage_block sharepoint "$(toml_value storage clamav_addr)"
-    fi
-    echo "   SharePoint storage configured. Check it under Administration -> SharePoint once running."
-  else
-    if [[ $was_sharepoint == yes ]]; then
-      warn "files already stored in SharePoint stay there, but PDMS will no longer be able to open them."
-      yes_no STOP_SHAREPOINT "Stop using SharePoint for document files anyway?" n
-      [[ $STOP_SHAREPOINT == yes ]] || fail "keeping SharePoint storage; nothing was changed"
-    fi
-    # Keep [graph] if this block wrote it: the Entra ID user sync may use it. A
-    # hand-written [graph] stays where it is.
-    graph_lines=""
-    if has_block sharepoint && [[ -n "$graph_tenant" ]]; then
-      graph_lines=$(printf '[graph]\n# Shared with the Entra ID user sync.\ntenant_id = %s\nclient_id = %s\n\n' \
-        "$(toml "$graph_tenant")" "$(toml "$graph_client")")
-    fi
-    has_table sharepoint && ! has_block sharepoint && remove_table sharepoint
-    write_block sharepoint <<EOF
-$graph_lines
-[sharepoint]
-# Not set up: document files stay on this server. Run ./install.sh --configure
-# sharepoint (see docs/SHAREPOINT_SETUP.md).
-site_url = ""
-EOF
-    if [[ $was_sharepoint == yes ]] && ! custom_storage; then
-      write_storage_block local "$(toml_value storage clamav_addr)"
-    fi
-  fi
-fi
-
 # --- 7. Removed: Outlook calendar sync --------------------------------------------------
 # The Outlook calendar sync was removed (D-087). Tidy what an earlier install wrote:
 # the [graph_calendar] block or table, and its client secret file.
@@ -766,38 +545,53 @@ if has_block outlook || has_table graph_calendar; then
 fi
 rm -f secrets/graph_client_secret
 
-# --- 8. OCR and virus scanning ---------------------------------------------------------
-if needs ocr ocr; then
-  say "OCR for scanned documents (optional)"
-  note "Text in ordinary PDFs and Word files is always read. OCR also reads scanned PDFs and"
-  note "photos so they are searchable and their dates can be suggested. It runs in an extra"
-  note "container (OCRmyPDF/Tesseract, about 1 GB) and is CPU-heavy while working."
-  yes_no OCR "Enable OCR?" n
-  if [[ $OCR == yes ]]; then
-    write_block ocr <<'EOF'
-[ocr]
-sidecar_url = "http://ocr:8080"
-EOF
-  else
-    write_block ocr <<'EOF'
-[ocr]
-# OCR off. Run ./install.sh --configure ocr to enable it.
-sidecar_url = ""
-EOF
-  fi
+# --- 8. optional containers: OCR and virus scanning ----------------------------------
+# The app can't start containers, so the installer decides which run (Compose
+# profiles); Administration turns their use on and off. An earlier install
+# that set them up keeps them.
+[[ -z "$(env_get PDMS_INCLUDE_OCR)" ]] && has_block ocr && \
+  env_set PDMS_INCLUDE_OCR "$([[ "$(toml_value ocr sidecar_url)" == http* ]] && echo yes || echo no)"
+if [[ -z "$(env_get PDMS_INCLUDE_CLAMAV)" ]] && { has_block storage || has_block clamav || [[ -n "$(env_get PDMS_CLAMAV_DECIDED)" ]]; }; then
+  env_set PDMS_INCLUDE_CLAMAV "$(grep -q '^clamav_addr = "clamav' "$CONFIG" && echo yes || echo no)"
 fi
-# Asked once; older installs answered it in the "clamav" block.
-if configuring clamav || { [[ -z "$(env_get PDMS_CLAMAV_DECIDED)" ]] && ! has_block clamav; }; then
-  say "Virus scanning (optional)"
-  note "Uploads can be scanned by ClamAV in an extra container (about 1 GB of memory)."
-  if custom_storage; then
-    note "Your [storage] settings are custom; set clamav_addr = \"clamav:3310\" there yourself."
-  else
-    yes_no CLAMAV "Enable virus scanning?" n
-    clamav_addr=""; [[ $CLAMAV == yes ]] && clamav_addr="clamav:3310"
-    write_storage_block "$(storage_backend)" "$clamav_addr"
+if configuring ocr || [[ -z "$(env_get PDMS_INCLUDE_OCR)" ]]; then
+  say "OCR service (optional)"
+  note "Text in ordinary PDFs and Word files is always read. The OCR service also reads scanned"
+  note "PDFs and photos so they are searchable and their dates can be suggested. It is an extra"
+  note "container (OCRmyPDF/Tesseract, about 1 GB) and is CPU-heavy while working. Once PDMS runs,"
+  note "turn it on under Administration -> Text extraction (OCR)."
+  yes_no OCR "Include the OCR service?" n
+  env_set PDMS_INCLUDE_OCR "$OCR"
+fi
+if configuring clamav || [[ -z "$(env_get PDMS_INCLUDE_CLAMAV)" ]]; then
+  say "Virus scanner (optional)"
+  note "Uploads can be scanned by ClamAV in an extra container (about 1 GB of memory). Once PDMS"
+  note "runs, turn scanning on under Administration -> Virus scanning."
+  yes_no CLAMAV "Include the virus scanner?" n
+  env_set PDMS_INCLUDE_CLAMAV "$CLAMAV"
+fi
+
+# --- 8b. upgrade: move settings an earlier installer wrote into Administration -------
+# Settings in config/pdms.toml win over Administration and show read-only there
+# (D-111), so the blocks earlier installers wrote would lock the admin pages.
+MOVED_BLOCKS=(sso smtp sharepoint ocr storage clamav)
+blocks_to_move=()
+for b in "${MOVED_BLOCKS[@]}"; do has_block "$b" && blocks_to_move+=("$b"); done
+MOVE_SETTINGS=no
+if (( ${#blocks_to_move[@]} )) && { configuring move-settings || [[ -z "$(env_get PDMS_SETTINGS_MOVED)" ]]; }; then
+  say "Settings now managed in Administration"
+  note "This install has sign-in, email, SharePoint, OCR or virus-scanning settings in"
+  note "$CONFIG (blocks: ${blocks_to_move[*]}). PDMS now sets these up on its admin pages,"
+  note "where they can be tested and changed without a restart. Moving them copies them into"
+  note "the database (passwords and keys encrypted with the master key), removes those blocks"
+  note "from $CONFIG (a copy is kept as $CONFIG.before-move) and empties their secret files."
+  note "Settings you wrote by hand outside those blocks stay in the file."
+  yes_no MOVE_SETTINGS "Move these settings into Administration?" y
+  if [[ $MOVE_SETTINGS == no ]]; then
+    env_set PDMS_SETTINGS_MOVED declined
+    note "Kept in $CONFIG: they show read-only on the admin pages. Move them later with"
+    note "./install.sh --configure move-settings."
   fi
-  env_set PDMS_CLAMAV_DECIDED yes
 fi
 
 # --- 9. first administrator (asked now; created after the build) -----------------------
@@ -831,8 +625,9 @@ fi
 # Docker Compose profiles follow the configuration.
 profiles=()
 [[ "$MODE" == caddy ]] && profiles+=(caddy)
-grep -q '^sidecar_url = "http' "$CONFIG" && profiles+=(ocr)
-grep -q '^clamav_addr = "clamav' "$CONFIG" && profiles+=(clamav)
+# Hand-written addresses in the file still bring their container along.
+{ [[ "$(env_get PDMS_INCLUDE_OCR)" == yes ]] || grep -q '^sidecar_url = "http' "$CONFIG"; } && profiles+=(ocr)
+{ [[ "$(env_get PDMS_INCLUDE_CLAMAV)" == yes ]] || grep -q '^clamav_addr = "clamav' "$CONFIG"; } && profiles+=(clamav)
 env_set COMPOSE_PROFILES "$(IFS=,; echo "${profiles[*]:-}")"
 COMPOSE_PROFILES=$(env_get COMPOSE_PROFILES)
 export COMPOSE_PROFILES
@@ -842,6 +637,23 @@ say "Building and starting (the first build takes several minutes)"
 docker compose build </dev/null
 docker compose up -d postgres </dev/null
 docker compose run --rm -T migrate </dev/null
+
+if [[ $MOVE_SETTINGS == yes ]]; then
+  say "Moving settings into Administration"
+  # Copies them into the database first; if that fails, set -e stops here and
+  # nothing is removed.
+  docker compose run --rm -T app settings import </dev/null
+  cp "$CONFIG" "$CONFIG.before-move"
+  for b in "${blocks_to_move[@]}"; do remove_block "$b"; done
+  tmp=$(mktemp); cat -s "$CONFIG" > "$tmp" && cat "$tmp" > "$CONFIG" && rm -f "$tmp" # one blank line between tables
+  # The secret files of the moved blocks (now in the database). The Graph
+  # certificate file is always imported, so it is emptied too.
+  [[ " ${blocks_to_move[*]} " == *" sso "* ]] && : > secrets/oidc_client_secret
+  [[ " ${blocks_to_move[*]} " == *" smtp "* ]] && : > secrets/smtp_password
+  : > secrets/graph_certificate
+  env_set PDMS_SETTINGS_MOVED yes
+  note "Moved. Change them under Administration from now on."
+fi
 
 if [[ -n "$ADMIN_EMAIL" ]]; then
   admins=$(docker compose exec -T postgres psql -U postgres -d pdms -Atc \
@@ -880,15 +692,16 @@ case "$MODE" in
   external) echo "   Open: $PUBLIC_URL_NOW   (via your reverse proxy -> this host, port $(env_get PDMS_HTTP_PORT))" ;;
   *)        echo "   Open: $PUBLIC_URL_NOW   (local testing only)" ;;
 esac
-if sso_enabled; then
+if [[ "$PUBLIC_URL_NOW" == https://* ]]; then
   echo
   echo "   Microsoft sign-in: the Entra app registration must list this redirect URI"
   echo "   (Authentication -> Web), exactly as written, including the port (also shown on"
   echo "   Administration -> Microsoft 365 -> Sign-in):"
   echo "     $(redirect_uri)"
   if $NETWORK_CHANGED; then
-    warn "the address changed in this run. Add the new redirect URI above to the app"
-    note "registration (and remove the old one), or Microsoft refuses sign-in (AADSTS50011)."
+    warn "the address changed in this run. If Microsoft sign-in is set up, add the new redirect"
+    note "URI above to the app registration (and remove the old one), or Microsoft refuses"
+    note "sign-in (AADSTS50011)."
   fi
 fi
 if $ADMIN_CREATED_NOW; then
@@ -903,8 +716,10 @@ if [[ -n "$ADMIN_PASSWORD_SHOWN" ]]; then
 fi
 cat <<EOF
 
+   Sign in and finish setup under Administration: Microsoft sign-in, email, SharePoint,
+   the Entra ID user sync, OCR and virus scanning are set up and tested there.
    Settings: .env (ports, profiles), config/pdms.toml (application), secrets/ (keep private).
-   Change one part later: ./install.sh --configure sso|smtp|sharepoint|ocr|clamav|network|database-port|source|admin
+   Change one part later: ./install.sh --configure network|database-port|source|ocr|clamav|admin
    Back up: deploy/backup/pdms-backup.sh (see docs/BACKUP.md). Check integrity: docker compose run --rm app verify-integrity
    Next steps and testing plan: docs/ROADMAP.md
 EOF

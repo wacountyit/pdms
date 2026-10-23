@@ -321,9 +321,10 @@ ID user sync.
 While SharePoint holds PDMS files, the site and library can't be changed:
 PDMS tracks each file by its ID in that library.
 
-If `config/pdms.toml` sets `[storage] backend` or the `[sharepoint]` values
-(for example from `./install.sh --configure sharepoint`), the page shows
-them read-only; change them in the file instead.
+If `config/pdms.toml` sets `[storage] backend` or the `[sharepoint]` values,
+the page shows them read-only; change them in the file instead. An install
+set up by an earlier installer moves them into Administration when it
+upgrades (ADMIN_GUIDE section 1).
 
 ## Rollout on the test server
 
@@ -331,8 +332,7 @@ them read-only; change them in the file instead.
 > anything on it matters.
 
 1. On the test server: `cd <install directory> && git pull && docker compose down -v`.
-2. `./install.sh`. Answer `none` at the SharePoint step: the next steps
-   are done on the admin pages. Then do B3 to B6.
+2. `./install.sh`, then do B3 to B6 on the admin pages.
 3. `docker compose run --rm app seed-demo`. The demo files go to the test site.
 4. Optional, from a workstation with the repository: run the three opt-in
    live tests against the test site (`live_sharepoint_round_trip`,

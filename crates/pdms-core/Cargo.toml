@@ -31,6 +31,7 @@ pdms-authz.workspace = true
 pdms-storage.workspace = true
 rand.workspace = true
 rcgen = "0.14.5"
+x509-parser = "0.18.1"
 regex = "1"
 reqwest = { workspace = true, features = ["stream"] }
 ring = "0.17"

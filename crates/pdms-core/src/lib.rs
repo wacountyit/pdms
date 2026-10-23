@@ -37,6 +37,7 @@ pub mod reviews;
 pub mod scanning;
 pub mod schedule;
 pub mod settings;
+pub mod settings_import;
 pub mod sharepoint;
 pub mod signatures;
 pub mod workflow;

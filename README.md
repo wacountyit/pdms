@@ -45,17 +45,20 @@ The installer asks everything first, then builds and starts unattended:
   something else on the machine already has them.
 - **Name and time zone** (detected from the host).
 - **Optionally:** PostgreSQL on `127.0.0.1` for host tools (on a free port),
-  Microsoft Entra ID sign-in, SMTP email, SharePoint document storage (see
-  [docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)), OCR, and virus
-  scanning.
+  and whether to include the OCR and virus-scanning containers.
 - **The first administrator.** The password is generated and shown once,
   along with an authenticator secret.
 
+Then sign in and finish setup under **Administration**: Microsoft sign-in,
+email, the Microsoft 365 connection, SharePoint document storage (see
+[docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)), the Entra ID user
+sync, OCR and virus scanning each have a page with a test.
+
 Database passwords and the master key are strong random values in `secrets/`.
 Deployment settings go in `.env` and application settings in
-`config/pdms.toml`. Re-running is safe; `./install.sh --configure smtp` (or
-`sso`, `ocr`, `clamav`, `network`, `database-port`, `admin`)
-redoes one part later. `./install.sh --help` lists the variables for unattended
+`config/pdms.toml`. Re-running is safe, and is also the upgrade step;
+`./install.sh --configure network` (or `database-port`, `source`, `ocr`,
+`clamav`, `admin`) redoes one part later. `./install.sh --help` lists the variables for unattended
 installs. Then see [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) and the testing
 plan in [docs/ROADMAP.md](docs/ROADMAP.md).
 
