@@ -113,22 +113,21 @@ images are still named `pdms`.
 
 Two people work on PADM, often in turns, each with their own Claude session.
 This table shows who has each piece of work and how far it has got, so
-either person can see what is being done before starting anything. Open
-pull requests (`gh pr list`, drafts included) show the branches in flight.
+either person can see what is being done before starting anything.
+Everyone works directly on `main` (since 2026-10-23), so this table is the
+only place that shows work in flight.
 
-**Keep your row current.** This table changes only through small commits
-pushed straight to `main` ("Working in turns" in [`CLAUDE.md`](../CLAUDE.md)),
-never inside a pull request:
+**Keep your row current** ("Working in turns" in [`CLAUDE.md`](../CLAUDE.md)):
 
-- **Before you start:** add your row.
+- **Before you start:** add your row, and push it straight away.
 - **Whenever a part changes state, and at the end of every session:**
   update the State and Updated columns. Mark each part **Not started**,
-  **In progress**, **In review** (its PR is waiting for the owner) or
-  **Done** (merged), with its PR number.
+  **In progress** or **Done**, and when you stop partway, add a short
+  "Where I stopped" note.
 - **When the whole item is done:** add it to §0.1 with the date, and remove
   its row here.
 
-| Work | Who | State | Branches and PRs | Updated |
+| Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
 
 Nothing is claimed. §0.5 lists what can start next.
@@ -186,25 +185,23 @@ the steps are in Appendix A of the spec):
 
 ### 0.4 How work moves through this list
 
-1. **Claim:** add your row to §0.1a and push that change straight to
-   `main`, then open a draft pull request, so the other person can see what
-   you have taken ([`CLAUDE.md`](../CLAUDE.md), "Working in turns"). Keep
-   the row's State current on `main` as the work moves.
+1. **Claim:** add your row to §0.1a and push it to `main` straight away,
+   so the other person can see what you have taken
+   ([`CLAUDE.md`](../CLAUDE.md), "Working in turns"). Keep the row's State
+   current as the work moves.
 2. **Design:** a spec in `docs/superpowers/specs/`, reviewed and approved by
    the project owner.
 3. **Plan:** an implementation plan in `docs/superpowers/plans/`.
-4. **Build:** on a branch, with tests. Before handing over, run
-   `cargo fmt`, `clippy -D warnings`, `cargo test`, and `cargo sqlx prepare`
-   (see §6).
-5. **Record:** in the same pull request:
-   - update the status column above (§0.1a is kept current separately,
-     on `main`);
+4. **Build:** directly on `main`, in small commits that each build and pass
+   the tests. Before each push, run `cargo fmt`, `clippy -D warnings`,
+   `cargo test`, and `cargo sqlx prepare` (see §6).
+5. **Record:** in the same commits:
+   - update the status column above and your §0.1a row;
    - update §0.5 and §0.6 if what can start next has changed;
    - add any new decisions to [DECISIONS.md](DECISIONS.md);
    - correct the README, ARCHITECTURE and ADMIN_GUIDE if behaviour changed.
 
-   The owner merges. Then delete the branch, and mark that part **Done**
-   in §0.1a. When the whole item is done, move it from §0.1a to §0.1.
+   When the whole item is done, move it from §0.1a to §0.1.
 
 Status values: Not started → Designing → Designed (spec approved) → Planned →
 In progress → Done.
@@ -458,7 +455,7 @@ Ordered by likely value; adjust after the pilot. Where these overlap the sub-pro
 ## 6. Making changes
 
 - **Code:** Rust workspace; see README "Develop". Before handing over a change: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`, and after query or migration changes `cargo sqlx prepare --workspace -- --all-targets`.
-- **Database changes:** add a new migration file; never edit one that is on `main`. Take the next number after the highest on `main` **and** in open PRs. On 2026-10-21, `main` ends at `0010`. Plans P3 and P4 expect `0011` and `0012`, and renumber at their own pre-flight if other work takes those numbers first.
-- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md`. Take the next number after the highest on `main` and in open PRs. On 2026-10-21, `main` ends at D-096. Plan P4 expects D-097 onward and renumbers the same way.
+- **Database changes:** add a new migration file; never edit one that has been pushed to `main`. Pull first, then take the next number after the highest in `migrations/`. On 2026-10-23, `main` ends at `0013`, so the next is `0014` (plan P4 says `0011` and renumbers at its pre-flight).
+- **Decisions:** record anything a future maintainer would ask "why?" about in `docs/DECISIONS.md`. Pull first, then take the next number after the highest there. On 2026-10-23, `main` ends at D-103, so the next is D-104 (plan P4 says D-091 onward and renumbers the same way).
 - **Working with Claude:** [`CLAUDE.md`](../CLAUDE.md) at the repository root has these rules and the commands in one place.
 - **Versions:** tag releases (`v1.0.0` for go-live), keep a `CHANGELOG.md`, and upgrade servers with `git pull && ./install.sh` after a backup.

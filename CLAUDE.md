@@ -44,69 +44,58 @@ Two people work on PADM, often one after the other, each with their own
 Claude session. These rules keep either one from overwriting or breaking the
 other's work. The owner (GitHub `@wc-sstevens`) follows them too.
 
+**Everyone works directly on `main`** (the owner's decision, 2026-10-23).
+PADM is not in production yet, so there are no feature branches or pull
+requests: you commit to `main` and push. CI runs on every push to `main`.
+Taking turns, claiming work, and pushing often are what keep the two of you
+from colliding.
+
 - **Before your first session:** you need Write access to `wacountyit/pdms`
   (ask the owner), and `gh auth login`. Commit under your own git identity;
   never copy one from an earlier plan.
 - **At the start of every session:**
   1. `git checkout main && git pull`.
-  2. Read ROADMAP §0.1a (who has what), §0.5 (what can start next) and §0.7
-     (questions waiting for the owner).
-  3. Run `gh pr list`. Draft PRs are work in flight.
-  4. If you are resuming your own branch, read the "Where I stopped" note in
-     its PR, rebase the branch on `main`, and push it with
-     `git push --force-with-lease`.
+  2. Read ROADMAP §0.1a (who has what, and where they stopped), §0.5 (what
+     can start next) and §0.7 (questions waiting for the owner).
 - **Claim work before you start it:**
   1. Take the first unclaimed item in ROADMAP §0.5 whose prerequisites are
      met, or the one the owner gives you.
-  2. Add your row to §0.1a and push that one change straight to `main`
-     (`docs: claim <item>`). If the push is rejected because `main` has
-     moved, pull, read §0.1a again, and choose again if someone else took
-     your item. Status changes (claims and states in §0.1a, and moving a
-     finished item to §0.1) and questions added to §0.7 are the only
-     changes pushed to `main` without a PR, and a PR never edits §0.1a.
-  3. Create your branch and open a **draft** PR straight away. Name the
-     branch after the item (`r2-admin-pages`, `p3-sharepoint-storage`), and
-     start the PR title with it (`R2:`, `P3:`, `SP3:`).
+  2. Add your row to §0.1a, commit it on its own (`docs: claim <item>`)
+     and push it straight away, so the other person sees it. If the push is
+     rejected because `main` has moved, pull, read §0.1a again, and choose
+     again if someone else took your item.
 
   Before starting work that shares a row in §0.6 with claimed work, agree
   the order with the owner.
-
-  **Work you did before claiming it**, or that is still only on your
-  machine: claim it now with its real state, move it onto a branch rebased
-  on `main`, push it, and open the draft PR.
-- **Never leave work only on your machine.** Push your branch at the end of
-  every session, even when the work is unfinished or failing.
+- **Commit and push in small steps.** Each commit should leave `main`
+  building and its tests passing: run the checks under "Commands" before you
+  push. Start commit messages with the item (`P4:`, `R3:`). Pull before you
+  push; if someone else pushed in between, `git pull --rebase`, run the
+  checks again, then push. Never force-push `main`.
+- **Never leave work only on your machine.** Push at the end of every
+  session. If something is unfinished, push it in a state that builds and
+  passes, for example with the new part not yet switched on, and say so in
+  §0.1a.
 - **Keep your status current.** Whenever a part of your work changes state,
-  and at the end of every session, update your row in ROADMAP §0.1a and
-  push it straight to `main` (`docs: status <item>`). Mark each part
-  **Not started**, **In progress**, **In review** or **Done**, with its PR
-  number and the date. This is how the other person sees what is being
-  done. If the push is rejected, pull and push again.
-- **When you stop partway,** fill in "Where I stopped" in the PR description
-  (the PR template has the heading). Say what is done, what the next step
-  is, the open questions, and anything half-done or failing. Update your
-  §0.1a row too.
-- **Taking over paused work:** agree it with the owner first. Then work on
-  the same branch, change "Who" in §0.1a, and add a line under "Where I
-  stopped". Only one person works on a branch at a time.
+  and at the end of every session, update your row in ROADMAP §0.1a, in the
+  same commit as the work or on its own (`docs: status <item>`). Mark each
+  part **Not started**, **In progress** or **Done**, with the date.
+- **When you stop partway,** put a short "Where I stopped" note in your
+  §0.1a row: what is done, the next step, the open questions, and anything
+  half-done.
+- **Taking over paused work:** agree it with the owner first, change "Who"
+  in §0.1a, and carry on from the "Where I stopped" note. Only one person
+  works on an item at a time.
 - **When you finish:**
-  1. Rebase on `main` and push with `git push --force-with-lease`. That is
-     expected on your own PR branch; never force-push `main` or someone
-     else's branch. If `main` has taken a migration or decision number you
-     were using, renumber yours.
-  2. Run the checks under "Commands".
-  3. Update the docs in the same PR: the status in ROADMAP §0.3, §0.5 and
-     §0.6 if they changed, and the other docs listed under "Good to know".
-  4. Mark the PR ready for review, and mark that part **In review** in
-     §0.1a. The owner merges it.
-  5. After the merge, delete the branch on GitHub and locally, so only
-     `main` and work in progress remain. Mark the part **Done** in §0.1a.
-     When the whole item is done, add it to ROADMAP §0.1 and remove its
-     row from §0.1a.
+  1. Run the checks under "Commands".
+  2. Update the docs in the same commit or push: the status in ROADMAP §0.3,
+     §0.5 and §0.6 if they changed, and the other docs listed under "Good to
+     know".
+  3. Mark the part **Done** in §0.1a. When the whole item is done, add it
+     to ROADMAP §0.1 and remove its row from §0.1a.
 - **Questions for the owner:**
   - If a question blocks you, ask the owner straight away: through the
-    person you work for, or in a comment on your PR that mentions
-    `@wc-sstevens` (`gh pr comment`).
+    person you work for, or in a GitHub issue that mentions `@wc-sstevens`.
   - If it can wait, add it to ROADMAP §0.7.
   - Don't guess at a product decision. Once you have the answer, record it
     where it belongs and remove the question from §0.7.
@@ -119,16 +108,16 @@ other's work. The owner (GitHub `@wc-sstevens`) follows them too.
   - Never commit secrets, internal hostnames or IP addresses, a real county
     seal, or real people's data.
   - A private security review exists. **Never write vulnerability details
-    into code comments, commit messages, PRs or issues.** The project owner
+    into code comments, commit messages or issues.** The project owner
     holds the findings; ask them.
   - Keep commit messages neutral and product-focused.
 - **Design before build.** Anything beyond a small fix gets a spec in
   `docs/superpowers/specs/`, approved by the project owner, then a plan, then
-  a build on a branch with a PR to `main` (ROADMAP §0.4). The owner merges.
-- **Numbers are shared across branches.** Migrations (`migrations/NNNN_*.sql`)
-  and decisions (`D-NNN`) take the next number after the highest one on
-  `main` **and** in open PRs. Never edit a migration once it is on `main`.
-  Migrations have no license header (D-080).
+  the build, committed to `main` in small steps (ROADMAP §0.4).
+- **Numbers.** Migrations (`migrations/NNNN_*.sql`) and decisions (`D-NNN`)
+  take the next number after the highest one on `main`; pull first. Never
+  edit a migration once it has been pushed. Migrations have no license
+  header (D-080).
 - **License headers.** Every other new source file starts with
   `SPDX-License-Identifier: AGPL-3.0-or-later` and
   `Copyright (C) 2026 PDMS contributors`, as comments in the file's syntax.
@@ -185,14 +174,13 @@ other's work. The owner (GitHub `@wc-sstevens`) follows them too.
 
 - **The app checks migrations at startup.** It refuses to start if the binary
   has migrations the database lacks; run `pdms migrate`. A database that is
-  *ahead* still serves. But `pdms migrate` from an older branch then fails,
-  because the database knows a migration that branch doesn't. Use your own dev
-  database, or recreate it when you switch between branches with different
-  migrations.
+  *ahead* still serves. But `pdms migrate` from an older checkout then
+  fails, because the database knows a migration that checkout doesn't. Pull
+  before you migrate, and use your own dev database.
 - **The test server** is upgraded by the project owner: back up first
   (`deploy/backup/pdms-backup.sh`), then `git pull && ./install.sh`. See
   ADMIN_GUIDE "Operations".
-- **Keep the docs in step with the code**, in the same branch:
+- **Keep the docs in step with the code**, in the same commit or push:
   - ROADMAP §0.3 status;
   - DECISIONS;
   - ADMIN_GUIDE, whenever an admin would do something differently;
