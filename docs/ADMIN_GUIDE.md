@@ -62,7 +62,11 @@ the installer adds your proxy's IP, `127.0.0.1`, and the Docker range
 
 1. In the Entra admin center, go to **App registrations → New registration**.
    - Name: your system name. Supported account types: this organization only.
-   - Redirect URI (Web): `https://<your-public-url>/auth/oidc/callback`
+   - Redirect URI (Web): `https://<your-public-url>/auth/oidc/callback`.
+     It must match PADM's address exactly, including any port: with Caddy
+     on port 444, for example, it is
+     `https://10.0.0.5:444/auth/oidc/callback`. The installer prints the exact
+     value, during the sign-in questions and again at the end.
 2. **Certificates & secrets → New client secret.** Copy the value into
    `secrets/oidc_client_secret` (no trailing newline needed).
 3. **Token configuration → Add groups claim → Security groups**, emitted as
@@ -100,6 +104,13 @@ With single sign-on on, `auto_provision = false`, and the sync off, only people
 who are already linked to their Entra account can sign in. PADM logs a warning
 at startup in that setup. Turn on the sync, or allow auto-provisioning, so new
 people can sign in.
+
+**"AADSTS50011: The redirect URI … does not match"** means the app
+registration does not list the address PADM sent. Copy the URI from the
+error message (or from the installer's summary) into **App registrations →
+(your app) → Authentication → Web → Redirect URIs**, save, and sign in again.
+It changes whenever PADM's address changes (`./install.sh --configure
+network`), for example when Caddy moves to another port.
 
 If Entra is unreachable when the app starts, single sign-on is disabled until
 the next restart (the log says so) and break-glass sign-in keeps working.
