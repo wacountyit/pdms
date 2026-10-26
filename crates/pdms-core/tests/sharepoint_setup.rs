@@ -157,6 +157,28 @@ async fn storage_set_in_the_configuration_file_cannot_be_switched() {
 }
 
 #[tokio::test]
+async fn a_site_set_in_the_configuration_file_is_used_when_the_form_leaves_it_out() {
+    // The page shows locked fields disabled, and a browser doesn't send a
+    // disabled field: the test and save arrive with them empty.
+    let sp = MockGraph::start().await;
+    let graph = sp.config(certificate());
+    let (core, _db) = core_with(|c| {
+        c.graph = graph;
+        c.sharepoint.site_url = mock_graph::SITE_URL.into();
+        c.locked.insert("sharepoint.site_url".into());
+        c.locked.insert("sharepoint.library".into());
+    })
+    .await;
+    let p = setup::test(&core, &system(), "", "").await.unwrap();
+    assert!(p.ok, "{:?}", p.lines);
+    setup::save_site(&core, &system(), "", "", 30)
+        .await
+        .unwrap();
+    assert_eq!(core.config().sharepoint.site_url, mock_graph::SITE_URL);
+    assert_eq!(core.config().sharepoint.delta_interval_minutes, 30);
+}
+
+#[tokio::test]
 async fn the_site_cannot_move_once_sharepoint_holds_files() {
     let sp = MockGraph::start().await;
     let graph = sp.config(certificate());

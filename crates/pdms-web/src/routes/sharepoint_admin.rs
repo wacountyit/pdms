@@ -119,13 +119,31 @@ async fn render(
                 None,
             ),
         };
+        // A locked field always shows the configuration file's value: the
+        // browser doesn't send a disabled field back with a Test.
+        let site_locked = file.locked.contains("sharepoint.site_url");
+        let library_locked = file.locked.contains("sharepoint.library");
+        let interval_locked = file.locked.contains("sharepoint.delta_interval_minutes");
+        let sp = &config.sharepoint;
         Some(SettingsPanel {
-            site_url: form.site_url,
-            library: form.library,
-            interval: form.interval,
-            site_locked: file.locked.contains("sharepoint.site_url"),
-            library_locked: file.locked.contains("sharepoint.library"),
-            interval_locked: file.locked.contains("sharepoint.delta_interval_minutes"),
+            site_url: if site_locked {
+                sp.site_url.clone()
+            } else {
+                form.site_url
+            },
+            library: if library_locked {
+                sp.library.clone()
+            } else {
+                form.library
+            },
+            interval: if interval_locked {
+                sp.delta_interval_minutes
+            } else {
+                form.interval
+            },
+            site_locked,
+            library_locked,
+            interval_locked,
             backend_locked: file.locked.contains("storage.backend"),
             storage: setup::state(&state.core).await?,
             probe,

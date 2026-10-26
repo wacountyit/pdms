@@ -53,6 +53,27 @@ fn same_site(a: &str, b: &str) -> bool {
         .eq_ignore_ascii_case(b.trim().trim_end_matches('/'))
 }
 
+/// The site address and library `site_url` and `library` would give,
+/// keeping what the configuration file sets: the page shows those fields
+/// disabled, and a browser doesn't send a disabled field.
+pub fn candidate(core: &Core, site_url: &str, library: &str) -> (String, String) {
+    let file = core.file_config();
+    let config = core.config();
+    let pick = |key: &str, typed: &str, current: &str| {
+        if file.locked.contains(key) {
+            current.trim().to_owned()
+        } else {
+            typed.trim().to_owned()
+        }
+    };
+    (
+        pick("sharepoint.site_url", site_url, &config.sharepoint.site_url)
+            .trim_end_matches('/')
+            .to_owned(),
+        pick("sharepoint.library", library, &config.sharepoint.library),
+    )
+}
+
 /// Save the site address, library and check interval (requires
 /// `ManageSettings`). The site and library can't change once SharePoint
 /// holds PDMS files.
@@ -66,8 +87,8 @@ pub async fn save_site(
     ctx.require(Capability::ManageSettings)?;
     let config = core.config();
     let file = core.file_config();
-    let (site_url, library) = (site_url.trim().trim_end_matches('/'), library.trim());
-    let moved = !same_site(site_url, &config.sharepoint.site_url)
+    let (site_url, library) = candidate(core, site_url, library);
+    let moved = !same_site(&site_url, &config.sharepoint.site_url)
         || !library.eq_ignore_ascii_case(&config.sharepoint.library);
     if moved && state(core).await?.sharepoint_files > 0 {
         return Err(CoreError::Conflict(
@@ -84,8 +105,8 @@ pub async fn save_site(
             });
         }
     };
-    put("sharepoint.site_url", Value::String(site_url.to_owned()));
-    put("sharepoint.library", Value::String(library.to_owned()));
+    put("sharepoint.site_url", Value::String(site_url));
+    put("sharepoint.library", Value::String(library));
     put(
         "sharepoint.delta_interval_minutes",
         Value::from(interval_minutes.clamp(1, 1440)),
@@ -93,11 +114,13 @@ pub async fn save_site(
     settings::save(core, ctx, changes).await
 }
 
-/// Check `site_url` and `library` through the Microsoft 365 connection,
-/// changing nothing (requires `ManageSettings`).
+/// Check `site_url` and `library` (or what the configuration file sets)
+/// through the Microsoft 365 connection, changing nothing (requires
+/// `ManageSettings`).
 pub async fn test(core: &Core, ctx: &Ctx, site_url: &str, library: &str) -> CoreResult<Probe> {
     ctx.require(Capability::ManageSettings)?;
-    let probe = probe(core, site_url, library).await;
+    let (site_url, library) = candidate(core, site_url, library);
+    let probe = probe(core, &site_url, &library).await;
     pdms_audit::record(
         &core.db,
         vec![
