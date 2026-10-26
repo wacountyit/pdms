@@ -31,9 +31,11 @@ The README ("Layout") describes each crate.
    Two people work on PDMS in turns, so read "Working in turns" below
    before you start.
    - **SharePoint storage is built** (plans P1 to P4, done 2026-10-23). The
-     live test on a real SharePoint site is the owner's next step
-     ([docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)); ROADMAP §0.5
-     lists what can start next. The
+     live test on a real SharePoint site started 2026-10-26: Test passes and
+     the first upload works. It found four small setup-flow problems, to be
+     fixed next (ROADMAP §0.5 item 1, details in §4 "SharePoint setup");
+     then the live test continues
+     ([docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)). The
      [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md)
      records what each plan produced.
    - **Settings in Administration (S1) is done** (2026-10-23). Sign-in,

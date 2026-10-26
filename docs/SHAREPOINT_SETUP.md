@@ -164,6 +164,25 @@ columns, the three folders, and whether PDMS can read the library's sharing.
 Before B5 it reports that the site wasn't found, because PDMS has no access
 to it yet.
 
+> **Known issues, found in the first live test (2026-10-26)** and listed to
+> be fixed next (ROADMAP §0.5 item 1):
+>
+> - Before B5, Test actually *finds* the site and then reports
+>   **"Libraries found: none"**. That means the site grant is missing.
+> - Test also passes when the grant is only `write`. The first upload then
+>   fails with "File storage (SharePoint) is unavailable", and
+>   `docker compose logs app` shows `accessDenied`. Raise the grant to
+>   `fullcontrol` (the second call in B5).
+> - To check the grant in a browser, use Graph Explorer, signed in as an
+>   administrator: put `GET https://graph.microsoft.com/v1.0/sites/<tenant>.sharepoint.com:/sites/<SiteName>?$select=id`
+>   in the query box first, so the **Modify permissions** tab offers
+>   `Sites.FullControl.All` to consent to; then `GET /sites/{site-id}/permissions`.
+>   For the POST and PATCH in B5, the JSON goes in the **Request body** tab,
+>   and the URL must not end in a space.
+> - Enter the site's root address only. A copied link such as
+>   `…/sites/<SiteName>/Shared Documents/Forms` is refused; in
+>   `config/pdms.toml` it stops PDMS from starting (`docker compose logs migrate`).
+
 ### B5. Give the app full control of this one site
 
 PDMS needs full control so it can create the library columns and folders and
