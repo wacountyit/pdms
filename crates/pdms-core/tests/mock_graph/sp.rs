@@ -19,6 +19,17 @@ pub const SITE: &str = "site-1";
 pub const DRIVE: &str = "drive-1";
 pub const LIST: &str = "list-1";
 
+/// The PDMS Service app's grant on the site (SHAREPOINT_SETUP.md B5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SiteGrant {
+    /// No grant: Microsoft finds the site but lists no libraries.
+    None,
+    /// `write`: files can be read, but not the site's permissions.
+    Write,
+    #[default]
+    FullControl,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SpItem {
     pub id: String,
@@ -61,6 +72,7 @@ pub struct SpState {
     expire_delta: bool,
     /// Every sharing invitation, as "invite <email> requireSignIn=… sendInvitation=… roles=…".
     invites: Vec<String>,
+    grant: SiteGrant,
 }
 
 impl SpState {
@@ -308,6 +320,11 @@ impl MockGraph {
         self.state.lock().unwrap().sp.expire_delta = true;
     }
 
+    /// Set the app's grant on the site (full control unless changed).
+    pub fn site_grant(&self, grant: SiteGrant) {
+        self.state.lock().unwrap().sp.grant = grant;
+    }
+
     /// Refuse PDMS's sign-in (every API call gets HTTP 401) until called with `false`.
     pub fn deny(&self, on: bool) {
         self.state.lock().unwrap().min_token = if on { usize::MAX } else { 0 };
@@ -367,7 +384,22 @@ pub(super) fn route(
             }
         }
         ("GET", ["sites", SITE, "drives"]) => {
-            json_resp(200, json!({"value": [{"id": DRIVE, "name": "Documents"}]}))
+            if sp.grant == SiteGrant::None {
+                json_resp(200, json!({"value": []}))
+            } else {
+                json_resp(200, json!({"value": [{"id": DRIVE, "name": "Documents"}]}))
+            }
+        }
+        ("GET", ["sites", SITE, "permissions"]) => {
+            if sp.grant == SiteGrant::FullControl {
+                json_resp(
+                    200,
+                    json!({"value": [{"id": "perm-app", "roles": ["fullcontrol"],
+                        "grantedToIdentitiesV2": [{"application": {"id": CLIENT}}]}]}),
+                )
+            } else {
+                graph_error(403, "accessDenied")
+            }
         }
         ("GET", ["drives", DRIVE, "list"]) => json_resp(200, json!({"id": LIST})),
         ("GET", ["sites", SITE, "lists", LIST, "columns"]) => {

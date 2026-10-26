@@ -200,6 +200,12 @@ async fn probe(inner: &Inner, out: &mut Vec<(bool, String)>) -> Result<(), Strin
         .get(&format!("/sites/{}/drives?$select=id,name", site.id))
         .await
         .map_err(|e| graph_problem("The site's libraries", &e))?;
+    if drives.value.is_empty() {
+        // Without a site grant, Microsoft finds the site but lists none.
+        return Err(
+            "PDMS sees no libraries on the site: the PDMS Service app has no grant on this site yet. Give it full control of the site (SHAREPOINT_SETUP.md B5).".into(),
+        );
+    }
     let Some(drive) = drives
         .value
         .iter()
@@ -209,14 +215,20 @@ async fn probe(inner: &Inner, out: &mut Vec<(bool, String)>) -> Result<(), Strin
         return Err(format!(
             "The library {:?} isn't on the site. Libraries found: {}.",
             inner.library,
-            if names.is_empty() {
-                "none".to_owned()
-            } else {
-                names.join(", ")
-            }
+            names.join(", ")
         ));
     };
     out.push((true, format!("Found the library {:?}.", drive.name)));
+    // Only full control may list the site's permissions; a `write` grant
+    // passes every read below, then the first upload is refused.
+    let _: serde_json::Value = g
+        .get(&format!("/sites/{}/permissions", site.id))
+        .await
+        .map_err(|e| match e {
+            crate::graph::GraphError::Auth(_) => "The PDMS Service app's grant on the site is below full control (for example `write`). PDMS could read the site but not store files or manage folder access. Raise the grant to `fullcontrol` (SHAREPOINT_SETUP.md B5).".to_owned(),
+            other => graph_problem("The site's permissions", &other),
+        })?;
+    out.push((true, "PDMS has full control of the site.".into()));
     let list: IdOnly = g
         .get(&format!("/drives/{}/list?$select=id", drive.id))
         .await

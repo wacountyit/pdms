@@ -32,9 +32,8 @@ The README ("Layout") describes each crate.
    before you start.
    - **SharePoint storage is built** (plans P1 to P4, done 2026-10-23). The
      live test on a real SharePoint site started 2026-10-26: Test passes and
-     the first upload works. It found four small setup-flow problems, to be
-     fixed next (ROADMAP §0.5 item 1, details in §4 "SharePoint setup");
-     then the live test continues
+     the first upload works. The four small setup-flow problems it found are
+     fixed (ROADMAP §0.1); the live test continues (§0.5 item 1)
      ([docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)). The
      [plan index](docs/superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md)
      records what each plan produced.

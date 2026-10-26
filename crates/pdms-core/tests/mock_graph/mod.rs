@@ -26,7 +26,7 @@ use serde_json::{Value, json};
 
 mod sp;
 #[allow(unused_imports)]
-pub use sp::{DRIVE, LIST, SITE, SITE_URL, SpItem};
+pub use sp::{DRIVE, LIST, SITE, SITE_URL, SiteGrant, SpItem};
 
 pub const TENANT: &str = "tenant-1";
 pub const CLIENT: &str = "client-1";

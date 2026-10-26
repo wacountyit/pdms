@@ -38,7 +38,7 @@
   <ul class="checklist">
     {% for (ok, line) in p.lines %}<li>{% if ok %}<span class="status status-good">OK</span>{% else %}<span class="status status-critical">Problem</span>{% endif %} {{ line }}</li>{% endfor %}
   </ul>
-  {% if p.ok %}<p>The site is ready. Save it, then turn storage on.</p>{% endif %}
+  {% if p.ok %}<p>{{ st.ready_note() }}</p>{% endif %}
   </div>
   {% endif %}
 

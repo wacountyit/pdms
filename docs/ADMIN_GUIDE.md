@@ -627,8 +627,11 @@ stay in `local_path`.
    Connection**), then, on **Administration → SharePoint** under
    **Settings**, enter the site address and library and choose **Save**.
    **Test** checks the site without saving or changing anything: the site,
-   the library, the PDMS columns, the three folders, and whether PDMS can
-   read the library's sharing. It is in the audit log as `settings.tested`.
+   the library, whether PDMS has full control of the site, the PDMS
+   columns, the three folders, and whether PDMS can read the library's
+   sharing. If it says PDMS sees no libraries, the site grant is missing; if
+   it says the grant is below full control, raise it to `fullcontrol`
+   (SharePoint setup guide, B5). It is in the audit log as `settings.tested`.
 4. Choose **Turn SharePoint storage on**. PDMS tests the site again first and
    stays off if the test fails. **Start with an empty system:** it refuses
    while any document file is stored on this server (or in S3), because those

@@ -142,6 +142,15 @@ Last updated 2026-10-26.
   `config/pdms.toml`. The page shows those fields disabled, browsers don't
   send disabled fields, and Test then failed with "enter the site's full
   address". 541 passed, 0 failed, 5 ignored.
+- **SharePoint live-test follow-ups** (2026-10-26, by WACountyIT): the four
+  setup-flow problems the first live test found. **Test** now checks that
+  the PDMS Service app has full control of the site (only full control may
+  list the site's permissions), so a `write` grant fails Test and turning
+  storage on, instead of the first upload. With no grant, Test says the
+  grant is missing instead of "Libraries found: none". After a passing Test
+  the page no longer asks to turn storage on when it is already on.
+  SHAREPOINT_SETUP.md B4b is corrected, B5 has the Graph Explorer steps, and
+  C2 lists the new messages. 544 passed, 0 failed, 5 ignored.
 
   It adds migration `0015` and decisions D-111 to D-116. On `main` on
   2026-10-23 it gives 540 passed, 0 failed, and 5 ignored. The
@@ -217,7 +226,7 @@ taken up.
 |---|---|---|---|---|
 | 1a | **Document visibility** (plan P1) | Department / County-wide / Restricted | **Done** | [P1 plan](superpowers/plans/2026-10-14-p1-document-visibility.md) |
 | 1b | **Visibility follow-ups** | Decided 2026-10-15: calendars show what you can see (D-090); County-wide comments owner/admin only, authors-only deletes (D-091) | **Done** | D-090, D-091 |
-| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PDMS; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Built; live test under way** (P1, P3 and P4 done; P4 finished 2026-10-23: migration `0014`, D-104 to D-110). On 2026-10-26 the test server connected to a real SharePoint test site: **Test** passes and the first document upload landed in SharePoint. Still to do: the follow-ups in §0.5 item 1, then the rest of §1.2 ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test server") | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md) |
+| 1 | **SharePoint document storage** | SharePoint store on P2's Graph client (app-only, `Sites.Selected`); folder layout and metadata columns; downloads streamed through PDMS; County-wide visibility; folder-level access; detecting and resolving changes made directly in SharePoint | **Built; live test under way** (P1, P3 and P4 done; P4 finished 2026-10-23: migration `0014`, D-104 to D-110). On 2026-10-26 the test server connected to a real SharePoint test site: **Test** passes and the first document upload landed in SharePoint. The four setup-flow fixes it found are done (§0.1). Still to do: the rest of §1.2 ([SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md), "Rollout on the test server") | [spec](superpowers/specs/2026-10-14-sharepoint-storage-entra-sync-design.md), [plan index](superpowers/plans/2026-10-14-pdms-sharepoint-entra-index.md) |
 | 2 | **Entra user sync** | Nightly and on-demand `/users/delta` sync; Department-field mapping list; deactivate departed staff; SSO by Entra object ID only; guests excluded; certificate app-only Graph client (D-096) | **Done** (2026-10-21; plan P2, [PR #1](https://github.com/wacountyit/pdms/pull/1)). SharePoint folder access built with P4 (D-104) | [P2 plan](superpowers/plans/2026-10-14-p2-graph-client-entra-sync.md) |
 | 3 | **Small changes** | Rename the ILA type; admin-curated tags (free-form off); remove the Outlook calendar sync (code, config, installer step, docs) | **Done** (2026-10-22, built inside R2, [PR #4](https://github.com/wacountyit/pdms/pull/4); migration `0011`). The OCR status moved to a "Text extraction (OCR)" admin page | D-087, D-088; [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) part 4 |
 | 4 | **Bulk import** | CSV of document details plus a folder of files, with a dry run, into the SharePoint layout (see §5 "Next" item 1) | Not started; needs a spec. Depends on 1 | — |
@@ -265,33 +274,19 @@ In progress → Done.
 Whoever is free takes the first unclaimed item below whose prerequisites are
 met, unless the owner says otherwise. Claim it (§0.1a) before you start.
 
-1. **SharePoint live-test follow-ups (fix next).** The first live test on
-   2026-10-26 found four problems in the setup flow; §4 "SharePoint setup"
-   has the details. Each is a small fix (no spec needed), mostly in
-   `crates/pdms-core/src/sharepoint/mod.rs` (`probe`),
-   `templates/admin/sharepoint.html` and `docs/SHAREPOINT_SETUP.md`:
-   1. **Test passes with only a `write` site grant**, and the first upload
-      then fails with "File storage (SharePoint) is unavailable" (the log
-      shows Graph `accessDenied`). Make Test detect a grant below
-      `fullcontrol` and say so.
-   2. **"Libraries found: none"** doesn't name the cause: it means the B5
-      site grant is missing. Say so in the message.
-   3. **SHAREPOINT_SETUP.md B4b is wrong:** before B5, Test *finds* the site
-      and lists no libraries; it doesn't report "site not found". Correct it,
-      add the two symptoms above to C2, and give the Graph Explorer steps
-      for B5 with their traps (the Modify permissions tab only lists scopes
-      for the query in the box; the PATCH body goes in the Request body tab;
-      a space after the permission ID gives 404).
-   4. **"Save it, then turn storage on"** shows after a passing Test even
-      when storage is already on (for example, set in `config/pdms.toml`).
-      Leave that sentence out then.
-2. **SharePoint live test, continued.** The site, the app and the grant are
-   ready, and the first upload works (§0.3). Work through
-   [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) B6 to B9 and §1.2. Set
+1. **SharePoint live test, continued.** The site, the app and the grant are
+   ready, the first upload works, and the setup-flow fixes it found are in
+   (§0.1). First, after upgrading the test server, choose **Test**: it
+   should say "PDMS has full control of the site". The new check relies on
+   an app with a `fullcontrol` site grant being allowed to list the site's
+   permissions, which only the real tenant can confirm; if Test says the
+   grant is below full control although it is `fullcontrol`, report it.
+   Then work through [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) B6 to B9
+   and §1.2. Set
    sub-projects 1 and 2 to **Done** when they pass.
-3. **Security fixes.** The owner holds the findings and hands them out one
+2. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-4. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
    imports into, is merged.
 
 ### 0.6 Which work touches which files
@@ -484,7 +479,6 @@ Things that work but are limited, or were deliberately left for later:
 | Scaling | Login and API rate limits live in memory per app instance; one app instance is assumed. | Fine for a single organization; matters only for multiple app instances. | M |
 | OCR | English only; date suggestions are keyword-based and miss unusual wording. | Spanish documents, odd contract language. | S–M |
 | Settings | Sign-in, email, Microsoft 365, SharePoint, the Entra sync, OCR and virus scanning are set up in Administration (S1). The time zone, upload size limit, API and rate limits, S3 storage and audit forwarding are still set in `config/pdms.toml`, and the address, ports and database in the installer. | Rarely changed, but they need shell access; the same pattern can bring them to the pages later. | S |
-| SharePoint setup | **Found in the first live test (2026-10-26); fix next, §0.5 item 1.** (1) **Test** passes with only a `write` site grant; the first upload then fails with "unavailable" and the log shows `accessDenied`. (2) "Libraries found: none" doesn't say the B5 grant is missing. (3) SHAREPOINT_SETUP.md says Test reports "site not found" before B5; in fact it finds the site and lists no libraries. (4) "Save it, then turn storage on" shows even when storage is already on. | The admin setting it up can't tell from PDMS what is wrong with the site grant. Workaround: check the grant in Graph Explorer (`GET /sites/{site-id}/permissions`) and raise it to `fullcontrol` (B5). | S |
 | SharePoint setup | **`sharepoint.site_url` in `config/pdms.toml` must be the site's root address** (`https://<tenant>.sharepoint.com/sites/<Name>`). A copied link such as `…/sites/<Name>/Shared Documents/Forms` fails the configuration check, and then every command fails, so `migrate` exits 1 and the app never starts; `docker compose logs migrate` shows the error. The message doesn't show which part of the address is wrong. | Easy to get wrong by pasting a browser link. | S |
 | SharePoint storage | **Orphans are listed, not removed.** If a save fails after its file was uploaded, the file stays in SharePoint; the change check lists it under "Files PDMS does not track" after ten minutes, and an administrator deletes it there (D-102, D-106). A folder moved by a change that then failed is put back by the next mirror run. | An administrator has to clean up the rare failed save by hand. | S |
 | SharePoint storage | **No migration between storage backends.** Turning SharePoint on doesn't move files already stored locally or in S3, and they can't be read afterwards. | Turn it on before real documents are added; the test server is reset when it is switched (D-102). | M |

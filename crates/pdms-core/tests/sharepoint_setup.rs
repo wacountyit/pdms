@@ -14,7 +14,7 @@ mod common;
 mod mock_graph;
 
 use common::*;
-use mock_graph::{MockGraph, certificate};
+use mock_graph::{MockGraph, SiteGrant, certificate};
 use pdms_authz::Visibility;
 use pdms_core::config::StorageBackend;
 use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
@@ -73,6 +73,44 @@ async fn the_test_changes_nothing_in_sharepoint() {
         "{:?}",
         p.lines
     );
+}
+
+#[tokio::test]
+async fn the_test_says_when_the_site_grant_is_missing() {
+    // Without the B5 grant, Microsoft finds the site but lists no libraries.
+    let sp = MockGraph::start().await;
+    sp.site_grant(SiteGrant::None);
+    let (core, _db) = connected(&sp).await;
+    let p = setup::test(&core, &system(), mock_graph::SITE_URL, "Documents")
+        .await
+        .unwrap();
+    assert!(!p.ok);
+    assert!(p.lines[0].0, "the site is found: {:?}", p.lines);
+    let (_, last) = p.lines.last().unwrap();
+    assert!(last.contains("no grant on this site"), "{last}");
+    assert!(last.contains("B5"), "{last}");
+}
+
+#[tokio::test]
+async fn the_test_fails_with_a_grant_below_full_control() {
+    // A `write` grant reads the site and library, but the first upload is
+    // refused: PDMS needs full control.
+    let sp = MockGraph::start().await;
+    sp.site_grant(SiteGrant::Write);
+    let (core, _db) = connected(&sp).await;
+    let p = setup::test(&core, &system(), mock_graph::SITE_URL, "Documents")
+        .await
+        .unwrap();
+    assert!(!p.ok);
+    let (_, last) = p.lines.last().unwrap();
+    assert!(last.contains("fullcontrol"), "{last}");
+
+    setup::save_site(&core, &system(), mock_graph::SITE_URL, "Documents", 15)
+        .await
+        .unwrap();
+    let err = setup::turn_on(&core, &system()).await.unwrap_err();
+    assert!(err.to_string().contains("fullcontrol"), "{err}");
+    assert_eq!(core.config().storage.backend, StorageBackend::Local);
 }
 
 #[tokio::test]

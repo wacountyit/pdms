@@ -159,29 +159,17 @@ choose **Save**. Leave storage off for now: turn it on in B6, after the site
 grant.
 
 **Test** checks what you typed without saving it and without changing
-anything in SharePoint. It lists each step: the site, the library, the PDMS
-columns, the three folders, and whether PDMS can read the library's sharing.
-Before B5 it reports that the site wasn't found, because PDMS has no access
-to it yet.
+anything in SharePoint. It lists each step: the site, the library, whether
+PDMS has full control of the site, the PDMS columns, the three folders, and
+whether PDMS can read the library's sharing. Before B5 it finds the site but
+stops at the library, saying that PDMS sees no libraries and the app has no
+grant on this site yet: until the grant is given, Microsoft lets PDMS see
+the site but nothing in it.
 
-> **Known issues, found in the first live test (2026-10-26)** and listed to
-> be fixed next (ROADMAP §0.5 item 1):
->
-> - Before B5, Test actually *finds* the site and then reports
->   **"Libraries found: none"**. That means the site grant is missing.
-> - Test also passes when the grant is only `write`. The first upload then
->   fails with "File storage (SharePoint) is unavailable", and
->   `docker compose logs app` shows `accessDenied`. Raise the grant to
->   `fullcontrol` (the second call in B5).
-> - To check the grant in a browser, use Graph Explorer, signed in as an
->   administrator: put `GET https://graph.microsoft.com/v1.0/sites/<tenant>.sharepoint.com:/sites/<SiteName>?$select=id`
->   in the query box first, so the **Modify permissions** tab offers
->   `Sites.FullControl.All` to consent to; then `GET /sites/{site-id}/permissions`.
->   For the POST and PATCH in B5, the JSON goes in the **Request body** tab,
->   and the URL must not end in a space.
-> - Enter the site's root address only. A copied link such as
->   `…/sites/<SiteName>/Shared Documents/Forms` is refused; in
->   `config/pdms.toml` it stops PDMS from starting (`docker compose logs migrate`).
+Enter the site's root address only (`https://<tenant>.sharepoint.com/sites/<SiteName>`).
+A link copied from the browser, such as
+`…/sites/<SiteName>/Shared Documents/Forms`, is refused; in `config/pdms.toml`
+it stops PDMS from starting (`docker compose logs migrate` shows why).
 
 ### B5. Give the app full control of this one site
 
@@ -204,8 +192,7 @@ Update-MgSitePermission -SiteId $site.Id -PermissionId $perm.Id -BodyParameter @
 Get-MgSitePermission -SiteId $site.Id | Format-List Id, Roles, GrantedToIdentitiesV2
 ```
 
-The same calls in raw Microsoft Graph (Graph Explorer, signed in with
-`Sites.FullControl.All`):
+The same calls in raw Microsoft Graph:
 
 ```http
 GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/PDMSRecordsTest?$select=id
@@ -216,6 +203,26 @@ POST https://graph.microsoft.com/v1.0/sites/{site-id}/permissions
 PATCH https://graph.microsoft.com/v1.0/sites/{site-id}/permissions/{permission-id}
 {"roles":["fullcontrol"]}
 ```
+
+**Graph Explorer** (in a browser, at `https://developer.microsoft.com/graph/graph-explorer`)
+makes the same calls without installing anything:
+
+1. Sign in as a Global Administrator or SharePoint Administrator.
+2. Put the first `GET` above in the query box, with your site's address,
+   and only then open the **Modify permissions** tab. That tab lists only
+   the permissions the query in the box needs, so with any other query it
+   doesn't offer `Sites.FullControl.All`. Consent to `Sites.FullControl.All`
+   there, then run the query and copy the site's `id` from the response.
+3. Choose **POST**, enter the permissions URL with that site ID, and paste
+   the JSON into the **Request body** tab below the query box (not into the
+   query box). Run it and copy the `id` from the response: that is the
+   permission ID.
+4. Choose **PATCH**, enter the URL with the permission ID, put
+   `{"roles":["fullcontrol"]}` in the **Request body** tab, and run it. Make
+   sure the URL doesn't end in a space after the permission ID: Graph then
+   answers 404 (not found).
+5. Check the result with `GET https://graph.microsoft.com/v1.0/sites/{site-id}/permissions`:
+   the PDMS Service app should be listed with `"roles": ["fullcontrol"]`.
 
 **PnP PowerShell** (needs its own app registration for sign-in, see the PnP
 documentation):
@@ -322,7 +329,9 @@ after uploading the new public certificate.
 | You see | Likely cause | What to do |
 |---|---|---|
 | "PDMS cannot sign in to Microsoft Graph" (at most hourly) | certificate expired or not uploaded, consent or site grant removed | B4, B2, B5; then **Check for changes now** |
-| "File storage (SharePoint) is unavailable right now" for users | Microsoft 365 outage or throttling | wait; nothing was saved or changed |
+| "File storage (SharePoint) is unavailable right now" for users | Microsoft 365 outage or throttling; or, if `docker compose logs app` shows `accessDenied`, a site grant below `fullcontrol` | wait; nothing was saved or changed. For `accessDenied`, raise the grant to `fullcontrol` (B5) |
+| **Test** says PDMS sees no libraries on the site | the site grant is missing: without it Microsoft lets PDMS find the site but nothing in it | B5 |
+| **Test** says the grant on the site is below full control | the grant was made as `write` (the first step of B5) but not raised | the `PATCH` (or `Update-MgSitePermission`) in B5; check with `GET /sites/{site-id}/permissions` |
 | Someone cannot open their department folder in SharePoint | blank or unmapped Department, a local (non-Entra) account, or no mailbox | A7, B8; the error list on **Administration → SharePoint** |
 | "Other access on department folders" | someone shared a folder directly in SharePoint | remove it in SharePoint if it was not intended; PDMS never removes it |
 | "Files PDMS does not track" | someone added a file in SharePoint, or an upload failed half-way ("PDMS (a save that did not finish)") | delete it in SharePoint if it does not belong, then **Dismiss** |

@@ -78,6 +78,19 @@ pub struct SettingsPanel {
     pub probe: Option<Probe>,
 }
 
+impl SettingsPanel {
+    /// What to say under a passing **Test**: the next step, if any.
+    pub fn ready_note(&self) -> &'static str {
+        if self.storage.on {
+            "The site is ready."
+        } else if self.backend_locked {
+            "The site is ready. Save it."
+        } else {
+            "The site is ready. Save it, then turn storage on."
+        }
+    }
+}
+
 fn run_label(name: &str) -> &'static str {
     match name {
         status::DELTA_CURSOR => "Change check",
@@ -360,4 +373,35 @@ pub async fn dismiss(
         .await?;
     let r = resolve::dismiss_unexpected(&state.core, &user.ctx, &item_id).await;
     done(&state, BACK, r, "Dismissed.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn panel(on: bool, backend_locked: bool) -> SettingsPanel {
+        SettingsPanel {
+            site_url: String::new(),
+            library: String::new(),
+            interval: 15,
+            site_locked: false,
+            library_locked: false,
+            interval_locked: false,
+            backend_locked,
+            storage: setup::StorageState {
+                on,
+                local_files: 0,
+                sharepoint_files: 0,
+            },
+            probe: None,
+        }
+    }
+
+    #[test]
+    fn a_passing_test_asks_to_turn_storage_on_only_while_it_is_off() {
+        assert!(panel(false, false).ready_note().contains("turn storage on"));
+        assert!(!panel(true, false).ready_note().contains("turn storage on"));
+        assert!(!panel(true, true).ready_note().contains("turn storage on"));
+        assert!(!panel(false, true).ready_note().contains("turn storage on"));
+    }
 }
