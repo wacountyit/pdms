@@ -817,6 +817,16 @@ never touched. While it is on, group mappings from the identity provider are
 not applied and the token never sets names or groups; configuration requires
 `auth.oidc.subject_claim = "oid"`, and runs are refused while it is off.
 
+**Confirmed by the owner (2026-10-28):** a linked account that also has a
+local password is departed like any other, and group mappings from the
+identity provider are not applied while the sync is on. The P2 build left
+two timing cases open. The case where a Department mapping change races a
+run applying the same person is fixed with the group-scoped sync (GS; its
+[spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) §3).
+The case of a mapping edit made while the sync is off stays as it is. GS
+also amends "never reactivates": people the sync departed for leaving the
+PDMS group are reactivated once they are back in it.
+
 ### D-097 R2 scope, order and admin navigation — Accepted (2026-10-22)
 The owner's answers to the R2 brief's questions, recorded in the
 [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md) §2:

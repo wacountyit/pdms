@@ -14,7 +14,7 @@ record**. Read it first if you are picking up the work.
 
 ## 0. Where things stand
 
-Last updated 2026-10-26.
+Last updated 2026-10-28.
 
 ### 0.1 Done
 
@@ -233,10 +233,10 @@ taken up.
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
 | S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Done** (2026-10-23; migration `0015`, D-111 to D-116) | [spec](superpowers/specs/2026-10-23-admin-settings-design.md), [plan](superpowers/plans/2026-10-23-admin-settings.md) |
-| GS | **Entra sync limited to one group** | When a group is set, only its members (nested groups count) get PDMS accounts; people removed from it are departed; sign-in refused for non-members. Lets IT control who uses PDMS with one Entra group (cloud, or an AD group synced to Entra). Amends D-086 | **Designing:** spec drafted 2026-10-27, waiting for the owner (§0.7) | [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) |
+| GS | **Entra sync limited to one group** | When a group is set, only its members (nested groups count) get PDMS accounts; people removed from it are departed; sign-in refused for non-members. Lets IT control who uses PDMS with one Entra group (cloud, or an AD group synced to Entra). Amends D-086 and D-096 | **Designed:** spec approved 2026-10-28. The owner's answers are in its §9: people back in the group are reactivated automatically; a refused sign-in says why; the P2 mapping race is fixed here. Next: the plan (§0.5) | [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
-| later | **First administrator account** | Change how the installer creates the first administrator | Idea: the owner will describe what they want | — |
+| — | **First administrator account** | Change how the installer creates the first administrator | Decided 2026-10-28: email becomes optional for the break-glass administrator the installer creates. Not started; needs a short spec, because every account needs an email today (`users.email` is required and unique) | — |
 
 **Waiting on the county** (needed before sub-projects 1–2 can be tested live;
 the steps are in [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md)):
@@ -289,6 +289,15 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
    area at a time. High and Medium items must be fixed before go-live (§3).
 3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
    imports into, is merged.
+4. **GS, Entra sync limited to one group.** The
+   [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md)
+   was approved on 2026-10-28; write the plan, then build. It changes the
+   Entra sync (`directory/entra_sync.rs`, `entra_values.rs`),
+   `auth/oidc.rs`, `settings.rs`, and the Entra ID sync admin page. If the
+   live test (item 1) needs fixes in the same code, agree the order with the
+   owner.
+5. **First administrator account.** Email becomes optional for the
+   break-glass administrator (§0.3). It needs a short spec first.
 
 ### 0.6 Which work touches which files
 
@@ -328,11 +337,7 @@ turns" in `CLAUDE.md`); this table is for the ones that can wait.
 
 | Question | Raised by | What it holds up |
 |---|---|---|
-| Confirm: an Entra-linked account that also has a local password is departed like any other when Entra disables it (D-096) | The P2 build | Nothing; it is built that way |
-| Confirm: identity provider group mappings are not applied while the Entra sync is on (D-096) | The P2 build | Nothing; it is built that way |
-| Two timing cases in how Department mapping changes and the sync interact were left as they are in the P2 build; the owner has the details. Fix them now, or keep the admin guide's advice (press **Full resync** after changing mappings during a sync)? | The P2 build | Nothing |
-| How should the installer create the first administrator account? | The owner (2026-10-15) | That change |
-| Approve the [group-scoped Entra sync spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) (amends D-086)? It has five questions in §9: the D-086 change; reactivating someone re-added to the group (spec keeps D-096: by hand); a **Depart these N people** button to confirm a large first narrowing; nested groups count; the generic page for a refused sign-in | WACountyIT (2026-10-27) | Sub-project GS |
+| (none: the owner answered every waiting question on 2026-10-28) | | |
 
 ---
 

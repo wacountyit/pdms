@@ -1,7 +1,8 @@
 # Entra ID sync limited to one group: design
 
 - **Date:** 2026-10-27
-- **Status:** draft, waiting for the owner's approval (ROADMAP §0.7).
+- **Status:** approved by the owner on 2026-10-28, with the answers in §9.
+  Next: the implementation plan.
 - **Item:** "Group-scoped sync" in ROADMAP §0.3. Commit messages start with
   `GS:`.
 - **Why:** today the Entra ID user sync (D-086, D-096) creates a PDMS account
@@ -25,9 +26,12 @@
    accounts only for the group's members, and departs (D-096) the people it
    had synced who are no longer in it.
 4. Someone outside the group who signs in with Microsoft is refused, and no
-   account is created. They see the same page as any other refused sign-in.
-   The audit log records the attempt with the reason `not_in_group`, so IT
-   can tell this case from the others.
+   account is created. The page tells them they aren't in the PDMS group and
+   to ask IT for access; every other refused sign-in still shows the generic
+   page. The audit log records the attempt with the reason `not_in_group`,
+   so IT can tell this case from the others.
+5. Someone the sync departed because they left the group is reactivated at
+   the next run after they are back in it (§3).
 
 The group can be:
 
@@ -94,9 +98,35 @@ these N people**:
 
 This replaces departing them one by one on their pages.
 
-**Re-added to the group.** Following D-096, the sync never reactivates
-anyone. Someone removed from the group and later added back stays departed
-until an administrator reactivates them. (Open question 2.)
+**Re-added to the group.** The sync reactivates them automatically (the
+owner's answer, §9). This amends D-096, under which the sync never
+reactivates anyone. The rule is narrow:
+
+- It applies only to accounts **the sync departed because they left the
+  group**. The group rule never undoes a departure an administrator made by
+  hand, or one made because Entra disabled or removed the account.
+- The person must be back in the group, with an enabled member account in
+  Entra.
+- Their roles, access grants and memberships come back as they were,
+  because a departure leaves them on the account. Their department is
+  refreshed from Entra as usual.
+- Each run's report lists the people it reactivated and marks those who
+  hold roles, so an administrator can review them. Each reactivation is
+  audited `user.status_changed` with the reason "is back in the PDMS group".
+
+The sync has to know why it departed someone. The plan settles how it
+records that, for example in a column on `users` (§4).
+
+**A Department mapping change racing the sync.** This was left open in the
+P2 build (D-096). If an administrator changes a mapping while a run is
+applying the same person, that person can stay on the old mapping until Entra
+changes them or a **Full resync** runs. GS closes the gap, because it changes
+the same code: applying a person and changing a mapping
+(`directory/entra_values.rs`, `upsert` and `remove`) take one advisory lock,
+shared and exclusive respectively, and the mapping is looked up inside the
+apply transaction. The admin guide's advice to press **Full resync** after
+mapping values during a sync then goes. A mapping edit made while the sync is
+off stays as it is (the owner's answer, §9).
 
 ## 4. Data and settings
 
@@ -106,10 +136,12 @@ until an administrator reactivates them. (Open question 2.)
   read-only (D-111). The value is checked as a GUID.
 - **Changing the group** changes the cursor key (the same mechanism as
   `include_guests`), so the next round reads every account again.
-- **`SyncReport` gets `held_back: Vec<Uuid>`**, with a serde default so
-  older summaries still read. The button uses it.
-- **No migration:** the report is stored in `sync_cursors.last_summary`
-  (JSON) as today.
+- **`SyncReport` gets `held_back: Vec<Uuid>`** (the button uses it) and
+  **`reactivated: Vec<Uuid>`** (the report lists them), each with a serde
+  default so older summaries still read.
+- **Migrations:** the report is stored in `sync_cursors.last_summary`
+  (JSON) as today. Recording why the sync departed someone (§3) probably
+  needs one migration, which takes the next free number.
 
 ## 5. Permissions and audit
 
@@ -119,7 +151,10 @@ until an administrator reactivates them. (Open question 2.)
 - Departures are audited as today (`user.status_changed`), with the new
   reason.
 - **Depart these N people** writes one audit event per person, in the same
-  transaction as that person's change. Nothing widens access.
+  transaction as that person's change.
+- **Automatic reactivation** gives back exactly the access the person had
+  before they left the group, and nothing more. It is audited like a
+  departure, and the run report lists it (§3). Nothing else widens access.
 
 ## 6. Tests
 
@@ -142,12 +177,18 @@ Cases:
 5. Narrowing the group holds back the mass departure. **Depart these N
    people** departs exactly the listed people still outside the group, and
    refuses for others.
-6. First sign-in: a member gets an account; a non-member is refused, the
-   audit reason is `not_in_group`, and no account is created.
+6. First sign-in: a member gets an account; a non-member is refused with
+   the "not in the PDMS group" page, the audit reason is `not_in_group`, and
+   no account is created. Other refusals still show the generic page.
 7. A missing `GroupMember.Read.All` gives the plain message, and nothing is
    departed.
 8. The last administrator and the break-glass account are kept.
 9. A group set in the configuration file shows read-only.
+10. Someone the sync departed for leaving the group is reactivated once back
+    in it, with their roles and grants, and listed in the report. Someone
+    departed by hand, or because Entra disabled them, is not reactivated.
+11. A mapping change made while a run is applying the same person is not
+    lost.
 
 ## 7. Documentation
 
@@ -155,38 +196,45 @@ Cases:
   - the group field and the new permission;
   - how to sync an on-premises AD group to Entra, or make the group in
     Entra;
-  - what happens on the first run and after removing someone;
+  - what happens on the first run, after removing someone, and after adding
+    them back;
+  - the **Full resync** advice for mapping changes during a sync is removed
+    (§3);
   - why **Assignment required** is still worth turning on: it blocks
     sign-in at Microsoft at once, before the next sync.
 - **SHAREPOINT_SETUP.md B2:** `GroupMember.Read.All` is added only when a
   group is used.
-- **DECISIONS:** a new decision amending D-086. Membership of one group,
-  when set, decides who has a PDMS account.
+- **DECISIONS:** a new decision amending D-086 and D-096. Membership of one
+  group, when set, decides who has a PDMS account. The sync reactivates the
+  people it departed for leaving the group once they are back, and the
+  mapping race is closed.
 - **ROADMAP:** §0.3 and §0.1.
 
 ## 8. Phases (the plan will detail them)
 
 1. The setting, **Test group**, and the mock Graph group endpoints.
 2. The sync with a group set: member list, non-member departures, newly
-   added members, and the sign-in check.
+   added members, reactivation of people back in the group, the sign-in
+   check and its page, and the lock between mapping changes and the sync.
 3. **Depart these N people**, the docs, and the decision.
 
-Size: small to medium. It touches `crates/pdms-core/src/directory/entra_sync.rs`,
-`auth/oidc.rs` (the refusal reason), `settings.rs`, and the Entra ID sync
-admin page and its handler in `routes/admin.rs`.
+Size: small to medium. It touches `crates/pdms-core/src/directory/entra_sync.rs`
+and `entra_values.rs`, `auth/oidc.rs` (the refusal reason and its page),
+`settings.rs`, and the Entra ID sync admin page and its handler in
+`routes/admin.rs`.
 
-## 9. Open questions for the owner
+## 9. The owner's answers (2026-10-28)
 
-1. **Approve the change to D-086:** one group, when set, decides who has a
-   PDMS account.
-2. **Re-added to the group:** keep D-096 (an administrator reactivates by
-   hand), or reactivate automatically when someone is back in the group?
-   This spec keeps D-096.
-3. **First narrowing:** is a **Depart these N people** button, after the
-   held-back run, the right way to confirm a large departure? The other
-   choice is a preview with a confirmation when the group is saved.
-4. **Nested groups count** as members. Agreed?
-5. **Refused sign-in:** keep the generic page that every refused sign-in
-   shows today, or tell the person they aren't in the PDMS group and to ask
-   IT? The second is friendlier, but it says why. This spec keeps the
-   generic page.
+1. **The change to D-086:** approved. One group, when set, decides who has
+   a PDMS account.
+2. **Re-added to the group:** reactivate automatically, with roles and
+   grants as they were, listed in the run report. This applies only to
+   accounts the sync departed for leaving the group (§3).
+3. **First narrowing:** yes, a **Depart these N people** button after the
+   held-back run.
+4. **Nested groups count** as members: yes.
+5. **Refused sign-in:** tell the person they aren't in the PDMS group and to
+   ask IT (§1).
+6. **Also decided:** of the two timing cases left from the P2 build, the
+   mapping change racing the sync is fixed in GS; the edit made while the
+   sync is off stays as it is (§3).
