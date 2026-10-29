@@ -2,7 +2,9 @@
 
 - **Date:** 2026-10-27
 - **Status:** approved by the owner on 2026-10-28, with the answers in §9.
-  Next: the implementation plan.
+  Amended by the owner on 2026-10-29: reactivation also happens at sign-in
+  (§3, §9 item 7). Plan:
+  [2026-10-29-entra-sync-group-scope.md](../plans/2026-10-29-entra-sync-group-scope.md).
 - **Item:** "Group-scoped sync" in ROADMAP §0.3. Commit messages start with
   `GS:`.
 - **Why:** today the Entra ID user sync (D-086, D-096) creates a PDMS account
@@ -30,8 +32,9 @@
    to ask IT for access; every other refused sign-in still shows the generic
    page. The audit log records the attempt with the reason `not_in_group`,
    so IT can tell this case from the others.
-5. Someone the sync departed because they left the group is reactivated at
-   the next run after they are back in it (§3).
+5. Someone the sync departed because they left the group is reactivated
+   once they are back in it: at the next run, or when they sign in with
+   Microsoft, whichever comes first (§3).
 
 The group can be:
 
@@ -114,6 +117,14 @@ reactivates anyone. The rule is narrow:
   hold roles, so an administrator can review them. Each reactivation is
   audited `user.status_changed` with the reason "is back in the PDMS group".
 
+**At sign-in** (the owner's answer, 2026-10-29): a departed account marked
+as departed for leaving the group doesn't wait for the next run. When the
+person signs in with Microsoft, PDMS checks the group
+(`checkMemberGroups`). If they are back in it, with an enabled member
+account, they are reactivated as above and signed in. If they are still
+outside it, they see the "not in the PDMS group" page. Any other departed
+account is refused as today, and Graph is not asked.
+
 The sync has to know why it departed someone. The plan settles how it
 records that, for example in a column on `users` (§4).
 
@@ -187,6 +198,7 @@ Cases:
 10. Someone the sync departed for leaving the group is reactivated once back
     in it, with their roles and grants, and listed in the report. Someone
     departed by hand, or because Entra disabled them, is not reactivated.
+    The same holds when they sign in before the next run.
 11. A mapping change made while a run is applying the same person is not
     lost.
 
@@ -238,3 +250,6 @@ and `entra_values.rs`, `auth/oidc.rs` (the refusal reason and its page),
 6. **Also decided:** of the two timing cases left from the P2 build, the
    mapping change racing the sync is fixed in GS; the edit made while the
    sync is off stays as it is (§3).
+7. **Reactivation at sign-in** (2026-10-29): someone back in the group who
+   signs in before the next run is reactivated then, instead of being refused
+   until the run (§3).

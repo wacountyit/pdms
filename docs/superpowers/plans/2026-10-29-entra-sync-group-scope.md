@@ -527,6 +527,20 @@ above runs.
   - `resolve_identity`: `NotInGroup` maps to `Err("not_in_group")`, and
     `NoAccount` follows today's `Ok(None)` path. Graph errors still give
     `Err("directory_unavailable")`.
+  - **Reactivation at sign-in** (the owner's amendment, spec §3 "At
+    sign-in"). `find_identity` may give `Err("inactive")` while the sync is
+    on, Graph is configured and a group is set. If the account's
+    `departed_from_group` is `true`, `resolve_identity` calls `sync_one`:
+    - `Account(_)`: `find_identity` again, which is now active, and sign the
+      person in. The reactivation is audited by `reactivate_back_in_group`
+      (Task 3) under `Ctx::system("entra-sync")`.
+    - `NotInGroup`: `Err("not_in_group")`.
+    - `NoAccount`, or still inactive (for example, disabled in Entra):
+      `Err("inactive")`.
+    - A Graph error: `Err("directory_unavailable")`.
+
+    Any other inactive account gives `Err("inactive")`, without asking
+    Graph.
   - `pub const NOT_IN_GROUP_MESSAGE: &str = "You aren't in the PDMS group in Microsoft Entra ID, so you can't sign in to PDMS. Ask IT to add you.";`
     in `auth::oidc`.
   - `fn refusal(reason: &str) -> CoreError` in `oidc.rs`. `"not_in_group"`
@@ -548,6 +562,15 @@ above runs.
       `requests()` contains `POST /v1.0/users/{N}/checkMemberGroups`;
     - after `forbid_groups(true)`, a new member gets
       `Err("directory_unavailable")`.
+  - Core: `someone_back_in_the_group_is_reactivated_when_they_sign_in`.
+    With a group set:
+    - A was departed with `depart_from_group`, then added back to the group.
+      `resolve_identity` gives `Ok((a, _))`; A is active, and the audit has
+      reason "is back in the PDMS group".
+    - C was departed for leaving the group and is still outside it:
+      `Err("not_in_group")`.
+    - B was departed by hand with `set_user_status` and is in the group:
+      `Err("inactive")`, and `requests()` has no `checkMemberGroups` for B.
   - Core: update `sync_one_reads_a_single_user` to the new return type:
     `SignInLookup::Account(_)` and `SignInLookup::NoAccount` where it had
     `Some` and `None`.

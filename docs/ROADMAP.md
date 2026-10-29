@@ -190,7 +190,7 @@ only place that shows work in flight.
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
 | §0.5 item 1: SharePoint live test, continued | WACountyIT | In progress (2026-10-27): upgrade and Test with the full-control check; then B6 to B9 and §1.2 | | 2026-10-27 |
-| §0.5 item 2: GS, Entra sync limited to one group | wc-sstevens (the owner, with Claude) | Spec: **Done** (approved 2026-10-28). Plan: written 2026-10-29 ([plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md), 7 tasks), waiting for the owner's review. Build: **Not started** | The build starts once the owner has read the plan. Recreate the dev database first (the plan, "Before you start") | 2026-10-29 |
+| §0.5 item 2: GS, Entra sync limited to one group | wc-sstevens (the owner, with Claude) | Spec: **Done** (approved 2026-10-28). Plan: **Done** (2026-10-29, [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md), 7 tasks; the owner added reactivation at sign-in). Build: **In progress** (2026-10-29), subagent-driven, task by task | | 2026-10-29 |
 
 §0.5 lists what can start next.
 
