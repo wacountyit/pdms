@@ -40,6 +40,7 @@ use crate::error::{CoreError, CoreResult};
 use crate::graph::{DeltaPage, GraphClient, GraphError};
 use crate::jobs::{self, NewJob};
 use crate::model::{MembershipSource, UserStatus};
+use crate::settings::{self, Check};
 
 pub const SYNC_JOB: &str = "directory.entra_sync";
 /// Runs every 15 minutes; enqueues the daily sync once `run_at` has passed.
@@ -93,14 +94,101 @@ fn select_list(attribute: &str) -> String {
 }
 
 /// What a delta link was started with, kept in `sync_cursors.delta_select`:
-/// the `$select`, followed by `;guests` when guests are included. A link
-/// keeps its original `$select`, and a delta lists only changed accounts, so
-/// guests skipped before would not come back; a different key means a full round.
-fn cursor_key(select: &str, include_guests: bool) -> String {
+/// the `$select`, followed by `;guests` when guests are included, then
+/// `;group=<id>` when the sync is limited to a group. A link keeps its
+/// original `$select`, and a delta lists only changed accounts, so guests
+/// skipped before would not come back; a different key means a full round.
+fn cursor_key(select: &str, include_guests: bool, group: Option<&str>) -> String {
+    let mut key = select.to_owned();
     if include_guests {
-        format!("{select};guests")
-    } else {
-        select.to_owned()
+        key.push_str(";guests");
+    }
+    if let Some(g) = group {
+        key.push_str(";group=");
+        key.push_str(g);
+    }
+    key
+}
+
+/// What an administrator sees when Graph refuses to list a group's members.
+pub const MISSING_PERMISSION: &str = "PDMS can't read the group's members: add the GroupMember.Read.All permission (ADMIN_GUIDE, Entra ID sync)";
+
+/// The user IDs (lowercase) of everyone in the group, including members of
+/// groups inside it.
+pub(crate) async fn group_members(
+    graph: &GraphClient,
+    group: &str,
+) -> CoreResult<BTreeSet<String>> {
+    let rows: Vec<Value> = graph
+        .get_all(&format!(
+            "/groups/{group}/transitiveMembers/microsoft.graph.user?$select=id&$top=999"
+        ))
+        .await
+        .map_err(group_error)?;
+    Ok(rows
+        .iter()
+        .filter_map(|v| v.get("id").and_then(Value::as_str))
+        .map(str::to_lowercase)
+        .collect())
+}
+
+fn group_error(e: GraphError) -> CoreError {
+    match e {
+        GraphError::Auth(_) => CoreError::validation(MISSING_PERMISSION),
+        other => other.into(),
+    }
+}
+
+/// Check a group ID without saving it: it is a GUID, Entra has the group, PDMS
+/// may read its members. Records `settings.tested` (requires `ManageSettings`).
+pub async fn test_group(core: &Core, ctx: &Ctx, group_id: &str) -> CoreResult<Check> {
+    ctx.require(Capability::ManageSettings)?;
+    let check = probe_group(core, group_id).await;
+    settings::record_test(core, ctx, "entra_sync", check.ok).await?;
+    Ok(check)
+}
+
+async fn probe_group(core: &Core, group_id: &str) -> Check {
+    let Ok(id) = Uuid::parse_str(group_id.trim()) else {
+        return Check::failed(
+            vec![],
+            "Enter the group's object ID: Entra admin center → Groups → the group → Object ID.",
+        );
+    };
+    let id = id.hyphenated().to_string();
+    let Some(graph) = core.graph() else {
+        return Check::failed(vec![], "Set up the Microsoft 365 connection first.");
+    };
+    let group: Value = match graph
+        .get(&format!("/groups/{id}?$select=id,displayName"))
+        .await
+    {
+        Ok(v) => v,
+        Err(GraphError::NotFound) => {
+            return Check::failed(
+                vec![],
+                format!("Entra has no group with the object ID {id}."),
+            );
+        }
+        Err(e) => return Check::failed(vec![], group_error(e).to_string()),
+    };
+    let name = group
+        .get("displayName")
+        .and_then(Value::as_str)
+        .unwrap_or(&id);
+    let found = (true, format!("Group \"{name}\" found."));
+    match group_members(&graph, &id).await {
+        Ok(members) => Check::passed(vec![
+            found,
+            (
+                true,
+                format!(
+                    "It has {} people, counting members of groups inside it.",
+                    members.len()
+                ),
+            ),
+        ]),
+        Err(e) => Check::failed(vec![found], e.to_string()),
     }
 }
 
@@ -286,7 +374,11 @@ async fn sync_all(
     let config = core.config();
     let attribute = config.entra_sync.attribute.as_str();
     let select = select_list(attribute);
-    let key = cursor_key(&select, config.entra_sync.include_guests);
+    let key = cursor_key(
+        &select,
+        config.entra_sync.include_guests,
+        config.entra_sync.group().as_deref(),
+    );
     let initial = format!("/users/delta?$select={select}");
     let saved = if full {
         None
@@ -955,7 +1047,18 @@ mod tests {
 
     #[test]
     fn the_cursor_key_covers_guests() {
-        assert_eq!(cursor_key("id,department", false), "id,department");
-        assert_eq!(cursor_key("id,department", true), "id,department;guests");
+        assert_eq!(cursor_key("id,department", false, None), "id,department");
+        assert_eq!(
+            cursor_key("id,department", true, None),
+            "id,department;guests"
+        );
+        assert_eq!(
+            cursor_key("id,department", false, Some("g")),
+            "id,department;group=g"
+        );
+        assert_eq!(
+            cursor_key("id,department", true, Some("g")),
+            "id,department;guests;group=g"
+        );
     }
 }

@@ -197,3 +197,76 @@ async fn administrators_change_the_sync_settings_on_the_page() {
     .await;
     assert_eq!(app.core.config().entra_sync.run_at, "03:15");
 }
+
+const GROUP: &str = "6f1b2c3d-0000-4000-8000-00000000abcd";
+
+#[tokio::test]
+async fn the_group_field_saves_and_shows_read_only_from_the_configuration_file() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    assert!(page.body.contains(r#"name="group_id""#), "{}", page.body);
+    assert!(page.body.contains("Only members of this group"));
+    let csrf = page.csrf();
+    let form = |group: &'static str| {
+        [
+            ("_csrf", csrf.clone()),
+            ("run_at", "03:15".to_owned()),
+            ("attribute", "department".to_owned()),
+            ("group_id", group.to_owned()),
+        ]
+    };
+    let f = form(GROUP);
+    let pairs: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    b.post("/admin/entra/settings", &pairs).await;
+    let page = b.get("/admin/entra").await;
+    assert!(
+        page.body.contains(&format!(r#"value="{GROUP}""#)),
+        "{}",
+        page.body
+    );
+
+    let f = form("PDMS");
+    let pairs: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    b.post("/admin/entra/settings", &pairs).await;
+    let page = b.get("/admin/entra").await;
+    assert!(page.body.contains("object ID"), "{}", page.body);
+    assert_eq!(app.core.config().entra_sync.group_id, GROUP);
+
+    let mut c = config();
+    c.entra_sync.group_id = GROUP.into();
+    c.locked.insert("entra_sync.group_id".into());
+    let app = app_with(c).await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    let at = page.body.find(r#"name="group_id""#).unwrap();
+    let tag = &page.body[at..page.body[at..].find('>').unwrap() + at];
+    assert!(tag.contains("disabled"), "{tag}");
+}
+
+#[tokio::test]
+async fn test_group_without_the_connection_says_so() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    let r = b
+        .post(
+            "/admin/entra/test-group",
+            &[("_csrf", &page.csrf()), ("group_id", GROUP)],
+        )
+        .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(
+        r.body
+            .contains("Set up the Microsoft 365 connection first."),
+        "{}",
+        r.body
+    );
+    assert!(r.body.contains("Test result"));
+}

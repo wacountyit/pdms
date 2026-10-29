@@ -658,6 +658,9 @@ pub struct EntraSyncConfig {
     pub attribute: String,
     /// Also sync guest (B2B) accounts. Off: guests cannot sign in.
     pub include_guests: bool,
+    /// An Entra group's object ID. When set, only its members (and members
+    /// of groups inside it) have PDMS accounts. Empty: everyone.
+    pub group_id: String,
 }
 
 impl Default for EntraSyncConfig {
@@ -667,11 +670,24 @@ impl Default for EntraSyncConfig {
             run_at: "02:30".into(),
             attribute: "department".into(),
             include_guests: false,
+            group_id: String::new(),
         }
     }
 }
 
 impl EntraSyncConfig {
+    /// The group's object ID as lowercase hyphenated text; `None` when blank
+    /// (or not a GUID, which `validate` refuses).
+    pub fn group(&self) -> Option<String> {
+        let g = self.group_id.trim();
+        if g.is_empty() {
+            return None;
+        }
+        uuid::Uuid::parse_str(g)
+            .ok()
+            .map(|u| u.hyphenated().to_string())
+    }
+
     pub fn run_at_time(&self) -> Option<chrono::NaiveTime> {
         chrono::NaiveTime::parse_from_str(self.run_at.trim(), "%H:%M").ok()
     }
@@ -906,6 +922,12 @@ impl Config {
                 );
             }
         }
+        if !e.group_id.trim().is_empty() && e.group().is_none() {
+            return bad(format!(
+                "entra_sync.group_id {:?} must be the group's object ID (a GUID)",
+                e.group_id
+            ));
+        }
         if e.run_at_time().is_none() {
             return bad(format!("entra_sync.run_at {:?} must be HH:MM", e.run_at));
         }
@@ -1080,6 +1102,24 @@ mod tests {
         );
         c.entra_sync.attribute = "department,mail".into();
         assert!(c.validate().is_err(), "the attribute goes into $select");
+    }
+
+    #[test]
+    fn entra_sync_group_id_must_be_a_guid() {
+        let mut c = Config::default();
+        assert_eq!(c.entra_sync.group(), None);
+        c.entra_sync.group_id = "  ".into();
+        assert_eq!(c.entra_sync.group(), None);
+        assert!(c.validate().is_ok());
+        c.entra_sync.group_id = "{6F1B2C3D-0000-4000-8000-00000000ABCD}".into();
+        assert_eq!(
+            c.entra_sync.group().as_deref(),
+            Some("6f1b2c3d-0000-4000-8000-00000000abcd")
+        );
+        assert!(c.validate().is_ok());
+        c.entra_sync.group_id = "PDMS".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("must be the group's object ID"), "{err}");
     }
 
     #[test]

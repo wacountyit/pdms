@@ -110,6 +110,7 @@ pub fn router(state: AppState) -> Router {
         .route("/entra/sync", post(admin::entra_sync_now))
         .route("/entra/settings", post(admin::save_entra_settings))
         .route("/entra/preview", get(admin::entra_preview))
+        .route("/entra/test-group", post(admin::entra_test_group))
         .route_layer(from_fn_with_state(state.clone(), require_admin));
 
     let max_body = state.core.config().server.max_body_bytes;

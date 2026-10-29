@@ -39,6 +39,13 @@ async fn synced(m: &MockGraph) -> (Core, pdms_testkit::TestDb) {
     (Core::new(core.db.clone(), cfg).unwrap(), db)
 }
 
+/// The same core with `entra_sync.group_id` set.
+async fn with_group(core: &Core, group: &str) -> Core {
+    let mut cfg = (*core.config()).clone();
+    cfg.entra_sync.group_id = group.into();
+    Core::new(core.db.clone(), cfg).unwrap()
+}
+
 async fn id_of(core: &Core, oid: &str) -> Option<Uuid> {
     sqlx::query_scalar("SELECT id FROM users WHERE oidc_subject = $1")
         .bind(oid)
@@ -1484,4 +1491,100 @@ async fn the_preview_shows_what_the_sync_would_do_and_changes_nothing() {
     let ctx = as_user(&core, clerk).await;
     let err = entra_sync::preview(&core, &ctx).await.unwrap_err();
     assert!(matches!(err, CoreError::Forbidden(_)), "{err:?}");
+}
+
+const GROUP_P: &str = "6f1b2c3d-0000-4000-8000-00000000abcd";
+const GROUP_N: &str = "6f1b2c3d-0000-4000-8000-00000000abce";
+
+#[tokio::test]
+async fn test_group_names_the_group_and_counts_nested_members() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_group(GROUP_N, "Nested");
+    m.add_to_group(GROUP_P, OID_A);
+    m.nest_group(GROUP_P, GROUP_N);
+    m.add_to_group(GROUP_N, OID_A);
+    m.add_to_group(GROUP_N, OID_B);
+    let check = entra_sync::test_group(&core, &system(), GROUP_P)
+        .await
+        .unwrap();
+    assert!(check.ok, "{check:?}");
+    let text: Vec<&str> = check.lines.iter().map(|(_, l)| l.as_str()).collect();
+    assert!(text.contains(&"Group \"PDMS\" found."), "{text:?}");
+    assert!(
+        text.iter().any(|l| l.contains("It has 2 people")),
+        "{text:?}"
+    );
+    assert!(
+        audit_actions(&core)
+            .await
+            .contains(&"settings.tested".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn test_group_explains_a_wrong_id_an_unknown_group_and_a_missing_permission() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_group(GROUP_P, "PDMS");
+    let check = entra_sync::test_group(&core, &system(), "not-a-guid")
+        .await
+        .unwrap();
+    assert!(!check.ok);
+    assert!(check.lines.iter().any(|(_, l)| l.contains("Object ID")));
+
+    let unknown = "11111111-0000-4000-8000-000000000001";
+    let check = entra_sync::test_group(&core, &system(), unknown)
+        .await
+        .unwrap();
+    assert!(!check.ok);
+    assert!(
+        check
+            .lines
+            .iter()
+            .any(|(_, l)| l.contains("has no group with the object ID")),
+        "{check:?}"
+    );
+
+    m.forbid_groups(true);
+    let check = entra_sync::test_group(&core, &system(), GROUP_P)
+        .await
+        .unwrap();
+    assert!(!check.ok);
+    assert!(
+        check
+            .lines
+            .iter()
+            .any(|(_, l)| l.contains("GroupMember.Read.All")),
+        "{check:?}"
+    );
+
+    let (clerk, _) = user_in_new_department(&core, "HR", "hr@x.org").await;
+    let err = entra_sync::test_group(&core, &as_user(&core, clerk).await, GROUP_P)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, CoreError::Forbidden(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn changing_the_group_starts_a_full_round() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    entra_sync::run(&core, &system()).await.unwrap();
+    let before = full_rounds(&m);
+
+    m.add_to_group(GROUP_P, OID_A);
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(full_rounds(&m), before + 1);
+
+    // The same ID in capitals and braces is the same setting.
+    let shouted = with_group(&core, &format!("{{{}}}", GROUP_P.to_uppercase())).await;
+    entra_sync::run(&shouted, &system()).await.unwrap();
+    assert_eq!(full_rounds(&m), before + 1, "no new full round");
 }

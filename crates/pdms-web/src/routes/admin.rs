@@ -827,6 +827,8 @@ struct EntraPage {
     settings: Option<EntraSettings>,
     /// The result of **Preview**.
     preview: Option<Vec<entra_sync::PreviewUser>>,
+    /// The result of **Test group**.
+    group_check: Option<settings::Check>,
 }
 
 pub struct EntraSettings {
@@ -836,6 +838,9 @@ pub struct EntraSettings {
     pub run_at_locked: bool,
     pub attribute_locked: bool,
     pub guests_locked: bool,
+    /// The group's object ID as saved (empty: everyone).
+    pub group_id: String,
+    pub group_locked: bool,
 }
 
 pub async fn entra(
@@ -843,7 +848,7 @@ pub async fn entra(
     user: CurrentUser,
     flash: FlashMsg,
 ) -> AppResult<Html<String>> {
-    entra_page(&state, &user, flash, None).await
+    entra_page(&state, &user, flash, None, None).await
 }
 
 /// The first ten Entra accounts and what the sync would do with each,
@@ -853,7 +858,7 @@ pub async fn entra_preview(
     user: CurrentUser,
 ) -> AppResult<Response> {
     match entra_sync::preview(&state.core, &user.ctx).await {
-        Ok(rows) => Ok(entra_page(&state, &user, FlashMsg(None), Some(rows))
+        Ok(rows) => Ok(entra_page(&state, &user, FlashMsg(None), Some(rows), None)
             .await?
             .into_response()),
         Err(e @ CoreError::Forbidden(_)) => Err(e.into()),
@@ -871,6 +876,7 @@ async fn entra_page(
     user: &CurrentUser,
     flash: FlashMsg,
     preview: Option<Vec<entra_sync::PreviewUser>>,
+    group_check: Option<settings::Check>,
 ) -> AppResult<Html<String>> {
     let core = &state.core;
     let settings = user.can(Capability::ManageSettings).then(|| {
@@ -883,6 +889,8 @@ async fn entra_page(
             run_at_locked: file.locked.contains("entra_sync.run_at"),
             attribute_locked: file.locked.contains("entra_sync.attribute"),
             guests_locked: file.locked.contains("entra_sync.include_guests"),
+            group_id: config.entra_sync.group_id.clone(),
+            group_locked: file.locked.contains("entra_sync.group_id"),
         }
     });
     let status = entra_sync::status(&core.db).await?;
@@ -918,6 +926,7 @@ async fn entra_page(
         departments: directory::list_departments(&core.db).await?,
         settings,
         preview,
+        group_check,
     };
     Ok(Html(page.render()?))
 }
@@ -930,6 +939,22 @@ pub struct EntraSettingsForm {
     #[serde(default)]
     attribute: String,
     include_guests: Option<String>,
+    #[serde(default)]
+    group_id: String,
+}
+
+/// Check the group ID in the form, without saving it.
+pub async fn entra_test_group(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Form(f): Form<EntraSettingsForm>,
+) -> AppResult<Response> {
+    user.require(&state, Capability::ManageSettings, "/admin/entra")
+        .await?;
+    let check = entra_sync::test_group(&state.core, &user.ctx, &f.group_id).await?;
+    Ok(entra_page(&state, &user, FlashMsg(None), None, Some(check))
+        .await?
+        .into_response())
 }
 
 pub async fn save_entra_settings(
@@ -956,6 +981,10 @@ pub async fn save_entra_settings(
         (
             "entra_sync.include_guests",
             serde_json::Value::Bool(checkbox(&f.include_guests)),
+        ),
+        (
+            "entra_sync.group_id",
+            serde_json::Value::String(f.group_id.trim().to_owned()),
         ),
     ]
     .into_iter()

@@ -168,3 +168,4 @@ enabled = false
 run_at = "02:30"                # daily, in [org] timezone
 attribute = "department"        # the Entra user property that names the department
 include_guests = false
+group_id = ""                   # an Entra group's object ID: only its members get PDMS accounts (needs GroupMember.Read.All)

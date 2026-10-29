@@ -82,6 +82,7 @@ pub const SETTINGS: &[SettingDef] = &[
     def("entra_sync.run_at", Kind::Text, Area::EntraSync),
     def("entra_sync.attribute", Kind::Text, Area::EntraSync),
     def("entra_sync.include_guests", Kind::Bool, Area::EntraSync),
+    def("entra_sync.group_id", Kind::Text, Area::EntraSync),
     def("auth.oidc.enabled", Kind::Bool, Area::SignIn),
     def("auth.oidc.issuer_url", Kind::Text, Area::SignIn),
     def("auth.oidc.client_id", Kind::Text, Area::SignIn),
