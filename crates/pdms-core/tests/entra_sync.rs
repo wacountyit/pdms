@@ -16,6 +16,7 @@ use std::collections::BTreeSet;
 use common::*;
 use mock_graph::*;
 use pdms_core::directory::{self, entra_sync, entra_values};
+use pdms_core::model::UserStatus;
 use pdms_core::{Core, CoreError};
 use serde_json::json;
 use uuid::Uuid;
@@ -1587,4 +1588,170 @@ async fn changing_the_group_starts_a_full_round() {
     let shouted = with_group(&core, &format!("{{{}}}", GROUP_P.to_uppercase())).await;
     entra_sync::run(&shouted, &system()).await.unwrap();
     assert_eq!(full_rounds(&m), before + 1, "no new full round");
+}
+
+async fn open_session(core: &Core, user: Uuid) {
+    sqlx::query(
+        "INSERT INTO sessions (id, token_hash, user_id, auth_method, expires_at)
+         VALUES ($1, $2, $3, 'oidc', now() + interval '1 hour')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(vec![7u8; 32])
+    .bind(user)
+    .execute(&core.db)
+    .await
+    .unwrap();
+}
+
+async fn live_sessions(core: &Core, user: Uuid) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL")
+        .bind(user)
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+async fn group_mark(core: &Core, user: Uuid) -> bool {
+    sqlx::query_scalar("SELECT departed_from_group FROM users WHERE id = $1")
+        .bind(user)
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+/// The `reason` in the newest `user.status_changed` audit row for the user.
+async fn last_status_reason(core: &Core, user: Uuid) -> Option<String> {
+    sqlx::query_scalar(
+        "SELECT context->>'reason' FROM audit_log
+          WHERE action = 'user.status_changed' AND object_id = $1
+          ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(user.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn departing_for_the_group_is_marked_and_audited() {
+    let (core, _db) = core().await;
+    let u = directory::create_user(&core.db, &system(), "Una", "una@county.example", None)
+        .await
+        .unwrap();
+    open_session(&core, u).await;
+    assert!(
+        directory::depart_from_group(&core.db, &system(), u)
+            .await
+            .unwrap()
+    );
+    assert_eq!(status_of(&core, u).await, "departed");
+    assert!(group_mark(&core, u).await);
+    assert_eq!(live_sessions(&core, u).await, 0);
+    assert_eq!(
+        last_status_reason(&core, u).await.as_deref(),
+        Some("is no longer in the PDMS group")
+    );
+    assert!(
+        !directory::depart_from_group(&core.db, &system(), u)
+            .await
+            .unwrap(),
+        "already departed: nothing changes"
+    );
+}
+
+#[tokio::test]
+async fn only_a_group_departure_is_undone_by_reactivate_back_in_group() {
+    let (core, _db) = core().await;
+    let u = directory::create_user(&core.db, &system(), "Una", "una@county.example", None)
+        .await
+        .unwrap();
+    let role = directory::role_id_by_key(&core.db, "auditor")
+        .await
+        .unwrap();
+    directory::assign_role(&core.db, &system(), u, role, None)
+        .await
+        .unwrap();
+    directory::set_user_status(&core.db, &system(), u, UserStatus::Departed)
+        .await
+        .unwrap();
+    assert!(
+        !directory::reactivate_back_in_group(&core.db, &system(), u)
+            .await
+            .unwrap()
+    );
+    assert_eq!(status_of(&core, u).await, "departed");
+
+    directory::set_user_status(&core.db, &system(), u, UserStatus::Active)
+        .await
+        .unwrap();
+    assert!(
+        directory::depart_from_group(&core.db, &system(), u)
+            .await
+            .unwrap()
+    );
+    assert!(
+        directory::reactivate_back_in_group(&core.db, &system(), u)
+            .await
+            .unwrap()
+    );
+    assert_eq!(status_of(&core, u).await, "active");
+    assert!(!group_mark(&core, u).await);
+    assert_eq!(
+        last_status_reason(&core, u).await.as_deref(),
+        Some("is back in the PDMS group")
+    );
+    let roles: i64 = sqlx::query_scalar("SELECT count(*) FROM role_assignments WHERE user_id = $1")
+        .bind(u)
+        .fetch_one(&core.db)
+        .await
+        .unwrap();
+    assert_eq!(roles, 1, "the role is still assigned");
+    assert!(
+        !directory::reactivate_back_in_group(&core.db, &system(), u)
+            .await
+            .unwrap(),
+        "an active person is left alone"
+    );
+}
+
+#[tokio::test]
+async fn any_other_status_change_clears_the_group_mark() {
+    let (core, _db) = core().await;
+    let u = directory::create_user(&core.db, &system(), "Una", "una@county.example", None)
+        .await
+        .unwrap();
+    directory::depart_from_group(&core.db, &system(), u)
+        .await
+        .unwrap();
+    directory::set_user_status(&core.db, &system(), u, UserStatus::Active)
+        .await
+        .unwrap();
+    directory::set_user_status(&core.db, &system(), u, UserStatus::Departed)
+        .await
+        .unwrap();
+    assert!(!group_mark(&core, u).await);
+    assert!(
+        !directory::reactivate_back_in_group(&core.db, &system(), u)
+            .await
+            .unwrap()
+    );
+    assert_eq!(status_of(&core, u).await, "departed");
+}
+
+#[tokio::test]
+async fn the_last_administrator_is_not_departed_for_the_group() {
+    let (core, _db) = core().await;
+    let a = directory::create_user(&core.db, &system(), "Ada", "ada@county.example", None)
+        .await
+        .unwrap();
+    let admin = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    directory::assign_role(&core.db, &system(), a, admin, None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        directory::depart_from_group(&core.db, &system(), a).await,
+        Err(CoreError::Conflict(_))
+    ));
+    assert_eq!(status_of(&core, a).await, "active");
+    assert!(!group_mark(&core, a).await);
 }

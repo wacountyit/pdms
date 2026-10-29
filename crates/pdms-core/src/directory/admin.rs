@@ -373,49 +373,121 @@ pub async fn set_user_status(
         ));
     }
     let mut tx = db.begin().await?;
+    let changed = change_status(&mut tx, ctx, id, status, false, None, None).await?;
+    if changed {
+        tx.commit().await?;
+    }
+    Ok(())
+}
+
+/// The Entra sync departs someone who is no longer in the PDMS group (GS).
+/// The person is marked, so the sync reactivates only these people.
+/// Returns `false` when the person was not active and nothing changed.
+pub async fn depart_from_group(db: &PgPool, ctx: &Ctx, id: Uuid) -> CoreResult<bool> {
+    ctx.require(Capability::ManageDirectory)?;
+    let mut tx = db.begin().await?;
+    let changed = change_status(
+        &mut tx,
+        ctx,
+        id,
+        UserStatus::Departed,
+        true,
+        Some(UserStatus::Active),
+        Some("is no longer in the PDMS group"),
+    )
+    .await?;
+    if changed {
+        tx.commit().await?;
+    }
+    Ok(changed)
+}
+
+/// The Entra sync reactivates someone it departed for leaving the group and
+/// who is back in it. Anyone departed any other way is left alone. Roles,
+/// grants and memberships are untouched. Returns whether anything changed.
+pub async fn reactivate_back_in_group(db: &PgPool, ctx: &Ctx, id: Uuid) -> CoreResult<bool> {
+    ctx.require(Capability::ManageDirectory)?;
+    let mut tx = db.begin().await?;
+    let marked = sqlx::query_scalar!(
+        "SELECT departed_from_group FROM users WHERE id = $1 AND status = 'departed'::user_status FOR UPDATE",
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if marked != Some(true) {
+        return Ok(false);
+    }
+    let changed = change_status(
+        &mut tx,
+        ctx,
+        id,
+        UserStatus::Active,
+        false,
+        Some(UserStatus::Departed),
+        Some("is back in the PDMS group"),
+    )
+    .await?;
+    if changed {
+        tx.commit().await?;
+    }
+    Ok(changed)
+}
+
+/// The one place a status changes: locks the row, applies the last-administrator
+/// rule, writes the status (and the group mark), revokes sessions when leaving
+/// `active`, queues the SharePoint reconcile and audits. The caller commits when
+/// this returns `true`. `only_from` limits the change to people in that status.
+async fn change_status(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ctx: &Ctx,
+    id: Uuid,
+    status: UserStatus,
+    from_group: bool,
+    only_from: Option<UserStatus>,
+    reason: Option<&str>,
+) -> CoreResult<bool> {
     let before = sqlx::query!(
         r#"SELECT display_name, status AS "status: UserStatus" FROM users WHERE id = $1 FOR UPDATE"#,
         id
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or(CoreError::NotFound)?;
-    if before.status == status {
-        return Ok(());
+    if before.status == status || only_from.is_some_and(|f| f != before.status) {
+        return Ok(false);
     }
-    if status != UserStatus::Active && is_org_admin(&mut tx, id).await? {
-        ensure_other_admin_remains(&mut tx, Some(id), None).await?;
+    if status != UserStatus::Active && is_org_admin(tx, id).await? {
+        ensure_other_admin_remains(tx, Some(id), None).await?;
     }
     sqlx::query!(
         "UPDATE users SET status = $2, updated_at = now(),
-                deactivated_at = CASE WHEN $2 = 'active'::user_status THEN NULL ELSE now() END
+                deactivated_at = CASE WHEN $2 = 'active'::user_status THEN NULL ELSE now() END,
+                departed_from_group = $3
           WHERE id = $1",
         id,
-        status as UserStatus
+        status as UserStatus,
+        from_group
     )
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-    crate::sharepoint::access::enqueue_reconcile(&mut *tx).await?;
+    crate::sharepoint::access::enqueue_reconcile(&mut **tx).await?;
     let revoked = if status == UserStatus::Active {
         0
     } else {
-        session::revoke_all_for_user(&mut tx, id).await?
+        session::revoke_all_for_user(tx, id).await?
     };
-    pdms_audit::append(
-        &mut tx,
-        vec![
-            event(ctx, Category::Admin, "user.status_changed", "user")
-                .object(id, Some(&before.display_name))
-                .change("status", before.status.as_str(), status.as_str())
-                .context(
-                    "sessions_revoked",
-                    i64::try_from(revoked).unwrap_or(i64::MAX),
-                ),
-        ],
-    )
-    .await?;
-    tx.commit().await?;
-    Ok(())
+    let mut e = event(ctx, Category::Admin, "user.status_changed", "user")
+        .object(id, Some(&before.display_name))
+        .change("status", before.status.as_str(), status.as_str())
+        .context(
+            "sessions_revoked",
+            i64::try_from(revoked).unwrap_or(i64::MAX),
+        );
+    if let Some(reason) = reason {
+        e = e.context("reason", reason);
+    }
+    pdms_audit::append(tx, vec![e]).await?;
+    Ok(true)
 }
 
 /// Set or replace a break-glass password and optional TOTP secret. Revokes sessions.
