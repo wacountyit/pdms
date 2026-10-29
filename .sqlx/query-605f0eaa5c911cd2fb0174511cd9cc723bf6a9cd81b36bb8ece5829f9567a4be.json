@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id, u.display_name, u.email, u.status AS \"status: UserStatus\",\n                  u.source::text AS \"source!\",\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u WHERE u.oidc_issuer = $1 AND u.oidc_subject = $2",
+  "query": "SELECT u.id, u.display_name, u.email, u.status AS \"status: UserStatus\",\n                  u.source::text AS \"source!\", u.departed_from_group,\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u WHERE u.oidc_issuer = $1 AND u.oidc_subject = $2",
   "describe": {
     "columns": [
       {
@@ -66,6 +66,17 @@
       },
       {
         "ordinal": 5,
+        "name": "departed_from_group",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "departed_from_group"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "local_login!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -83,8 +94,9 @@
       false,
       false,
       null,
+      false,
       null
     ]
   },
-  "hash": "ffeeafb0425b05b967e958ed0d88a31c95cea86a3edd472d1637c84ae849ec2a"
+  "hash": "605f0eaa5c911cd2fb0174511cd9cc723bf6a9cd81b36bb8ece5829f9567a4be"
 }

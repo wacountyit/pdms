@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET departed_from_group = false, updated_at = now()\n          WHERE id = $1 AND departed_from_group",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7113fe87875c70429d31059e83656ec6857f20d88d4c882641603ff77ab7500c"
+}

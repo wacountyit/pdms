@@ -1755,3 +1755,406 @@ async fn the_last_administrator_is_not_departed_for_the_group() {
     assert_eq!(status_of(&core, a).await, "active");
     assert!(!group_mark(&core, a).await);
 }
+
+const OID_H: &str = "80000000-0000-4000-8000-000000000008";
+
+/// The context of the newest `directory.synced` audit row.
+async fn last_sync_context(core: &Core) -> serde_json::Value {
+    sqlx::query_scalar(
+        "SELECT context FROM audit_log WHERE action = 'directory.synced' ORDER BY seq DESC LIMIT 1",
+    )
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+/// `user.status_changed` audit rows about one person.
+async fn status_audits(core: &Core, user: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'user.status_changed' AND object_id = $1",
+    )
+    .bind(user.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+/// `GET /users/{oid}` requests (single-user reads) so far.
+fn single_reads(m: &MockGraph, oid: &str) -> usize {
+    let prefix = format!("GET /v1.0/users/{oid}?$select=");
+    m.requests()
+        .iter()
+        .filter(|r| r.starts_with(&prefix))
+        .count()
+}
+
+#[tokio::test]
+async fn with_a_group_only_members_get_accounts_and_others_are_departed() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_user(member(OID_C, "Carl", "carl@county.example", None));
+    entra_sync::run(&core, &system()).await.unwrap();
+    let (a, b, c) = (
+        id_of(&core, OID_A).await.unwrap(),
+        id_of(&core, OID_B).await.unwrap(),
+        id_of(&core, OID_C).await.unwrap(),
+    );
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_B);
+    let grouped = with_group(&core, GROUP_P).await;
+    m.add_user(member(OID_D, "Dora", "dora@county.example", None));
+
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!((r.created, r.departed), (0, 1), "{r:?}");
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    assert!(r.held_back.is_empty() && r.reactivated.is_empty(), "{r:?}");
+    assert_eq!(status_of(&core, a).await, "active");
+    assert_eq!(status_of(&core, b).await, "active");
+    assert_eq!(status_of(&core, c).await, "departed");
+    assert!(group_mark(&core, c).await);
+    assert_eq!(
+        last_status_reason(&core, c).await.as_deref(),
+        Some("is no longer in the PDMS group")
+    );
+    assert!(id_of(&core, OID_D).await.is_none(), "not in the group");
+
+    // The next run, a delta, has nothing more to do.
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!((r.created, r.updated, r.departed), (0, 0, 0), "{r:?}");
+    assert!(id_of(&core, OID_D).await.is_none());
+}
+
+#[tokio::test]
+async fn a_member_added_to_the_group_is_created_at_the_next_run() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_E, "Eve", "eve@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    let grouped = with_group(&core, GROUP_P).await;
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.created, 1, "{r:?}");
+    assert!(id_of(&core, OID_E).await.is_none(), "not in the group");
+
+    // Joining a group is no change to the user, so no delta lists her.
+    m.add_to_group(GROUP_P, OID_E);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.created, 1, "{r:?}");
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    let e = id_of(&core, OID_E).await.unwrap();
+    assert_eq!(status_of(&core, e).await, "active");
+    assert_eq!(single_reads(&m, OID_E), 1, "{:?}", m.requests());
+    assert_eq!(full_rounds(&m), 1, "the second run was a delta");
+
+    // Once she has an account, she is not read again.
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(single_reads(&m, OID_E), 1, "{:?}", m.requests());
+    assert_eq!(single_reads(&m, OID_A), 0, "{:?}", m.requests());
+}
+
+#[tokio::test]
+async fn members_of_a_nested_group_count() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_F, "Fay", "fay@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_group(GROUP_N, "Road and Bridge");
+    m.add_to_group(GROUP_P, OID_A);
+    m.nest_group(GROUP_P, GROUP_N);
+    m.add_to_group(GROUP_N, OID_F);
+    let grouped = with_group(&core, GROUP_P).await;
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.created, 2, "{r:?}");
+    let f = id_of(&core, OID_F).await.unwrap();
+    assert_eq!(status_of(&core, f).await, "active");
+
+    // Leaving the nested group is leaving the PDMS group.
+    m.remove_from_group(GROUP_N, OID_F);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert_eq!(status_of(&core, f).await, "departed");
+}
+
+#[tokio::test]
+async fn narrowing_the_group_holds_back_a_mass_departure() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    for i in 1..=9 {
+        let (name, mail) = (format!("P{i}"), format!("p{i}@county.example"));
+        m.add_user(member(&oid(i), &name, &mail, None));
+    }
+    entra_sync::run(&core, &system()).await.unwrap();
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, &oid(1));
+    m.add_to_group(GROUP_P, &oid(2));
+    let grouped = with_group(&core, GROUP_P).await;
+
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 0, "{r:?}");
+    let mut others = BTreeSet::new();
+    for i in 3..=9 {
+        others.insert(id_of(&core, &oid(i)).await.unwrap());
+    }
+    assert_eq!(r.held_back.len(), 7, "{r:?}");
+    assert_eq!(r.held_back.iter().copied().collect::<BTreeSet<_>>(), others);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    for i in 1..=9 {
+        let id = id_of(&core, &oid(i)).await.unwrap();
+        assert_eq!(status_of(&core, id).await, "active");
+    }
+    assert_eq!(last_sync_context(&core).await["held_back"], json!(7));
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().held_back, r.held_back);
+}
+
+#[tokio::test]
+async fn an_empty_group_departs_nobody_and_says_so() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    entra_sync::run(&core, &system()).await.unwrap();
+    m.add_group(GROUP_P, "PDMS");
+    let grouped = with_group(&core, GROUP_P).await;
+
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 0, "{r:?}");
+    assert!(r.held_back.is_empty(), "{r:?}");
+    assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+    let line = &r.errors[0];
+    assert!(
+        line.contains("lists no members")
+            && line.contains("the 2 linked account(s) outside it were not departed")
+            && line.contains("Check the group's object ID and its members"),
+        "{line}"
+    );
+    for o in [OID_A, OID_B] {
+        let id = id_of(&core, o).await.unwrap();
+        assert_eq!(status_of(&core, id).await, "active");
+    }
+}
+
+#[tokio::test]
+async fn a_missing_permission_fails_the_run_and_changes_nothing() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    entra_sync::run(&core, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    let before = saved_link(&core).await;
+    // Had the run gone ahead, Hal would be created and Alice departed.
+    m.add_group(GROUP_P, "PDMS");
+    m.add_user(member(OID_H, "Hal", "hal@county.example", None));
+    m.add_to_group(GROUP_P, OID_H);
+    m.forbid_groups(true);
+    let grouped = with_group(&core, GROUP_P).await;
+
+    let err = entra_sync::run(&grouped, &system()).await.unwrap_err();
+    assert!(err.to_string().contains("GroupMember.Read.All"), "{err}");
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert!(
+        st.last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("GroupMember.Read.All")),
+        "{st:?}"
+    );
+    assert!(id_of(&core, OID_H).await.is_none());
+    assert_eq!(status_of(&core, a).await, "active");
+    assert_eq!(saved_link(&core).await, before);
+
+    // With the permission granted, the next run does the work.
+    m.forbid_groups(false);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!((r.created, r.departed), (1, 1), "{r:?}");
+    assert_eq!(status_of(&core, a).await, "departed");
+}
+
+#[tokio::test]
+async fn the_last_administrator_and_the_break_glass_account_are_kept() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_user(member(OID_C, "Carl", "carl@county.example", None));
+    let c = linked_local(&core, "Carl", "carl@county.example", OID_C).await;
+    directory::set_local_credentials(&core.db, &core.keys, &system(), c, PW, None)
+        .await
+        .unwrap();
+    entra_sync::run(&core, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    let admin = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    directory::assign_role(&core.db, &system(), a, admin, None)
+        .await
+        .unwrap();
+    // The break-glass account: local, with no directory link.
+    let glass = directory::create_user(
+        &core.db,
+        &system(),
+        "Break Glass",
+        "glass@county.example",
+        None,
+    )
+    .await
+    .unwrap();
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_B);
+    let grouped = with_group(&core, GROUP_P).await;
+
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert!(r.held_back.is_empty(), "{r:?}");
+    assert_eq!(r.errors.len(), 2, "{:?}", r.errors);
+    assert!(
+        r.errors.iter().any(|e| e.contains("alice@county.example")
+            && e.contains("is no longer in the PDMS group but was not deactivated")),
+        "{:?}",
+        r.errors
+    );
+    assert!(
+        r.errors.iter().any(|e| e.contains("carl@county.example")
+            && e.contains("is no longer in the PDMS group")
+            && e.contains("the account also had a local password")),
+        "{:?}",
+        r.errors
+    );
+    assert_eq!(status_of(&core, a).await, "active");
+    assert!(!group_mark(&core, a).await);
+    assert_eq!(status_of(&core, c).await, "departed");
+    assert!(group_mark(&core, c).await);
+    assert_eq!(status_of(&core, glass).await, "active");
+    assert!(!group_mark(&core, glass).await);
+    assert_eq!(status_audits(&core, glass).await, 0, "untouched");
+}
+
+#[tokio::test]
+async fn someone_back_in_the_group_is_reactivated_with_their_roles() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_user(member(OID_C, "Carl", "carl@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    for o in [OID_A, OID_B, OID_C] {
+        m.add_to_group(GROUP_P, o);
+    }
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let (a, b, c) = (
+        id_of(&core, OID_A).await.unwrap(),
+        id_of(&core, OID_B).await.unwrap(),
+        id_of(&core, OID_C).await.unwrap(),
+    );
+    let auditor = directory::role_id_by_key(&core.db, "auditor")
+        .await
+        .unwrap();
+    directory::assign_role(&core.db, &system(), a, auditor, None)
+        .await
+        .unwrap();
+
+    // Alice and Bob leave the group.
+    m.remove_from_group(GROUP_P, OID_A);
+    m.remove_from_group(GROUP_P, OID_B);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 2, "{r:?}");
+    assert!(group_mark(&core, a).await && group_mark(&core, b).await);
+
+    // Entra then disables Bob: his departure is Entra's now.
+    m.update_user(OID_B, json!({ "accountEnabled": false }));
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 0, "{r:?}");
+    assert_eq!(status_of(&core, b).await, "departed");
+    assert!(!group_mark(&core, b).await);
+    // Carl, still in the group, is departed by hand.
+    directory::set_user_status(&core.db, &system(), c, UserStatus::Departed)
+        .await
+        .unwrap();
+
+    // Alice and Bob are added back, and Bob is enabled again.
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_B);
+    m.update_user(OID_B, json!({ "accountEnabled": true }));
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.reactivated, vec![a], "{r:?}");
+    assert_eq!(status_of(&core, a).await, "active");
+    assert!(!group_mark(&core, a).await);
+    assert_eq!(
+        last_status_reason(&core, a).await.as_deref(),
+        Some("is back in the PDMS group")
+    );
+    let roles: i64 = sqlx::query_scalar("SELECT count(*) FROM role_assignments WHERE user_id = $1")
+        .bind(a)
+        .fetch_one(&core.db)
+        .await
+        .unwrap();
+    assert_eq!(roles, 1, "the role is still assigned");
+    assert_eq!(status_of(&core, b).await, "departed");
+    assert_eq!(status_of(&core, c).await, "departed");
+    assert_eq!(last_sync_context(&core).await["reactivated"], json!(1));
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().reactivated, vec![a]);
+
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert!(r.reactivated.is_empty(), "{r:?}");
+    assert_eq!(status_of(&core, b).await, "departed");
+    assert_eq!(status_of(&core, c).await, "departed");
+}
+
+#[tokio::test]
+async fn clearing_the_group_reactivates_nobody() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_B);
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    m.remove_from_group(GROUP_P, OID_A);
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(status_of(&core, a).await, "departed");
+
+    // Back to the whole tenant: Alice stays departed, still marked.
+    let r = entra_sync::run_full(&core, &system()).await.unwrap();
+    assert!(r.reactivated.is_empty(), "{r:?}");
+    assert_eq!(status_of(&core, a).await, "departed");
+    assert!(group_mark(&core, a).await);
+
+    // A group again, with her in it: she comes back.
+    m.add_to_group(GROUP_P, OID_A);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.reactivated, vec![a], "{r:?}");
+    assert_eq!(status_of(&core, a).await, "active");
+}
+
+#[tokio::test]
+async fn disabled_and_guest_members_are_skipped_quietly() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    let mut off = member(OID_D, "Dan Disabled", "dan@county.example", None);
+    off["accountEnabled"] = json!(false);
+    m.add_user(off);
+    let mut guest = member(OID_G, "Gwen Guest", "gwen@partner.example", None);
+    guest["userType"] = json!("Guest");
+    m.add_user(guest);
+    m.add_group(GROUP_P, "PDMS");
+    for o in [OID_A, OID_D, OID_G] {
+        m.add_to_group(GROUP_P, o);
+    }
+    let grouped = with_group(&core, GROUP_P).await;
+    for run in 1..=2 {
+        let r = entra_sync::run(&grouped, &system()).await.unwrap();
+        assert!(r.errors.is_empty(), "run {run}: {:?}", r.errors);
+        assert!(id_of(&core, OID_D).await.is_none(), "run {run}");
+        assert!(id_of(&core, OID_G).await.is_none(), "run {run}");
+    }
+    assert_eq!(full_rounds(&m), 1, "the second run was a delta");
+    assert!(id_of(&core, OID_A).await.is_some());
+}

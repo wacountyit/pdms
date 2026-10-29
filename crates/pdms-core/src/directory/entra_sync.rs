@@ -16,8 +16,27 @@
 //!   max(5, 20%) of them missing);
 //! - accounts with a local password are departed like any other, and reported;
 //! - guests (`userType` = `Guest`) are skipped unless `include_guests`;
-//! - nobody is ever reactivated, and runs happen only while
-//!   `[entra_sync] enabled` is true.
+//! - nobody is reactivated, except under the group rule below, and runs
+//!   happen only while `[entra_sync] enabled` is true.
+//!
+//! With `[entra_sync] group_id` set (GS), only the group's members
+//! have accounts; members of groups inside it count. Each run reads the
+//! member list before it applies anything, so a list it can't read changes
+//! nothing. Then:
+//! - removed, disabled and guest accounts are handled as above; these
+//!   reasons come first;
+//! - an account outside the group is neither created nor updated;
+//! - a member this round did not list, with no account, is read with
+//!   `/users/{id}` and applied (added to the group with no other change in
+//!   Entra);
+//! - active accounts outside the group are departed, every run, and marked
+//!   `departed_from_group`. The same guards apply: the last administrator
+//!   stays, nobody is departed when the group lists no members, and when
+//!   more than max(5, 20%) would leave at once they are held back and listed
+//!   in the report for an administrator to confirm;
+//! - someone the sync departed for leaving the group is reactivated once
+//!   they are back in it, with an enabled member account. A departure made by
+//!   hand, or because Entra removed or disabled the account, is never undone.
 //!
 //! Accounts are matched by issuer and Entra object ID only, never by email.
 
@@ -64,6 +83,12 @@ pub struct SyncReport {
     pub changed_departments: BTreeSet<Uuid>,
     /// Accounts that need a person's attention (not linked, last admin, ...).
     pub errors: Vec<String>,
+    /// People the sync departed for leaving the PDMS group and reactivated
+    /// because they are back in it.
+    pub reactivated: Vec<Uuid>,
+    /// Active accounts outside the PDMS group that were not departed because
+    /// more would have left at once than the limit allows.
+    pub held_back: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -72,6 +97,28 @@ pub struct SyncStatus {
     /// Why the last run failed; cleared by the next run that succeeds.
     pub last_error: Option<String>,
     pub last_summary: Option<SyncReport>,
+}
+
+/// Where someone stands with the PDMS group in this run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Membership {
+    /// No group is set: everyone in the tenant may have an account.
+    Everyone,
+    /// In the group, directly or through a group inside it.
+    Member,
+    /// Not in the group.
+    Outside,
+}
+
+impl Membership {
+    /// `members`: the group's member list (lowercase IDs), when a group is set.
+    fn of(members: Option<&BTreeSet<String>>, oid: &str) -> Self {
+        match members {
+            None => Self::Everyone,
+            Some(m) if m.contains(&oid.to_ascii_lowercase()) => Self::Member,
+            Some(_) => Self::Outside,
+        }
+    }
 }
 
 /// One entry of `/users/delta` or `/users/{id}`.
@@ -374,11 +421,14 @@ async fn sync_all(
     let config = core.config();
     let attribute = config.entra_sync.attribute.as_str();
     let select = select_list(attribute);
-    let key = cursor_key(
-        &select,
-        config.entra_sync.include_guests,
-        config.entra_sync.group().as_deref(),
-    );
+    let group = config.entra_sync.group();
+    let key = cursor_key(&select, config.entra_sync.include_guests, group.as_deref());
+    // With a group set, its member list comes first: a list that can't be
+    // read fails the run before anything changes, and the cursor stays.
+    let in_group = match group.as_deref() {
+        Some(g) => Some(group_members(graph, g).await?),
+        None => None,
+    };
     let initial = format!("/users/delta?$select={select}");
     let saved = if full {
         None
@@ -407,18 +457,29 @@ async fn sync_all(
                 if !u.removed && !u.guest {
                     members += 1;
                 }
-                apply(core, ctx, issuer, &u, &mut report).await?;
+                let membership = Membership::of(in_group.as_ref(), &u.id);
+                apply(core, ctx, issuer, &u, membership, &mut report).await?;
             }
             None => report
                 .errors
                 .push("an entry without an id was skipped".into()),
         }
     }
+    if let Some(in_group) = &in_group {
+        add_missing_members(core, ctx, graph, issuer, in_group, &seen, &mut report).await?;
+        group_sweep(core, ctx, issuer, started, in_group, &mut report).await?;
+    }
     if complete {
         sweep(core, ctx, issuer, started, &seen, members, &mut report).await?;
     }
     for e in &report.errors {
         tracing::warn!(problem = %e, "Entra sync");
+    }
+    if !report.held_back.is_empty() {
+        tracing::warn!(
+            held_back = report.held_back.len(),
+            "Entra sync: departures for leaving the PDMS group were held back"
+        );
     }
 
     // Problems with single accounts stay in the summary; `last_error` is
@@ -454,7 +515,9 @@ async fn sync_all(
             .context("departed", report.departed)
             .context("unmapped", report.unmapped)
             .context("departments_changed", n(report.changed_departments.len()))
-            .context("problems", n(report.errors.len())),
+            .context("problems", n(report.errors.len()))
+            .context("reactivated", n(report.reactivated.len()))
+            .context("held_back", n(report.held_back.len())),
         ],
     )
     .await?;
@@ -498,17 +561,7 @@ async fn sweep(
     members: usize,
     report: &mut SyncReport,
 ) -> CoreResult<()> {
-    let linked = sqlx::query!(
-        r#"SELECT u.id, u.display_name, u.email, u.oidc_subject AS "oidc_subject!",
-                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
-             FROM users u
-            WHERE u.oidc_issuer = $1 AND u.status = 'active' AND u.created_at < $2
-            ORDER BY u.display_name"#,
-        issuer,
-        started
-    )
-    .fetch_all(&core.db)
-    .await?;
+    let linked = linked_accounts(&core.db, issuer, started).await?;
     let missing: Vec<_> = linked
         .iter()
         .filter(|r| !seen.contains(&r.oidc_subject.to_ascii_lowercase()))
@@ -516,25 +569,9 @@ async fn sweep(
     if missing.is_empty() {
         return Ok(());
     }
-    // `set_user_status` keeps the last active administrator: when every one
-    // of them is missing, the last of them in this order stays, so it does
-    // not count as a departure.
-    let admins = sqlx::query_scalar!(
-        r#"SELECT DISTINCT ra.user_id FROM role_assignments ra
-             JOIN roles r ON r.id = ra.role_id JOIN users u ON u.id = ra.user_id
-            WHERE r.key = $1 AND ra.department_id IS NULL AND u.status = 'active'"#,
-        role_keys::ADMIN
-    )
-    .fetch_all(&core.db)
-    .await?;
-    let kept = admins
-        .iter()
-        .all(|a| missing.iter().any(|r| r.id == *a))
-        .then(|| missing.iter().rev().find(|r| admins.contains(&r.id)))
-        .flatten()
-        .map(|r| r.id);
+    let kept = kept_admin(&core.db, &missing).await?;
     let departing: Vec<_> = missing.iter().filter(|r| Some(r.id) != kept).collect();
-    let limit = (linked.len() / 5).max(5);
+    let limit = departure_limit(linked.len());
     let held = if departing.is_empty() {
         None
     } else if members == 0 {
@@ -571,15 +608,188 @@ async fn sweep(
         return Ok(());
     }
     for r in missing {
-        let who = Linked {
-            id: r.id,
-            name: &r.display_name,
-            email: &r.email,
-            local_login: r.local_login,
-        };
-        depart(core, ctx, &who, "is not in Entra", report).await?;
+        depart(
+            core,
+            ctx,
+            &r.who(),
+            Leaving::Entra("is not in Entra"),
+            report,
+        )
+        .await?;
     }
     Ok(())
+}
+
+/// With a group set, every run: depart this issuer's active accounts outside
+/// the group that existed when the round started, marked so they come back
+/// if they rejoin. Nobody is departed when the group lists no members (a
+/// wrong ID, or a dynamic group still filling), which is reported; nor when
+/// more would leave than max(5, 20%) of linked accounts at once (narrowing
+/// the group), when they are listed in `held_back` for an administrator to
+/// confirm.
+async fn group_sweep(
+    core: &Core,
+    ctx: &Ctx,
+    issuer: &str,
+    started: DateTime<Utc>,
+    in_group: &BTreeSet<String>,
+    report: &mut SyncReport,
+) -> CoreResult<()> {
+    let linked = linked_accounts(&core.db, issuer, started).await?;
+    let outside: Vec<_> = linked
+        .iter()
+        .filter(|r| !in_group.contains(&r.oidc_subject.to_ascii_lowercase()))
+        .collect();
+    if outside.is_empty() {
+        return Ok(());
+    }
+    if in_group.is_empty() {
+        report.errors.push(format!(
+            "The PDMS group lists no members, so the {} linked account(s) outside it were not \
+             departed. Check the group's object ID and its members.",
+            outside.len()
+        ));
+        return Ok(());
+    }
+    let kept = kept_admin(&core.db, &outside).await?;
+    let departing: Vec<Uuid> = outside
+        .iter()
+        .map(|r| r.id)
+        .filter(|id| Some(*id) != kept)
+        .collect();
+    if departing.len() > departure_limit(linked.len()) {
+        report.held_back = departing;
+        return Ok(());
+    }
+    for r in outside {
+        depart(core, ctx, &r.who(), Leaving::Group, report).await?;
+    }
+    Ok(())
+}
+
+/// Members of the group this round did not list: added to the group with no
+/// other change in Entra, or back in it. Each one PDMS has no account for,
+/// or departed for leaving the group, is read and applied. Anyone else is
+/// known: active, or departed for another reason, which the group never undoes.
+async fn add_missing_members(
+    core: &Core,
+    ctx: &Ctx,
+    graph: &GraphClient,
+    issuer: &str,
+    in_group: &BTreeSet<String>,
+    seen: &BTreeSet<String>,
+    report: &mut SyncReport,
+) -> CoreResult<()> {
+    let unseen: Vec<String> = in_group.difference(seen).cloned().collect();
+    if unseen.is_empty() {
+        return Ok(());
+    }
+    let known: BTreeSet<String> = sqlx::query_scalar!(
+        r#"SELECT lower(oidc_subject) AS "subject!" FROM users
+            WHERE oidc_issuer = $1 AND lower(oidc_subject) = ANY($2)
+              AND (status = 'active' OR NOT departed_from_group)"#,
+        issuer,
+        &unseen[..]
+    )
+    .fetch_all(&core.db)
+    .await?
+    .into_iter()
+    .collect();
+    let config = core.config();
+    let attribute = config.entra_sync.attribute.as_str();
+    let select = select_list(attribute);
+    for oid in unseen.iter().filter(|o| !known.contains(*o)) {
+        // Only an object ID goes into the request path.
+        let Ok(oid) = Uuid::parse_str(oid) else {
+            report.errors.push(format!(
+                "the PDMS group lists a member with an unexpected ID {oid}"
+            ));
+            continue;
+        };
+        let path = format!("/users/{}?$select={select}", oid.hyphenated());
+        let v: Value = match graph.get(&path).await {
+            Ok(v) => v,
+            // Deleted since the member list was read.
+            Err(GraphError::NotFound) => continue,
+            Err(e) => return Err(e.into()),
+        };
+        match parse_user(&v, attribute) {
+            Some(u) => {
+                apply(core, ctx, issuer, &u, Membership::Member, report).await?;
+            }
+            None => report
+                .errors
+                .push("an entry without an id was skipped".into()),
+        }
+    }
+    Ok(())
+}
+
+/// An active account linked to this issuer that existed when the round
+/// started: what both sweeps may depart.
+struct LinkedAccount {
+    id: Uuid,
+    display_name: String,
+    email: String,
+    oidc_subject: String,
+    local_login: bool,
+}
+
+impl LinkedAccount {
+    fn who(&self) -> Linked<'_> {
+        Linked {
+            id: self.id,
+            name: &self.display_name,
+            email: &self.email,
+            local_login: self.local_login,
+        }
+    }
+}
+
+/// Accounts created after `started` (a first sign-in during the round) may
+/// be missing from its listing, so they are left out.
+async fn linked_accounts(
+    db: &PgPool,
+    issuer: &str,
+    started: DateTime<Utc>,
+) -> CoreResult<Vec<LinkedAccount>> {
+    Ok(sqlx::query_as!(
+        LinkedAccount,
+        r#"SELECT u.id, u.display_name, u.email, u.oidc_subject AS "oidc_subject!",
+                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
+             FROM users u
+            WHERE u.oidc_issuer = $1 AND u.status = 'active' AND u.created_at < $2
+            ORDER BY u.display_name"#,
+        issuer,
+        started
+    )
+    .fetch_all(db)
+    .await?)
+}
+
+/// The most a sweep departs at once: max(5, 20% of linked accounts).
+fn departure_limit(linked: usize) -> usize {
+    (linked / 5).max(5)
+}
+
+/// Departing keeps the last active administrator: when every one of them is
+/// in `leaving`, the last of them in that order stays, so it does not count
+/// as a departure (and is reported when its departure is refused).
+async fn kept_admin(db: &PgPool, leaving: &[&LinkedAccount]) -> CoreResult<Option<Uuid>> {
+    let admins = sqlx::query_scalar!(
+        r#"SELECT DISTINCT ra.user_id FROM role_assignments ra
+             JOIN roles r ON r.id = ra.role_id JOIN users u ON u.id = ra.user_id
+            WHERE r.key = $1 AND ra.department_id IS NULL AND u.status = 'active'"#,
+        role_keys::ADMIN
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(admins
+        .iter()
+        .all(|a| leaving.iter().any(|r| r.id == *a))
+        .then(|| leaving.iter().rev().find(|r| admins.contains(&r.id)))
+        .flatten()
+        .map(|r| r.id))
 }
 
 /// An active PDMS account linked to an Entra account.
@@ -590,19 +800,42 @@ struct Linked<'a> {
     local_login: bool,
 }
 
-/// Depart someone Entra no longer has as an enabled member. The last
-/// administrator is reported instead; a departed account that had a local
-/// password is reported too, so an administrator knows.
+/// Why the sync departs someone.
+#[derive(Clone, Copy)]
+enum Leaving {
+    /// Entra no longer has them as an enabled member; the text says why.
+    Entra(&'static str),
+    /// They are no longer in the PDMS group: marked, so they can come back.
+    Group,
+}
+
+/// Depart someone. The last administrator is reported instead; a departed
+/// account that had a local password is reported too, so an administrator
+/// knows.
 async fn depart(
     core: &Core,
     ctx: &Ctx,
     who: &Linked<'_>,
-    why: &str,
+    why: Leaving,
     report: &mut SyncReport,
 ) -> CoreResult<()> {
     let (name, email) = (who.name, who.email);
-    match super::set_user_status(&core.db, ctx, who.id, UserStatus::Departed).await {
-        Ok(()) => {
+    let (result, why) = match why {
+        Leaving::Entra(why) => (
+            super::set_user_status(&core.db, ctx, who.id, UserStatus::Departed)
+                .await
+                .map(|()| true),
+            why,
+        ),
+        Leaving::Group => (
+            super::depart_from_group(&core.db, ctx, who.id).await,
+            "is no longer in the PDMS group",
+        ),
+    };
+    match result {
+        // No longer active by the time it was departed: nothing changed.
+        Ok(false) => {}
+        Ok(true) => {
             report.departed += 1;
             if who.local_login {
                 report.errors.push(format!(
@@ -657,6 +890,7 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
         &Ctx::system("entra-sync"),
         &issuer,
         &user,
+        Membership::Everyone,
         &mut report,
     )
     .await?;
@@ -672,11 +906,12 @@ async fn apply(
     ctx: &Ctx,
     issuer: &str,
     u: &EntraUser,
+    membership: Membership,
     report: &mut SyncReport,
 ) -> CoreResult<Option<Uuid>> {
     let existing = sqlx::query!(
         r#"SELECT u.id, u.display_name, u.email, u.status AS "status: UserStatus",
-                  u.source::text AS "source!",
+                  u.source::text AS "source!", u.departed_from_group,
                   EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
              FROM users u WHERE u.oidc_issuer = $1 AND u.oidc_subject = $2"#,
         issuer,
@@ -685,11 +920,10 @@ async fn apply(
     .fetch_optional(&core.db)
     .await?;
 
+    // Entra's reasons come first, so they are never "left the group".
     let leaving = u.removed || !u.enabled || (u.guest && !core.config().entra_sync.include_guests);
     if leaving {
-        if let Some(e) = existing.as_ref()
-            && e.status == UserStatus::Active
-        {
+        if let Some(e) = existing.as_ref() {
             let why = if u.removed {
                 "was removed from Entra"
             } else if !u.enabled {
@@ -697,23 +931,48 @@ async fn apply(
             } else {
                 "is a guest account in Entra"
             };
-            let who = Linked {
-                id: e.id,
-                name: &e.display_name,
-                email: &e.email,
-                local_login: e.local_login,
-            };
-            depart(core, ctx, &who, why, report).await?;
+            if e.status == UserStatus::Active {
+                let who = Linked {
+                    id: e.id,
+                    name: &e.display_name,
+                    email: &e.email,
+                    local_login: e.local_login,
+                };
+                depart(core, ctx, &who, Leaving::Entra(why), report).await?;
+            } else if e.departed_from_group {
+                entra_takes_over_departure(&core.db, ctx, e.id, &e.display_name, why).await?;
+            }
         }
         return Ok(None);
     }
+    // Outside the group: neither created nor updated. The group sweep departs
+    // an active account, under its guards.
+    if membership == Membership::Outside {
+        return Ok(None);
+    }
+    // Back in the group after the sync departed them for leaving it.
+    let back = match existing.as_ref() {
+        Some(e)
+            if membership == Membership::Member
+                && e.status != UserStatus::Active
+                && e.departed_from_group =>
+        {
+            let back = super::reactivate_back_in_group(&core.db, ctx, e.id).await?;
+            if back {
+                report.reactivated.push(e.id);
+            }
+            back
+        }
+        _ => false,
+    };
 
     let want = entra_values::lookup(&core.db, u.department.as_deref()).await?;
     let mut events = Vec::new();
     let mut tx = core.db.begin().await?;
     let (id, name, created, changed) = match existing {
-        Some(e) if e.status != UserStatus::Active => {
-            // Never reactivated automatically: an administrator decides.
+        Some(e) if e.status != UserStatus::Active && !back => {
+            // Never reactivated automatically, apart from the group rule
+            // above: an administrator decides.
             sqlx::query!(
                 "UPDATE users SET entra_department = $2, entra_synced_at = now() WHERE id = $1",
                 e.id,
@@ -821,6 +1080,42 @@ async fn apply(
         report.unmapped += 1;
     }
     Ok(Some(id))
+}
+
+/// Entra reports someone the sync departed for leaving the group as removed,
+/// disabled or a guest: from now on the departure is Entra's, which being
+/// back in the group never undoes, so the mark goes (audited).
+async fn entra_takes_over_departure(
+    db: &PgPool,
+    ctx: &Ctx,
+    id: Uuid,
+    name: &str,
+    why: &str,
+) -> CoreResult<()> {
+    let mut tx = db.begin().await?;
+    let cleared = sqlx::query!(
+        "UPDATE users SET departed_from_group = false, updated_at = now()
+          WHERE id = $1 AND departed_from_group",
+        id
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if cleared == 0 {
+        return Ok(());
+    }
+    pdms_audit::append(
+        &mut tx,
+        vec![
+            AuditEvent::new(Category::Admin, "user.updated", ctx.actor.clone(), "user")
+                .object(id, Some(name))
+                .change("departed_from_group", true, false)
+                .context("reason", why),
+        ],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// An email already belongs to another account: report it, change nothing.
@@ -1020,6 +1315,8 @@ pub async fn run_job(core: &Core, payload: &Value) -> Result<(), String> {
                 created = r.created,
                 updated = r.updated,
                 departed = r.departed,
+                reactivated = r.reactivated.len(),
+                held_back = r.held_back.len(),
                 unmapped = r.unmapped,
                 problems = r.errors.len(),
                 "Entra directory synchronized"
@@ -1043,6 +1340,7 @@ mod tests {
         let r: SyncReport = serde_json::from_value(json!({ "created": 2, "departed": 1 })).unwrap();
         assert_eq!((r.created, r.departed, r.updated), (2, 1, 0));
         assert!(r.errors.is_empty() && r.changed_departments.is_empty());
+        assert!(r.reactivated.is_empty() && r.held_back.is_empty());
     }
 
     #[test]

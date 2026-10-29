@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lower(oidc_subject) AS \"subject!\" FROM users\n            WHERE oidc_issuer = $1 AND lower(oidc_subject) = ANY($2)\n              AND (status = 'active' OR NOT departed_from_group)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ff661becf04433f5fb737b0fd4bcca0a1cbbb5cfd14637407f2a99ac18041c1e"
+}
