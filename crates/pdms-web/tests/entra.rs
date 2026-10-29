@@ -232,7 +232,11 @@ async fn the_group_field_saves_and_shows_read_only_from_the_configuration_file()
     let pairs: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
     b.post("/admin/entra/settings", &pairs).await;
     let page = b.get("/admin/entra").await;
-    assert!(page.body.contains("object ID"), "{}", page.body);
+    assert!(
+        page.body.contains("must be the group&#39;s object ID"),
+        "{}",
+        page.body
+    );
     assert_eq!(app.core.config().entra_sync.group_id, GROUP);
 
     let mut c = config();
@@ -269,4 +273,26 @@ async fn test_group_without_the_connection_says_so() {
         r.body
     );
     assert!(r.body.contains("Test result"));
+}
+
+#[tokio::test]
+async fn test_group_uses_the_value_from_the_configuration_file() {
+    let mut c = config();
+    c.entra_sync.group_id = GROUP.into();
+    c.locked.insert("entra_sync.group_id".into());
+    let app = app_with(c).await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    // A disabled field is not posted.
+    let r = b
+        .post("/admin/entra/test-group", &[("_csrf", &page.csrf())])
+        .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(!r.body.contains("Enter the group"), "{}", r.body);
+    assert!(
+        r.body
+            .contains("Set up the Microsoft 365 connection first.")
+    );
 }

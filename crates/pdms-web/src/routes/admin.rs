@@ -951,7 +951,19 @@ pub async fn entra_test_group(
 ) -> AppResult<Response> {
     user.require(&state, Capability::ManageSettings, "/admin/entra")
         .await?;
-    let check = entra_sync::test_group(&state.core, &user.ctx, &f.group_id).await?;
+    // A value set in the configuration file shows disabled, so the browser
+    // does not post it: test the one in effect.
+    let group_id = if state
+        .core
+        .file_config()
+        .locked
+        .contains("entra_sync.group_id")
+    {
+        state.core.config().entra_sync.group_id.clone()
+    } else {
+        f.group_id
+    };
+    let check = entra_sync::test_group(&state.core, &user.ctx, &group_id).await?;
     Ok(entra_page(&state, &user, FlashMsg(None), None, Some(check))
         .await?
         .into_response())
