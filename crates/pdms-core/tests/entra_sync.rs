@@ -2158,3 +2158,93 @@ async fn disabled_and_guest_members_are_skipped_quietly() {
     assert_eq!(full_rounds(&m), 1, "the second run was a delta");
     assert!(id_of(&core, OID_A).await.is_some());
 }
+
+/// `user.updated` audit rows that cleared the group mark, with this reason.
+async fn unmarked_audits(core: &Core, user: Uuid, reason: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log
+          WHERE action = 'user.updated' AND object_id = $1 AND context->>'reason' = $2
+            AND changes @> '[{\"field\": \"departed_from_group\", \"before\": true, \"after\": false}]'",
+    )
+    .bind(user.to_string())
+    .bind(reason)
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_member_deleted_from_entra_is_departed_as_not_in_entra() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_B);
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+
+    // Alice is deleted while the saved link has expired: a complete round,
+    // which no longer lists her, and the group no longer lists her either.
+    m.remove_user(OID_A, "deleted");
+    m.state.lock().unwrap().expire_delta = true;
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(full_rounds(&m), 2);
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    assert_eq!(status_of(&core, a).await, "departed");
+    assert!(
+        !group_mark(&core, a).await,
+        "Entra's departure, not the group's"
+    );
+    assert_ne!(
+        last_status_reason(&core, a).await.as_deref(),
+        Some("is no longer in the PDMS group")
+    );
+
+    // Restored in Entra, and still in the group: she stays departed.
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_to_group(GROUP_P, OID_A);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert!(r.reactivated.is_empty(), "{r:?}");
+    assert_eq!(status_of(&core, a).await, "departed");
+}
+
+#[tokio::test]
+async fn a_group_departure_later_deleted_from_entra_loses_its_mark() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_B);
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    m.remove_from_group(GROUP_P, OID_A);
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    assert!(group_mark(&core, a).await);
+
+    // A complete round that lists no member accounts proves nothing.
+    m.remove_user(OID_A, "deleted");
+    m.remove_user(OID_B, "deleted");
+    entra_sync::run_full(&grouped, &system()).await.unwrap();
+    assert!(group_mark(&core, a).await, "kept while Entra lists nobody");
+
+    // Once Entra lists its members again without her, she was deleted.
+    m.add_user(member(OID_B, "Bob", "bob@county.example", None));
+    entra_sync::run_full(&grouped, &system()).await.unwrap();
+    assert_eq!(status_of(&core, a).await, "departed");
+    assert!(!group_mark(&core, a).await);
+    assert_eq!(unmarked_audits(&core, a, "is not in Entra").await, 1);
+
+    // Restored in Entra and added back to the group: she stays departed.
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_to_group(GROUP_P, OID_A);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert!(r.reactivated.is_empty(), "{r:?}");
+    assert_eq!(status_of(&core, a).await, "departed");
+}

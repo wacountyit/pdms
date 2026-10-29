@@ -33,10 +33,14 @@
 //!   `departed_from_group`. The same guards apply: the last administrator
 //!   stays, nobody is departed when the group lists no members, and when
 //!   more than max(5, 20%) would leave at once they are held back and listed
-//!   in the report for an administrator to confirm;
+//!   in the report for an administrator to confirm. An account a complete
+//!   round did not list is gone from Entra, not just from the group, and is
+//!   left to the sweep above;
 //! - someone the sync departed for leaving the group is reactivated once
 //!   they are back in it, with an enabled member account. A departure made by
-//!   hand, or because Entra removed or disabled the account, is never undone.
+//!   hand, or because Entra removed or disabled the account, is never undone:
+//!   when Entra later reports such a person removed, disabled or a guest, or a
+//!   complete round no longer lists them, the departure becomes Entra's.
 //!
 //! Accounts are matched by issuer and Entra object ID only, never by email.
 
@@ -465,12 +469,17 @@ async fn sync_all(
                 .push("an entry without an id was skipped".into()),
         }
     }
+    // A round that listed every account: who it did not list is gone from Entra.
+    let listed = complete.then_some(&seen);
     if let Some(in_group) = &in_group {
         add_missing_members(core, ctx, graph, issuer, in_group, &seen, &mut report).await?;
-        group_sweep(core, ctx, issuer, started, in_group, &mut report).await?;
+        group_sweep(core, ctx, issuer, started, in_group, listed, &mut report).await?;
     }
     if complete {
         sweep(core, ctx, issuer, started, &seen, members, &mut report).await?;
+        if members > 0 {
+            unmark_missing_from_entra(core, ctx, issuer, &seen).await?;
+        }
     }
     for e in &report.errors {
         tracing::warn!(problem = %e, "Entra sync");
@@ -627,18 +636,26 @@ async fn sweep(
 /// more would leave than max(5, 20%) of linked accounts at once (narrowing
 /// the group), when they are listed in `held_back` for an administrator to
 /// confirm.
+///
+/// `listed`: every account a complete round listed. An account it did not
+/// list is gone from Entra, not just from the group, so it is left to
+/// [`sweep`]: that departure is Entra's, which the group rule never undoes.
 async fn group_sweep(
     core: &Core,
     ctx: &Ctx,
     issuer: &str,
     started: DateTime<Utc>,
     in_group: &BTreeSet<String>,
+    listed: Option<&BTreeSet<String>>,
     report: &mut SyncReport,
 ) -> CoreResult<()> {
     let linked = linked_accounts(&core.db, issuer, started).await?;
     let outside: Vec<_> = linked
         .iter()
-        .filter(|r| !in_group.contains(&r.oidc_subject.to_ascii_lowercase()))
+        .filter(|r| {
+            let oid = r.oidc_subject.to_ascii_lowercase();
+            !in_group.contains(&oid) && listed.is_none_or(|l| l.contains(&oid))
+        })
         .collect();
     if outside.is_empty() {
         return Ok(());
@@ -1080,6 +1097,31 @@ async fn apply(
         report.unmapped += 1;
     }
     Ok(Some(id))
+}
+
+/// After a round that listed every account (and some member accounts):
+/// someone the sync departed for leaving the group whom it did not list was
+/// deleted from Entra since, so their departure is Entra's now.
+async fn unmark_missing_from_entra(
+    core: &Core,
+    ctx: &Ctx,
+    issuer: &str,
+    listed: &BTreeSet<String>,
+) -> CoreResult<()> {
+    let marked = sqlx::query!(
+        r#"SELECT id, display_name, oidc_subject AS "oidc_subject!" FROM users
+            WHERE oidc_issuer = $1 AND departed_from_group"#,
+        issuer
+    )
+    .fetch_all(&core.db)
+    .await?;
+    for r in marked
+        .iter()
+        .filter(|r| !listed.contains(&r.oidc_subject.to_ascii_lowercase()))
+    {
+        entra_takes_over_departure(&core.db, ctx, r.id, &r.display_name, "is not in Entra").await?;
+    }
+    Ok(())
 }
 
 /// Entra reports someone the sync departed for leaving the group as removed,
