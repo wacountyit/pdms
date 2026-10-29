@@ -190,6 +190,7 @@ only place that shows work in flight.
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
 | §0.5 item 1: SharePoint live test, continued | WACountyIT | In progress (2026-10-27): upgrade and Test with the full-control check; then B6 to B9 and §1.2 | | 2026-10-27 |
+| §0.5 item 2: GS, Entra sync limited to one group | wc-sstevens (the owner, with Claude) | Spec: **Done** (approved 2026-10-28). Plan: **In progress** (2026-10-29). Build: **Not started** | | 2026-10-29 |
 
 §0.5 lists what can start next.
 
@@ -310,22 +311,23 @@ Two pieces of work that share a row can conflict. When you claim something,
 add a column for it with what it changes in each row, and check the other
 columns first. If your work and claimed work share a row, agree the order
 with the owner first. (P3, P4 and S1 are done, so their columns were removed
-on 2026-10-23; nothing else is claimed.) Paths are under `crates/pdms-web/`
+on 2026-10-23. The SharePoint live test changes no files unless it finds a
+fix.) Paths are under `crates/pdms-web/`
 unless they start with `crates/` or name a top-level folder.
 
-| Files | (no claimed work) |
+| Files | GS (Entra sync limited to one group) |
 | --- | --- |
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | |
-| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | |
-| Route table: `src/lib.rs`, `src/routes/mod.rs` | |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | |
-| Web errors and API: `src/error.rs`, `src/routes/api.rs` | |
-| Web tests: `crates/pdms-web/tests/` | |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | |
-| `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | |
-| `migrations/` | |
-| `.sqlx/` | |
-| `config/`, `install.sh`, `docker-compose.yml` | |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | `admin/entra.html` and its handler in `admin.rs`: the group field, **Test group**, **Depart these N people**, the reactivated list |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | No |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | Two routes under `/admin/entra` (Test group, Depart these N people) |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | No |
+| Web errors and API: `src/error.rs`, `src/routes/api.rs` | No. The "not in the PDMS group" sign-in message is in `routes/auth.rs` and `login.html` |
+| Web tests: `crates/pdms-web/tests/` | `entra.rs`, `oidc.rs` |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | None of these. GS changes `directory/entra_sync.rs`, `directory/entra_values.rs`, `auth/oidc.rs`, and the mock Graph used by tests |
+| `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | `settings.rs` and `config.rs`: `entra_sync.group_id` |
+| `migrations/` | Probably one (why the sync departed someone); the next free number |
+| `.sqlx/` | Yes |
+| `config/`, `install.sh`, `docker-compose.yml` | `config/pdms.example.toml`: `[entra_sync] group_id` |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
   and ADMIN_GUIDE. In this table, change only your own column. Take
