@@ -396,11 +396,8 @@ the page lists those values with counts. Make the Department field part of
 account creation. A department membership you add by hand in the mapped
 department counts as satisfying the mapping. A mapping you add, change, or
 remove applies at once to the people already synced with that value; you do
-not need a full resync. The one exception: if you change mappings while a
-sync is running (during the long first run, the nightly run at
-`[entra_sync] run_at`, or just after **Sync now** or **Full resync**), wait
-until **Last run** shows a time after your change, then press **Full
-resync**, so nobody is left on the old mapping.
+not need a full resync, even while a sync is running: the change waits for
+the person being synced and then applies to them too.
 
 Roles (administrator, legal counsel, records officer, auditor, appointments
 clerk, department head) are still assigned in PDMS. Memberships you add by

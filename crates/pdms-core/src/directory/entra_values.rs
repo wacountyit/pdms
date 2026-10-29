@@ -55,8 +55,27 @@ pub async fn list(db: &PgPool) -> CoreResult<Vec<EntraValue>> {
     .await?)
 }
 
+/// Advisory lock key ("PDMSEMAP") that orders mapping changes against the
+/// sync applying a person. A mapping change takes it exclusively, the sync
+/// takes it shared, each as the first statement of its transaction, so a
+/// person is never applied from a mapping that changes under them.
+///
+/// Lock order: the sync's own `entra_sync::LOCK_KEY` is taken first (and only
+/// by the run), then this one; a mapping change takes only this one. There is
+/// no cycle, so no deadlock.
+pub const MAPPING_LOCK: i64 = 0x5044_4d53_454d_4150;
+
 /// The department for a raw attribute value, if it is mapped.
 pub async fn lookup(db: &PgPool, value: Option<&str>) -> CoreResult<Option<Uuid>> {
+    let mut conn = db.acquire().await?;
+    lookup_in(&mut conn, value).await
+}
+
+/// `lookup` on a given connection (the sync's transaction).
+pub(super) async fn lookup_in(
+    conn: &mut PgConnection,
+    value: Option<&str>,
+) -> CoreResult<Option<Uuid>> {
     let Some(n) = value.map(normalize).filter(|n| !n.is_empty()) else {
         return Ok(None);
     };
@@ -64,7 +83,7 @@ pub async fn lookup(db: &PgPool, value: Option<&str>) -> CoreResult<Option<Uuid>
         "SELECT department_id FROM department_entra_values WHERE value_normalized = $1",
         n
     )
-    .fetch_optional(db)
+    .fetch_optional(conn)
     .await?)
 }
 
@@ -80,6 +99,9 @@ pub async fn upsert(db: &PgPool, ctx: &Ctx, value: &str, department_id: Uuid) ->
         ));
     }
     let mut tx = db.begin().await?;
+    sqlx::query!("SELECT pg_advisory_xact_lock($1)", MAPPING_LOCK)
+        .execute(&mut *tx)
+        .await?;
     let dept = sqlx::query_scalar!("SELECT name FROM departments WHERE id = $1", department_id)
         .fetch_optional(&mut *tx)
         .await?
@@ -125,6 +147,9 @@ pub async fn remove(db: &PgPool, ctx: &Ctx, value: &str) -> CoreResult<()> {
     ctx.require(Capability::ManageDirectory)?;
     let n = normalize(value);
     let mut tx = db.begin().await?;
+    sqlx::query!("SELECT pg_advisory_xact_lock($1)", MAPPING_LOCK)
+        .execute(&mut *tx)
+        .await?;
     let row = sqlx::query!(
         "DELETE FROM department_entra_values v USING departments d
           WHERE v.value_normalized = $1 AND d.id = v.department_id

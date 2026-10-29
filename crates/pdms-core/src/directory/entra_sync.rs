@@ -1027,9 +1027,17 @@ async fn apply(
         _ => false,
     };
 
-    let want = entra_values::lookup(&core.db, u.department.as_deref()).await?;
     let mut events = Vec::new();
     let mut tx = core.db.begin().await?;
+    // First statement: wait for any mapping change in progress, and hold off
+    // new ones until this person is written (lock order: LOCK_KEY, then this).
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock_shared($1)",
+        entra_values::MAPPING_LOCK
+    )
+    .execute(&mut *tx)
+    .await?;
+    let want = entra_values::lookup_in(&mut tx, u.department.as_deref()).await?;
     let (id, name, created, changed) = match existing {
         Some(e) if e.status != UserStatus::Active && !back => {
             // Never reactivated automatically, apart from the group rule

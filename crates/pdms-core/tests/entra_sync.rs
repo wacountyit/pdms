@@ -2441,3 +2441,66 @@ async fn someone_back_in_the_group_is_reactivated_when_they_sign_in() {
     assert_eq!(status_of(&core, d).await, "departed");
     assert!(group_mark(&core, d).await);
 }
+
+#[tokio::test]
+async fn a_mapping_change_waits_for_a_person_being_applied() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    // A sync holds the shared lock while it applies a person.
+    let mut tx = core.db.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock_shared($1)")
+        .bind(entra_values::MAPPING_LOCK)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let c2 = core.clone();
+    let task =
+        tokio::spawn(
+            async move { entra_values::upsert(&c2.db, &system(), "Road & Bridge", rb).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!task.is_finished(), "the mapping change must wait");
+    tx.commit().await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn a_person_is_applied_with_the_mapping_committed_before_them() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let rb = directory::create_department(&core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    m.add_user(member(
+        OID_A,
+        "Alice",
+        "alice@county.example",
+        Some("Road & Bridge"),
+    ));
+    // A mapping change is in flight: its lock is held, its row inserted.
+    let mut tx = core.db.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(entra_values::MAPPING_LOCK)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO department_entra_values (value_normalized, value_display, department_id)
+         VALUES ('road and bridge', 'Road & Bridge', $1)",
+    )
+    .bind(rb)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let c2 = core.clone();
+    let task = tokio::spawn(async move { entra_sync::run(&c2, &system()).await });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!task.is_finished(), "the sync must wait for the mapping");
+    tx.commit().await.unwrap();
+    task.await.unwrap().unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    assert_eq!(idp_departments(&core, a).await, vec![rb]);
+}
