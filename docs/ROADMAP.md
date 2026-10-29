@@ -14,7 +14,7 @@ record**. Read it first if you are picking up the work.
 
 ## 0. Where things stand
 
-Last updated 2026-10-28.
+Last updated 2026-10-29.
 
 ### 0.1 Done
 
@@ -285,17 +285,18 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
    Then work through [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) B6 to B9
    and §1.2. Set
    sub-projects 1 and 2 to **Done** when they pass.
-2. **Security fixes.** The owner holds the findings and hands them out one
-   area at a time. High and Medium items must be fixed before go-live (§3).
-3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
-   imports into, is merged.
-4. **GS, Entra sync limited to one group.** The
+2. **GS, Entra sync limited to one group.** The owner put it ahead of bulk
+   import on 2026-10-29. The
    [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md)
    was approved on 2026-10-28; write the plan, then build. It changes the
    Entra sync (`directory/entra_sync.rs`, `entra_values.rs`),
    `auth/oidc.rs`, `settings.rs`, and the Entra ID sync admin page. If the
    live test (item 1) needs fixes in the same code, agree the order with the
    owner.
+3. **Security fixes.** The owner holds the findings and hands them out one
+   area at a time. High and Medium items must be fixed before go-live (§3).
+4. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+   imports into, is merged.
 5. **First administrator account.** Email becomes optional for the
    break-glass administrator (§0.3). It needs a short spec first.
 
