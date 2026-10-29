@@ -304,3 +304,82 @@ fn certificate_lifetime_outside_1_to_3650_days_is_an_error() {
         );
     }
 }
+
+#[tokio::test]
+async fn get_all_follows_next_links_until_the_last_page() {
+    let (m, graph) = client().await;
+    m.add_group("G", "Staff");
+    for i in 1..=5 {
+        let id = format!("u{i}");
+        m.add_user(member(&id, &id, &format!("{id}@example.org"), None));
+        m.add_to_group("G", &id);
+    }
+    let ids: Vec<Value> = graph
+        .get_all("/groups/G/transitiveMembers/microsoft.graph.user?$select=id&$top=999")
+        .await
+        .unwrap();
+    assert_eq!(ids.len(), 5);
+    assert_eq!(count(&m, "transitiveMembers"), 3);
+}
+
+#[tokio::test]
+async fn transitive_members_count_nested_groups_once() {
+    let (m, graph) = client().await;
+    m.add_group("G", "Staff");
+    m.add_group("N", "Nested");
+    for id in ["u1", "u2"] {
+        m.add_user(member(id, id, &format!("{id}@example.org"), None));
+    }
+    m.add_to_group("G", "u1");
+    m.nest_group("G", "N");
+    m.add_to_group("N", "u1");
+    m.add_to_group("N", "u2");
+    let mut ids: Vec<String> = graph
+        .get_all::<Value>("/groups/G/transitiveMembers/microsoft.graph.user?$select=id&$top=999")
+        .await
+        .unwrap()
+        .iter()
+        .map(|v| v["id"].as_str().unwrap().to_owned())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["u1", "u2"]);
+    m.remove_from_group("N", "u2");
+    let ids: Vec<Value> = graph
+        .get_all("/groups/G/transitiveMembers/microsoft.graph.user")
+        .await
+        .unwrap();
+    assert_eq!(ids.len(), 1);
+    let g: Value = graph.get("/groups/N").await.unwrap();
+    assert_eq!(g["displayName"], "Nested");
+    assert!(matches!(
+        graph.get::<Value>("/groups/missing").await,
+        Err(GraphError::NotFound)
+    ));
+}
+
+#[tokio::test]
+async fn check_member_groups_is_transitive_and_groups_can_be_forbidden() {
+    let (m, graph) = client().await;
+    m.add_group("G", "Staff");
+    m.add_group("N", "Nested");
+    for id in ["u2", "u3"] {
+        m.add_user(member(id, id, &format!("{id}@example.org"), None));
+    }
+    m.nest_group("G", "N");
+    m.add_to_group("N", "u2");
+    let v: Value = graph
+        .post("/users/u2/checkMemberGroups", &json!({"groupIds": ["G"]}))
+        .await
+        .unwrap();
+    assert_eq!(v["value"], json!(["G"]));
+    let v: Value = graph
+        .post("/users/u3/checkMemberGroups", &json!({"groupIds": ["G"]}))
+        .await
+        .unwrap();
+    assert_eq!(v["value"], json!([]));
+    m.forbid_groups(true);
+    let r = graph
+        .get_all::<Value>("/groups/G/transitiveMembers/microsoft.graph.user")
+        .await;
+    assert!(matches!(r, Err(GraphError::Auth(_))), "{r:?}");
+}

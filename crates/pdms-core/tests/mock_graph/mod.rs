@@ -63,6 +63,17 @@ pub struct MockState {
     pub expire_delta: bool,
     pub uploads: Vec<(String, String, Vec<u8>)>,
     pub sp: sp::SpState,
+    pub groups: BTreeMap<String, MockGroup>,
+    /// While set, every group route answers 403 `Authorization_RequestDenied`.
+    pub groups_forbidden: bool,
+}
+
+/// A group: its direct user members (ids) and directly nested groups (ids).
+#[derive(Default, Clone)]
+pub struct MockGroup {
+    pub name: String,
+    pub users: Vec<String>,
+    pub groups: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -124,6 +135,41 @@ impl MockGraph {
         s.users.remove(id);
         s.pending
             .push(json!({ "id": id, "@removed": { "reason": reason } }));
+    }
+
+    pub fn add_group(&self, id: &str, name: &str) {
+        self.state.lock().unwrap().groups.insert(
+            id.to_owned(),
+            MockGroup {
+                name: name.to_owned(),
+                ..Default::default()
+            },
+        );
+    }
+
+    pub fn add_to_group(&self, group: &str, user: &str) {
+        let mut s = self.state.lock().unwrap();
+        let g = s.groups.get_mut(group).unwrap();
+        if !g.users.iter().any(|u| u == user) {
+            g.users.push(user.to_owned());
+        }
+    }
+
+    pub fn remove_from_group(&self, group: &str, user: &str) {
+        let mut s = self.state.lock().unwrap();
+        s.groups.get_mut(group).unwrap().users.retain(|u| u != user);
+    }
+
+    pub fn nest_group(&self, parent: &str, child: &str) {
+        let mut s = self.state.lock().unwrap();
+        let g = s.groups.get_mut(parent).unwrap();
+        if !g.groups.iter().any(|c| c == child) {
+            g.groups.push(child.to_owned());
+        }
+    }
+
+    pub fn forbid_groups(&self, on: bool) {
+        self.state.lock().unwrap().groups_forbidden = on;
     }
 
     pub fn fail_next(&self, status: u16, retry_after_secs: u64) {
@@ -274,6 +320,9 @@ async fn handle(
     if let Some(r) = sp::route(&mut s, &base, &method, api, &body) {
         return r;
     }
+    if let Some(r) = group_route(&s, &base, &method, api, &query, &body) {
+        return r;
+    }
     match (method, api) {
         (Method::GET, "/users/delta") => users_delta(&mut s, &base, &query),
         (Method::GET, "/users") => {
@@ -344,4 +393,95 @@ fn delta_page(s: &mut MockState, base: &str, offset: usize) -> Response {
         ));
     }
     json_resp(200, page)
+}
+
+/// Every user reachable from `group` through nested groups, once each, in id
+/// order, and only users that still exist.
+fn transitive_users(s: &MockState, group: &str) -> Vec<String> {
+    let mut seen_groups = std::collections::BTreeSet::new();
+    let mut users = std::collections::BTreeSet::new();
+    let mut todo = vec![group.to_owned()];
+    while let Some(g) = todo.pop() {
+        if !seen_groups.insert(g.clone()) {
+            continue;
+        }
+        if let Some(g) = s.groups.get(&g) {
+            users.extend(g.users.iter().filter(|u| s.users.contains_key(*u)).cloned());
+            todo.extend(g.groups.iter().cloned());
+        }
+    }
+    users.into_iter().collect()
+}
+
+/// The group routes. None of them touches `pending`: the users delta doesn't
+/// see group changes, as in real Entra.
+fn group_route(
+    s: &MockState,
+    base: &str,
+    method: &Method,
+    api: &str,
+    query: &str,
+    body: &[u8],
+) -> Option<Response> {
+    let members = api
+        .strip_prefix("/groups/")
+        .and_then(|r| r.strip_suffix("/transitiveMembers/microsoft.graph.user"));
+    let check = api
+        .strip_prefix("/users/")
+        .and_then(|r| r.strip_suffix("/checkMemberGroups"));
+    let one = api
+        .strip_prefix("/groups/")
+        .filter(|r| !r.is_empty() && !r.contains('/'));
+    let is_group_route = match *method {
+        Method::GET => members.is_some() || one.is_some(),
+        Method::POST => check.is_some(),
+        _ => false,
+    };
+    if !is_group_route {
+        return None;
+    }
+    if s.groups_forbidden {
+        return Some(graph_error(403, "Authorization_RequestDenied"));
+    }
+    if let Some(id) = one {
+        return Some(match s.groups.get(id) {
+            Some(g) => json_resp(200, json!({ "id": id, "displayName": g.name })),
+            None => graph_error(404, "Request_ResourceNotFound"),
+        });
+    }
+    if let Some(id) = members {
+        if !s.groups.contains_key(id) {
+            return Some(graph_error(404, "Request_ResourceNotFound"));
+        }
+        let all = transitive_users(s, id);
+        let params: HashMap<String, String> = serde_urlencoded::from_str(query).unwrap_or_default();
+        let offset: usize = params
+            .get("$skiptoken")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let end = (offset + s.page_size.max(1)).min(all.len());
+        let value: Vec<Value> = all[offset.min(end)..end]
+            .iter()
+            .map(|u| json!({ "id": u }))
+            .collect();
+        let mut page = json!({ "value": value });
+        if end < all.len() {
+            let base = s.link_base.clone().unwrap_or_else(|| base.to_owned());
+            page["@odata.nextLink"] = json!(format!(
+                "{base}/v1.0/groups/{id}/transitiveMembers/microsoft.graph.user?$skiptoken={end}"
+            ));
+        }
+        return Some(json_resp(200, page));
+    }
+    let user = check?;
+    let req: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let value: Vec<Value> = req["groupIds"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|g| transitive_users(s, g).iter().any(|u| u == user))
+        .map(|g| json!(g))
+        .collect();
+    Some(json_resp(200, json!({ "value": value })))
 }

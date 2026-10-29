@@ -176,6 +176,26 @@ impl GraphClient {
         })
     }
 
+    /// Follow `@odata.nextLink` from `start` until a page has none, and return
+    /// every item.
+    pub async fn get_all<T: DeserializeOwned>(&self, start: &str) -> Result<Vec<T>, GraphError> {
+        let mut items = Vec::new();
+        let mut next = start.to_owned();
+        for _ in 0..MAX_PAGES {
+            let page: RawPage<T> = self.get(&next).await?;
+            items.extend(page.value);
+            match page.next_link {
+                Some(n) => next = n,
+                None => return Ok(items),
+            }
+        }
+        Err(GraphError::Http {
+            status: 200,
+            code: "tooManyPages".into(),
+            message: format!("more than {MAX_PAGES} pages"),
+        })
+    }
+
     /// One chunk of an upload session. `range` is `(first byte, last byte, total)`.
     /// `Ok(None)` means "send the next chunk"; `Ok(Some(item))` is the finished file.
     pub async fn put_bytes(
