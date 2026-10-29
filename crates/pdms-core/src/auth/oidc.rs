@@ -18,6 +18,7 @@ use crate::auth::local::LoginSuccess;
 use crate::auth::session;
 use crate::config::OidcConfig;
 use crate::context::ClientInfo;
+use crate::directory::entra_sync::{self, SignInLookup};
 use crate::directory::sync;
 use crate::error::{CoreError, CoreResult};
 use crate::model::UserStatus;
@@ -32,6 +33,20 @@ type Client = CoreClient<
 >;
 
 pub const CALLBACK_PATH: &str = "/auth/oidc/callback";
+
+/// What someone outside the PDMS group sees when they sign in with Microsoft.
+pub const NOT_IN_GROUP_MESSAGE: &str = "You aren't in the PDMS group in Microsoft Entra ID, so you can't sign in to PDMS. Ask IT to add you.";
+
+/// The error a refused sign-in returns. Only "not in the PDMS group" is told
+/// to the person, so they know to ask IT; every other reason stays generic
+/// (the audit log has it).
+fn refusal(reason: &str) -> CoreError {
+    if reason == "not_in_group" {
+        CoreError::Validation(NOT_IN_GROUP_MESSAGE.into())
+    } else {
+        CoreError::Forbidden(None)
+    }
+}
 
 /// A configured, discovered OIDC provider.
 pub struct OidcProvider {
@@ -177,7 +192,7 @@ impl OidcProvider {
                     e = e.context("attempted_identifier", email.clone());
                 }
                 pdms_audit::record(&core.db, vec![e]).await?;
-                return Err(CoreError::Forbidden(None));
+                return Err(refusal(reason));
             }
         };
 
@@ -353,44 +368,52 @@ pub async fn resolve_identity(
     name: Option<&str>,
 ) -> CoreResult<Result<(Uuid, String), &'static str>> {
     let issuer = normalize_issuer(issuer);
+    let entra = core.config().entra_sync.enabled && core.graph().is_some();
     if let Some(found) = find_identity(core, issuer, subject).await? {
+        if found == Err("inactive")
+            && entra
+            && core.config().entra_sync.group().is_some()
+            && departed_from_group(core, issuer, subject).await?
+        {
+            return back_in_group(core, issuer, subject).await;
+        }
         return Ok(found);
     }
-    if core.config().entra_sync.enabled && core.graph().is_some() {
-        // Entra decides: enabled member or not, and the department.
-        return Ok(
-            match crate::directory::entra_sync::sync_one(core, subject).await {
-                Ok(Some(_)) => match find_identity(core, issuer, subject).await? {
-                    Some(found) => found,
-                    None => {
-                        // The sync stores the configured issuer and Graph's
-                        // object ID; this token's differ in form.
-                        tracing::error!(
-                            %issuer,
-                            %subject,
-                            "Entra has this person, but no account has this sign-in's issuer and subject; \
-                             check auth.oidc.issuer_url and subject_claim"
-                        );
-                        Err("not_provisioned")
-                    }
-                },
-                Ok(None) => {
-                    // A sync running at the same moment may have created the
-                    // account just now (its insert won).
-                    if let Some(found) = find_identity(core, issuer, subject).await? {
-                        found
-                    } else if email_taken(core, issuer, subject, email).await? {
-                        Err("email_in_use")
-                    } else {
-                        Err("not_provisioned")
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Entra lookup at first sign-in failed");
-                    Err("directory_unavailable")
+    if entra {
+        // Entra decides: enabled member (of the PDMS group, when one is
+        // set) or not, and the department.
+        return Ok(match entra_sync::sync_one(core, subject).await {
+            Ok(SignInLookup::Account(_)) => match find_identity(core, issuer, subject).await? {
+                Some(found) => found,
+                None => {
+                    // The sync stores the configured issuer and Graph's
+                    // object ID; this token's differ in form.
+                    tracing::error!(
+                        %issuer,
+                        %subject,
+                        "Entra has this person, but no account has this sign-in's issuer and subject; \
+                         check auth.oidc.issuer_url and subject_claim"
+                    );
+                    Err("not_provisioned")
                 }
             },
-        );
+            Ok(SignInLookup::NotInGroup) => Err("not_in_group"),
+            Ok(SignInLookup::NoAccount) => {
+                // A sync running at the same moment may have created the
+                // account just now (its insert won).
+                if let Some(found) = find_identity(core, issuer, subject).await? {
+                    found
+                } else if email_taken(core, issuer, subject, email).await? {
+                    Err("email_in_use")
+                } else {
+                    Err("not_provisioned")
+                }
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Entra lookup at first sign-in failed");
+                Err("directory_unavailable")
+            }
+        });
     }
     if !core.config().auth.oidc.auto_provision {
         return Ok(Err("not_provisioned"));
@@ -442,6 +465,42 @@ pub async fn resolve_identity(
     .await?;
     tx.commit().await?;
     Ok(Ok((id, display)))
+}
+
+/// Someone the sync departed for leaving the PDMS group signs in: Entra is
+/// asked whether they are back in it (spec GS §3). Only a member with an
+/// enabled account is reactivated, by the sync's own rule and audit; every
+/// other answer, and any Graph error, refuses the sign-in.
+async fn back_in_group(
+    core: &Core,
+    issuer: &str,
+    subject: &str,
+) -> CoreResult<Result<(Uuid, String), &'static str>> {
+    Ok(match entra_sync::sync_one(core, subject).await {
+        Ok(SignInLookup::Account(_)) => find_identity(core, issuer, subject)
+            .await?
+            .unwrap_or(Err("inactive")),
+        Ok(SignInLookup::NotInGroup) => Err("not_in_group"),
+        Ok(SignInLookup::NoAccount) => Err("inactive"),
+        Err(e) => {
+            tracing::error!(error = %e, "Entra lookup for a departed account at sign-in failed");
+            Err("directory_unavailable")
+        }
+    })
+}
+
+/// Whether this identity's account was departed by the sync for leaving the
+/// PDMS group (and not since changed by anyone else).
+async fn departed_from_group(core: &Core, issuer: &str, subject: &str) -> CoreResult<bool> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT departed_from_group FROM users
+            WHERE oidc_issuer = $1 AND oidc_subject = $2 AND status = 'departed'::user_status"#,
+        issuer,
+        subject,
+    )
+    .fetch_optional(&core.db)
+    .await?
+    .unwrap_or(false))
 }
 
 async fn find_identity(
@@ -535,6 +594,18 @@ mod tests {
         let cut = display_name(Some(&long)).unwrap();
         assert_eq!(cut.chars().count(), 200);
         assert!(cut.ends_with('é'), "cut on a character boundary");
+    }
+
+    #[test]
+    fn refusal_names_the_group_only_for_not_in_group() {
+        assert!(
+            matches!(refusal("not_in_group"), CoreError::Validation(m) if m == NOT_IN_GROUP_MESSAGE)
+        );
+        assert!(matches!(refusal("inactive"), CoreError::Forbidden(None)));
+        assert!(matches!(
+            refusal("directory_unavailable"),
+            CoreError::Forbidden(None)
+        ));
     }
 
     #[test]

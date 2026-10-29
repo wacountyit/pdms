@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 
 use common::*;
 use mock_graph::*;
+use pdms_core::directory::entra_sync::SignInLookup;
 use pdms_core::directory::{self, entra_sync, entra_values};
 use pdms_core::model::UserStatus;
 use pdms_core::{Core, CoreError};
@@ -691,17 +692,22 @@ async fn sync_one_reads_a_single_user() {
     let mut guest = member(OID_G, "Gwen", "gwen@partner.example", None);
     guest["userType"] = json!("Guest");
     m.add_user(guest);
-    let a = entra_sync::sync_one(&core, OID_A).await.unwrap().unwrap();
+    let SignInLookup::Account(a) = entra_sync::sync_one(&core, OID_A).await.unwrap() else {
+        panic!("Alice is a member");
+    };
     assert_eq!(idp_departments(&core, a).await, vec![rb]);
     assert_eq!(
         entra_sync::sync_one(&core, OID_A).await.unwrap(),
-        Some(a),
+        SignInLookup::Account(a),
         "idempotent"
     );
-    assert_eq!(entra_sync::sync_one(&core, OID_G).await.unwrap(), None);
+    assert_eq!(
+        entra_sync::sync_one(&core, OID_G).await.unwrap(),
+        SignInLookup::NoAccount
+    );
     assert_eq!(
         entra_sync::sync_one(&core, OID_E).await.unwrap(),
-        None,
+        SignInLookup::NoAccount,
         "unknown in Entra"
     );
     assert!(matches!(
@@ -713,7 +719,10 @@ async fn sync_one_reads_a_single_user() {
     older["userType"] = serde_json::Value::Null;
     m.add_user(older);
     assert!(
-        entra_sync::sync_one(&core, OID_F).await.unwrap().is_some(),
+        matches!(
+            entra_sync::sync_one(&core, OID_F).await.unwrap(),
+            SignInLookup::Account(_)
+        ),
         "a member"
     );
     let mut odd = member(OID_D, "Dora", "dora@partner.example", None);
@@ -721,7 +730,7 @@ async fn sync_one_reads_a_single_user() {
     m.add_user(odd);
     assert_eq!(
         entra_sync::sync_one(&core, OID_D).await.unwrap(),
-        None,
+        SignInLookup::NoAccount,
         "any spelling of Guest is a guest"
     );
 }
@@ -2247,4 +2256,188 @@ async fn a_group_departure_later_deleted_from_entra_loses_its_mark() {
     let r = entra_sync::run(&grouped, &system()).await.unwrap();
     assert!(r.reactivated.is_empty(), "{r:?}");
     assert_eq!(status_of(&core, a).await, "departed");
+}
+
+/// `POST /users/{oid}/checkMemberGroups` requests so far.
+fn group_checks(m: &MockGraph, oid: &str) -> usize {
+    let line = format!("POST /v1.0/users/{oid}/checkMemberGroups");
+    m.requests().iter().filter(|r| **r == line).count()
+}
+
+#[tokio::test]
+async fn first_sign_in_checks_the_group() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_user(member(OID_B, "Ned", "ned@county.example", None));
+    m.add_user(member(OID_D, "Dora", "dora@county.example", None));
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, OID_A);
+    m.add_to_group(GROUP_P, OID_D);
+    let core = with_group(&core, GROUP_P).await;
+
+    let (a, name) = resolve_identity(&core, ISSUER, OID_A, Some("alice@county.example"), None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(Some(a), id_of(&core, OID_A).await);
+    assert_eq!(name, "Alice");
+    assert_eq!(group_checks(&m, OID_A), 1);
+
+    // Ned is not in the group: refused, with no account, and never read.
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_B, Some("ned@county.example"), None)
+            .await
+            .unwrap(),
+        Err("not_in_group")
+    );
+    assert_eq!(id_of(&core, OID_B).await, None, "no account for Ned");
+    assert!(
+        m.requests()
+            .contains(&format!("POST /v1.0/users/{OID_B}/checkMemberGroups")),
+        "{:?}",
+        m.requests()
+    );
+    assert_eq!(single_reads(&m, OID_B), 0, "a non-member is not read");
+
+    // The group can't be checked: refused, never let in.
+    m.forbid_groups(true);
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_D, Some("dora@county.example"), None)
+            .await
+            .unwrap(),
+        Err("directory_unavailable")
+    );
+    assert_eq!(id_of(&core, OID_D).await, None, "no account for Dora");
+    assert_eq!(single_reads(&m, OID_D), 0);
+}
+
+/// The actor of the newest `user.status_changed` audit row for the user.
+async fn last_status_actor(core: &Core, user: Uuid) -> Option<String> {
+    sqlx::query_scalar(
+        "SELECT actor_display FROM audit_log
+          WHERE action = 'user.status_changed' AND object_id = $1
+          ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(user.to_string())
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn someone_back_in_the_group_is_reactivated_when_they_sign_in() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let people = [
+        (OID_A, "Alice", "alice@county.example"),
+        (OID_B, "Bob", "bob@county.example"),
+        (OID_C, "Carl", "carl@county.example"),
+        (OID_D, "Dora", "dora@county.example"),
+        (OID_E, "Eve", "eve@county.example"),
+    ];
+    m.add_group(GROUP_P, "PDMS");
+    for (oid, name, mail) in people {
+        m.add_user(member(oid, name, mail, None));
+        m.add_to_group(GROUP_P, oid);
+    }
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let [a, b, c, d, e] = {
+        let mut ids = [Uuid::nil(); 5];
+        for (i, (oid, _, _)) in people.iter().enumerate() {
+            ids[i] = id_of(&core, oid).await.unwrap();
+        }
+        ids
+    };
+
+    // Alice, Carl, Dora and Eve left the group and were departed for it;
+    // Alice, Dora and Eve are back in it. Bob was departed by hand.
+    for (oid, id) in [(OID_A, a), (OID_C, c), (OID_D, d), (OID_E, e)] {
+        m.remove_from_group(GROUP_P, oid);
+        assert!(
+            directory::depart_from_group(&core.db, &system(), id)
+                .await
+                .unwrap()
+        );
+    }
+    for oid in [OID_A, OID_D, OID_E] {
+        m.add_to_group(GROUP_P, oid);
+    }
+    directory::set_user_status(&core.db, &system(), b, UserStatus::Departed)
+        .await
+        .unwrap();
+
+    // Alice is back in the group: reactivated and signed in.
+    assert_eq!(
+        resolve_identity(&grouped, ISSUER, OID_A, None, None)
+            .await
+            .unwrap(),
+        Ok((a, "Alice".to_owned()))
+    );
+    assert_eq!(status_of(&core, a).await, "active");
+    assert!(!group_mark(&core, a).await);
+    assert_eq!(
+        last_status_reason(&core, a).await.as_deref(),
+        Some("is back in the PDMS group")
+    );
+    assert_eq!(
+        last_status_actor(&core, a).await.as_deref(),
+        Some("entra-sync")
+    );
+
+    // Carl is still outside the group.
+    assert_eq!(
+        resolve_identity(&grouped, ISSUER, OID_C, None, None)
+            .await
+            .unwrap(),
+        Err("not_in_group")
+    );
+    assert_eq!(status_of(&core, c).await, "departed");
+    assert!(group_mark(&core, c).await, "still marked");
+
+    // Bob was departed by hand: refused as before, and Graph is not asked.
+    assert_eq!(
+        resolve_identity(&grouped, ISSUER, OID_B, None, None)
+            .await
+            .unwrap(),
+        Err("inactive")
+    );
+    assert_eq!(group_checks(&m, OID_B), 0, "{:?}", m.requests());
+    assert_eq!(single_reads(&m, OID_B), 0);
+    assert_eq!(status_of(&core, b).await, "departed");
+
+    // Without a group, nobody is reactivated at sign-in, and Graph is not asked.
+    let asked = m.requests().len();
+    assert_eq!(
+        resolve_identity(&core, ISSUER, OID_D, None, None)
+            .await
+            .unwrap(),
+        Err("inactive")
+    );
+    assert_eq!(m.requests().len(), asked, "{:?}", m.requests());
+    assert_eq!(status_of(&core, d).await, "departed");
+
+    // Eve is back in the group but disabled in Entra: she stays departed.
+    m.update_user(OID_E, json!({ "accountEnabled": false }));
+    assert_eq!(
+        resolve_identity(&grouped, ISSUER, OID_E, None, None)
+            .await
+            .unwrap(),
+        Err("inactive")
+    );
+    assert_eq!(status_of(&core, e).await, "departed");
+
+    // The group can't be checked: Dora is refused and stays departed.
+    m.forbid_groups(true);
+    assert_eq!(
+        resolve_identity(&grouped, ISSUER, OID_D, None, None)
+            .await
+            .unwrap(),
+        Err("directory_unavailable")
+    );
+    assert_eq!(status_of(&core, d).await, "departed");
+    assert!(group_mark(&core, d).await);
 }

@@ -10,8 +10,9 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use axum_extra::extract::{CookieJar, PrivateCookieJar};
 use pdms_audit::{AuditEvent, Category, Outcome};
+use pdms_core::CoreError;
 use pdms_core::auth::local::{self, LoginError, LoginFailure};
-use pdms_core::auth::oidc::{FlowState, safe_return_to};
+use pdms_core::auth::oidc::{FlowState, NOT_IN_GROUP_MESSAGE, safe_return_to};
 use pdms_core::auth::session;
 use pdms_core::crypto::new_token;
 use serde::{Deserialize, Serialize};
@@ -257,6 +258,18 @@ pub struct CallbackQuery {
     error_description: Option<String>,
 }
 
+/// The sign-in page's message for a refused Microsoft sign-in.
+const SSO_FAILED: &str = "Single sign-on failed. Try again, or contact your administrator.";
+
+/// Someone outside the PDMS group is told so, to ask IT; every other refusal
+/// gets the generic message (the audit log records the reason).
+fn sso_failure_message(e: &CoreError) -> &'static str {
+    match e {
+        CoreError::Validation(m) if m == NOT_IN_GROUP_MESSAGE => NOT_IN_GROUP_MESSAGE,
+        _ => SSO_FAILED,
+    }
+}
+
 pub async fn oidc_callback(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
@@ -269,12 +282,12 @@ pub async fn oidc_callback(
     let mut cookie = read_login_cookie(&state, &jar);
     let flow = cookie.oidc.take();
     let jar = jar.add(login_cookie(&state, &cookie));
-    let failed = |jar| {
+    let failed = |jar, message: &str| {
         render_login(
             &state,
             jar,
             "/",
-            Some("Single sign-on failed. Try again, or contact your administrator."),
+            Some(message),
             None,
             StatusCode::UNAUTHORIZED,
         )
@@ -301,10 +314,10 @@ pub async fn oidc_callback(
             ],
         )
         .await?;
-        return failed(jar);
+        return failed(jar, SSO_FAILED);
     }
     let (Some(flow), Some(code), Some(returned_state)) = (flow, q.code, q.state) else {
-        return failed(jar);
+        return failed(jar, SSO_FAILED);
     };
     let return_to = flow.return_to.clone();
     match oidc
@@ -316,8 +329,11 @@ pub async fn oidc_callback(
             let plain = CookieJar::new().add(session_cookie(&state, ok.token));
             Ok((jar, plain, Redirect::to(&return_to)).into_response())
         }
-        Err(pdms_core::CoreError::Unauthenticated | pdms_core::CoreError::Forbidden(_)) => {
-            failed(jar)
+        Err(e)
+            if matches!(e, CoreError::Unauthenticated | CoreError::Forbidden(_))
+                || matches!(&e, CoreError::Validation(m) if m == NOT_IN_GROUP_MESSAGE) =>
+        {
+            failed(jar, sso_failure_message(&e))
         }
         Err(e) => Err(e.into()),
     }
@@ -347,4 +363,24 @@ pub async fn logout(State(state): State<AppState>, user: CurrentUser) -> AppResu
     tx.commit().await.map_err(pdms_core::CoreError::from)?;
     let jar = CookieJar::new().remove(removal(&state, state.cookies.session));
     Ok((jar, Redirect::to("/login")).into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sso_failure_message_shows_the_group_case() {
+        let generic = "Single sign-on failed. Try again, or contact your administrator.";
+        assert_eq!(
+            sso_failure_message(&CoreError::Validation(NOT_IN_GROUP_MESSAGE.into())),
+            NOT_IN_GROUP_MESSAGE
+        );
+        assert_eq!(sso_failure_message(&CoreError::Unauthenticated), generic);
+        assert_eq!(sso_failure_message(&CoreError::Forbidden(None)), generic);
+        assert_eq!(
+            sso_failure_message(&CoreError::Validation("other".into())),
+            generic
+        );
+    }
 }

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT departed_from_group FROM users\n            WHERE oidc_issuer = $1 AND oidc_subject = $2 AND status = 'departed'::user_status",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "departed_from_group",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "departed_from_group"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "300023b24a016bb68c323e3f4e5d0a6ff0e6eb4c6406699825e4e99cb28c97a0"
+}

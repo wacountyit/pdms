@@ -37,10 +37,15 @@
 //!   round did not list is gone from Entra, not just from the group, and is
 //!   left to the sweep above;
 //! - someone the sync departed for leaving the group is reactivated once
-//!   they are back in it, with an enabled member account. A departure made by
+//!   they are back in it, with an enabled member account: at the next run, or
+//!   when they sign in with Microsoft ([`sync_one`]). A departure made by
 //!   hand, or because Entra removed or disabled the account, is never undone:
 //!   when Entra later reports such a person removed, disabled or a guest, or a
 //!   complete round no longer lists them, the departure becomes Entra's.
+//!
+//! At sign-in with a group set, [`sync_one`] asks Entra whether the person is
+//! in it before anything else: someone outside it is refused, without an
+//! account, and a Graph error refuses the sign-in too.
 //!
 //! Accounts are matched by issuer and Entra object ID only, never by email.
 
@@ -882,9 +887,32 @@ async fn record_failure(db: &PgPool, error: &str) -> CoreResult<()> {
     Ok(())
 }
 
-/// Look one account up in Entra and apply it (first sign-in). `None`: not an
-/// enabled member, unknown to Entra, or blocked (see the log).
-pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
+/// What Entra says about someone signing in with Microsoft.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignInLookup {
+    /// An enabled member (of the PDMS group, when one is set) with an active
+    /// account: created, updated or reactivated just now.
+    Account(Uuid),
+    /// A PDMS group is set and the person is not in it. Nothing was read or
+    /// changed.
+    NotInGroup,
+    /// Not an enabled member, unknown to Entra, or blocked (see the log).
+    NoAccount,
+}
+
+/// `POST /users/{id}/checkMemberGroups`: the groups of those asked that the
+/// user is in, directly or through a group inside them.
+#[derive(Deserialize)]
+struct MemberGroups {
+    value: Vec<String>,
+}
+
+/// Look one account up in Entra and apply it, at sign-in. With a PDMS group
+/// set, Entra is first asked whether the person is in it: someone outside it
+/// is refused without being read, and a member is applied as one (which
+/// reactivates an account the sync departed for leaving the group). Any Graph
+/// error is returned, so the sign-in is refused, never let through.
+pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<SignInLookup> {
     let oid = Uuid::parse_str(oid)
         .map_err(|_| CoreError::validation("not an Entra object ID"))?
         .hyphenated()
@@ -892,11 +920,27 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
     let graph = graph(core)?;
     let config = core.config();
     let issuer = entra_issuer(&config)?;
+    let membership = match config.entra_sync.group() {
+        Some(group) => {
+            let found: MemberGroups = graph
+                .post(
+                    &format!("/users/{oid}/checkMemberGroups"),
+                    &json!({ "groupIds": [&group] }),
+                )
+                .await
+                .map_err(group_error)?;
+            if !found.value.iter().any(|g| g.eq_ignore_ascii_case(&group)) {
+                return Ok(SignInLookup::NotInGroup);
+            }
+            Membership::Member
+        }
+        None => Membership::Everyone,
+    };
     let attribute = config.entra_sync.attribute.as_str();
     let path = format!("/users/{oid}?$select={}", select_list(attribute));
     let v: Value = match graph.get(&path).await {
         Ok(v) => v,
-        Err(GraphError::NotFound) => return Ok(None),
+        Err(GraphError::NotFound) => return Ok(SignInLookup::NoAccount),
         Err(e) => return Err(e.into()),
     };
     let user = parse_user(&v, attribute)
@@ -907,14 +951,14 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<Option<Uuid>> {
         &Ctx::system("entra-sync"),
         &issuer,
         &user,
-        Membership::Everyone,
+        membership,
         &mut report,
     )
     .await?;
     for e in &report.errors {
         tracing::warn!(oid = %oid, problem = %e, "Entra sign-in lookup");
     }
-    Ok(id)
+    Ok(id.map_or(SignInLookup::NoAccount, SignInLookup::Account))
 }
 
 /// Apply one account. Returns the PDMS user ID when the person is an active member.
