@@ -478,6 +478,10 @@ pub(crate) async fn flag_changed(
     }
 }
 
+/// Shown when a view finds the file changed outside PDMS (it has been
+/// flagged by then).
+const NOT_SHOWN: &str = "A file of this document was changed outside PDMS, so it can't be shown. An administrator has been alerted.";
+
 /// Copy a version's file out of SharePoint into the spool directory,
 /// verified, so it can be uploaded again as a new version.
 pub(crate) async fn spool_copy(
@@ -487,13 +491,50 @@ pub(crate) async fn spool_copy(
     expected: BlobHash,
     size: u64,
 ) -> CoreResult<SpooledFile> {
+    spool_verified(core, document_id, version_no, expected, size, |e| {
+        CoreError::Conflict(format!("The earlier file could not be read: {e}"))
+    })
+    .await
+}
+
+/// Copy a version's file out of SharePoint into the spool directory,
+/// verified, so it is checked in full before any of it is shown. A file that
+/// doesn't match is a `Conflict` here.
+pub(crate) async fn spool_checked(
+    core: &Core,
+    document_id: Uuid,
+    version_no: i32,
+    expected: BlobHash,
+    size: u64,
+) -> CoreResult<SpooledFile> {
+    spool_verified(core, document_id, version_no, expected, size, |e| {
+        let changed = e.get_ref().is_some_and(|i| i.is::<ChangedOutside>());
+        if changed {
+            CoreError::Conflict(NOT_SHOWN.into())
+        } else {
+            unavailable(READ_UNAVAILABLE, e)
+        }
+    })
+    .await
+}
+
+/// Read a version's file through [`open`] into a spool file. `read_error`
+/// words a failure while reading, a failed check included. The spool file
+/// is removed on every error.
+async fn spool_verified(
+    core: &Core,
+    document_id: Uuid,
+    version_no: i32,
+    expected: BlobHash,
+    size: u64,
+    read_error: impl Fn(std::io::Error) -> CoreError,
+) -> CoreResult<SpooledFile> {
     let mut stream = open(core, document_id, version_no, expected, size).await?;
     let mut w = SpoolWriter::create(&core.config().storage.spool_path, size.max(1))
         .await
         .map_err(CoreError::internal)?;
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk
-            .map_err(|e| CoreError::Conflict(format!("The earlier file could not be read: {e}")))?;
+        let chunk = chunk.map_err(&read_error)?;
         w.write(&chunk).await.map_err(CoreError::internal)?;
     }
     let f = w.finish().await.map_err(CoreError::internal)?;

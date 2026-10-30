@@ -1873,14 +1873,13 @@ async fn open_file_as(
     };
     let hash =
         BlobHash::from_slice(&v.blob_sha256).ok_or_else(|| CoreError::internal("bad blob hash"))?;
-    let stream = filestore::open(
-        core,
-        id,
-        v.version_no,
-        hash,
-        u64::try_from(v.size_bytes).unwrap_or(0),
-    )
-    .await?;
+    let size = u64::try_from(v.size_bytes).unwrap_or(0);
+    // An inline answer is shown as it arrives, so it is checked in full first.
+    let stream = if disposition == Disposition::Inline {
+        filestore::open_checked(core, id, v.version_no, hash, size).await?
+    } else {
+        filestore::open(core, id, v.version_no, hash, size).await?
+    };
     pdms_audit::record(
         &core.db,
         vec![

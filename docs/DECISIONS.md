@@ -1187,8 +1187,9 @@ Amends D-027. Design: the DV
   table open it in a new tab. It calls the same core function as a download,
   so the `View` permission, visibility (D-085, D-090) and the stop on a
   SharePoint file changed outside PDMS (D-105) apply unchanged. A file
-  paused by that check can't be viewed either. A type not on the list is
-  sent exactly as a download is (`attachment`).
+  paused by that check can't be viewed either, and a SharePoint file is
+  checked in full before it is shown. A type not on the list is sent
+  exactly as a download is (`attachment`).
 - **A viewable file is sent inline** with `nosniff`, `Cache-Control:
   private, no-store`, and the real file name for the viewer's own Save. No
   `Accept-Ranges` header is sent, so the viewer fetches the file once and

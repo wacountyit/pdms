@@ -343,13 +343,13 @@ top-level folder.
 | Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | |
 | Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | `static/app.css`: spacing in the Files table's actions cell, if needed |
 | Route table: `src/lib.rs`, `src/routes/mod.rs` | one route: `/documents/{id}/versions/{n}/view`; also `src/middleware.rs` (the view policy), which no row lists |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | `show.html` (View links); `documents.rs` (`view_version`, `file_response`, `VersionRow.viewable`) |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | `show.html` (View links, the paused-file notice); `documents.rs` (`view_version`, `file_response`, `VersionRow.viewable`) |
 | Web errors and API: `src/error.rs`, `src/routes/api.rs` | |
-| Web tests: `crates/pdms-web/tests/` | `documents.rs` |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | new `documents/viewing.rs`; `open_file` and `view_file` in `documents/service.rs` |
+| Web tests: `crates/pdms-web/tests/` | `documents.rs`, `sharepoint_admin.rs` |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | new `documents/viewing.rs`; `open_file` and `view_file` in `documents/service.rs`; `open_checked` in `documents/filestore.rs`; `open` and the spool copies in `sharepoint/files.rs` |
 | `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | |
 | `migrations/` | |
-| `.sqlx/` | |
+| `.sqlx/` | one query (`sharepoint::open`) |
 | `config/`, `install.sh`, `docker-compose.yml` | |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README

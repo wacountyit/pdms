@@ -348,7 +348,9 @@ document files in one SharePoint library through Microsoft Graph (P2's
   (`CoreError::Conflict`) before SharePoint is asked for it. The stream holds
   back its last piece until the whole file has matched, so it completes only
   for a matching file. A mismatch ends the stream with an error, marks the
-  file `changed_outside`, and is audited in the same transaction.
+  file `changed_outside`, and is audited in the same transaction. A view
+  (`filestore::open_checked`) is spooled and checked in full before its
+  first byte is sent; the spool copy is deleted when the answer ends.
 - **Placement:** the mirror job (§8) applies names, columns and moves.
   Changes that narrow who can browse a document (`layout::narrows`) move the
   folder before the change is saved and are refused if SharePoint is down.

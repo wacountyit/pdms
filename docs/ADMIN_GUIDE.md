@@ -656,7 +656,9 @@ and WebP. PDMS goes by the type it found in the file's content at upload, not
 by the file name. Word, Excel, PowerPoint, OpenDocument, RTF, TIFF, text, CSV
 and email files show only **Download**.
 - **Same rules as a download.** Whoever may download a file may view it, and
-  a SharePoint file changed outside PDMS is stopped the same way.
+  a SharePoint file changed outside PDMS is stopped the same way. PDMS
+  checks a SharePoint file in full before showing it, using the spool
+  folder.
 - **Why only some types.** A file shown in the browser opens as a page on
   PDMS's own address, so PDMS shows only types a browser displays safely, and
   it adds a stricter security policy to the answer.

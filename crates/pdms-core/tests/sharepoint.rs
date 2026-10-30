@@ -616,6 +616,80 @@ async fn a_changed_file_never_arrives_complete() {
 }
 
 #[tokio::test]
+async fn a_view_is_checked_before_anything_is_shown() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let spool = core.config().storage.spool_path.clone();
+    let spooled = || std::fs::read_dir(&spool).map_or(0, Iterator::count);
+
+    // A file changed in SharePoint: refused before anything is shown.
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Fuel",
+        Visibility::Department,
+        Some(("a.pdf", &pdf_of_len("original terms", 2000))),
+    )
+    .await;
+    let ext = external_id(&core, id).await;
+    let folder = format!("Departments/Road and Bridge/{ext} – Fuel");
+    let name = sp.names(&folder).pop().unwrap();
+    sp.tamper(
+        &format!("{folder}/{name}"),
+        &pdf_of_len("edited in SharePoint", 2000),
+    );
+    let before = spooled();
+    let sent = downloads(&core).await;
+    let e = documents::view_file(&core, &ctx, id, 1).await.err();
+    assert!(
+        matches!(&e, Some(CoreError::Conflict(m)) if m.contains("can't be shown")),
+        "{e:?}"
+    );
+    assert_eq!(file_state(&core, id).await, "changed_outside");
+    assert_eq!(downloads(&core).await, sent, "nothing was sent");
+    assert_eq!(spooled(), before, "no copy is left in the spool folder");
+
+    // An untouched file is shown whole, from a checked copy that is removed
+    // once it has been sent, or when the answer is dropped.
+    let bytes = pdf("Lease terms");
+    let id = new_doc(
+        &core,
+        &ctx,
+        dept,
+        alice,
+        "Lease",
+        Visibility::Department,
+        Some(("a.pdf", &bytes)),
+    )
+    .await;
+    let before = spooled();
+    let view = documents::view_file(&core, &ctx, id, 1).await.unwrap();
+    assert_eq!(view.disposition, documents::Disposition::Inline);
+    assert_eq!(
+        spooled(),
+        before + 1,
+        "checked from a copy in the spool folder"
+    );
+    let mut stream = view.stream;
+    let mut got = Vec::new();
+    while let Some(c) = stream.next().await {
+        got.extend_from_slice(&c.unwrap());
+    }
+    assert_eq!(got, bytes);
+    assert_eq!(spooled(), before, "the copy is removed once sent");
+    drop(stream);
+    let view = documents::view_file(&core, &ctx, id, 1).await.unwrap();
+    assert_eq!(spooled(), before + 1);
+    drop(view);
+    assert_eq!(spooled(), before, "the copy is removed when dropped");
+    assert_eq!(downloads(&core).await, sent + 2);
+}
+
+#[tokio::test]
 async fn a_paused_file_is_refused_before_anything_is_sent() {
     let sp = MockGraph::start().await;
     let (core, _db) = sp_core(&sp).await;

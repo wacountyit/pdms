@@ -6,10 +6,12 @@
 
 use std::path::Path;
 
+use bytes::Bytes;
 use pdms_authz::Visibility;
 use pdms_storage::spool::SpooledFile;
 use pdms_storage::{BlobHash, ByteStream};
 use sqlx::PgConnection;
+use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 use super::files::StoredFile;
@@ -109,6 +111,46 @@ pub async fn open(
         .get(hash)
         .await
         .map_err(|e| CoreError::internal(format!("reading blob: {e}")))
+}
+
+/// Open the file current at `version_no`, checked in full before the first
+/// byte is returned, for an answer that is shown as it arrives (a view). In
+/// SharePoint mode a verified copy is spooled first, so a file that doesn't
+/// match PDMS's record is an error here, never partway through the stream;
+/// the copy is deleted when the stream ends or is dropped. Otherwise the
+/// same as [`open`].
+pub async fn open_checked(
+    core: &Core,
+    document_id: Uuid,
+    version_no: i32,
+    hash: BlobHash,
+    size: u64,
+) -> CoreResult<ByteStream> {
+    if core.sharepoint().is_none() {
+        return open(core, document_id, version_no, hash, size).await;
+    }
+    let copy = sharepoint::spool_checked(core, document_id, version_no, hash, size).await?;
+    let file = tokio::fs::File::open(&copy.path)
+        .await
+        .map_err(CoreError::internal)?;
+    Ok(spooled_stream(file, copy))
+}
+
+/// Stream `file`, the open spool file `copy`. `copy` lives in the stream's
+/// state, so the spool file is deleted when the stream ends or is dropped.
+fn spooled_stream(file: tokio::fs::File, copy: SpooledFile) -> ByteStream {
+    let state = Some((file, copy, vec![0u8; 64 * 1024]));
+    Box::pin(futures_util::stream::unfold(state, |state| async move {
+        let (mut file, copy, mut buf) = state?;
+        match file.read(&mut buf).await {
+            Ok(0) => None,
+            Ok(n) => {
+                let chunk = Bytes::copy_from_slice(buf.get(..n).unwrap_or_default());
+                Some((Ok(chunk), Some((file, copy, buf))))
+            }
+            Err(e) => Some((Err(e), None)),
+        }
+    }))
 }
 
 /// Open the file of one `document_versions` row.

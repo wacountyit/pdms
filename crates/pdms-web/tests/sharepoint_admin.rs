@@ -1,29 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PDMS contributors
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! Administration → SharePoint and the document-page notice. This app stores
-//! files locally; the SharePoint records are written directly, as the change
-//! check would leave them.
+//! Administration → SharePoint and the document-page notice. Files are stored
+//! locally (the last test's app stores them in SharePoint but never reaches
+//! it); the SharePoint records are written directly, as the change check
+//! would leave them.
 
 mod support;
 
 use axum::http::StatusCode;
 use pdms_authz::Visibility;
-use pdms_core::directory;
+use pdms_core::config::{GraphConfig, Secret, StorageBackend};
 use pdms_core::documents::{self, DocumentStatus, MetadataInput, NewDocument, types};
+use pdms_core::{Core, directory};
 use support::*;
 use uuid::Uuid;
 
 /// A document with one file, recorded as edited in SharePoint by Pat Clerk.
 /// Returns (document, file version).
 async fn flagged_document(
-    app: &App,
+    core: &Core,
     owner: Uuid,
     dept: Uuid,
     visibility: Visibility,
     title: &str,
 ) -> (Uuid, Uuid) {
-    let core = &app.core;
     let mut w =
         pdms_storage::spool::SpoolWriter::create(&core.config().storage.spool_path, 1 << 20)
             .await
@@ -87,7 +88,7 @@ async fn sharepoint_panel_is_for_administrators() {
     let (admin, admin_totp) = user(core, "admin@x.org", Some(dept), Some("admin")).await;
     let (clerk, clerk_totp) = user(core, "clerk@x.org", Some(dept), None).await;
     let (doc, version) = flagged_document(
-        &app,
+        core,
         admin,
         dept,
         Visibility::Department,
@@ -96,7 +97,7 @@ async fn sharepoint_panel_is_for_administrators() {
     .await;
     // A Restricted document the administrator cannot open.
     let (secret_doc, _) = flagged_document(
-        &app,
+        core,
         clerk,
         dept,
         Visibility::Restricted,
@@ -247,7 +248,7 @@ async fn files_stored_here_keep_sharepoint_storage_off() {
     let rb = directory::create_department(&app.core.db, &system(), "RB", "Road and Bridge")
         .await
         .unwrap();
-    flagged_document(&app, admin, rb, Visibility::Department, "Agreement").await;
+    flagged_document(&app.core, admin, rb, Visibility::Department, "Agreement").await;
     let mut b = Browser::new(&app);
     b.login("admin@x.org", &secret).await;
     let page = b.get("/admin/sharepoint").await;
@@ -272,4 +273,63 @@ async fn settings_from_the_configuration_file_are_shown_locked() {
     assert!(page.body.contains(r#"aria-describedby="sp-site-locked""#));
     assert!(page.body.contains("<code>[storage] backend</code>"));
     assert!(!page.body.contains("Turn SharePoint storage on"));
+}
+
+/// A file paused by the SharePoint check is refused at both addresses, as a
+/// page with the page policy. SharePoint is never asked for it, so this app
+/// stores files in SharePoint but has no Graph to reach (port 9).
+#[tokio::test]
+async fn a_paused_file_is_refused_at_both_addresses() {
+    let mut config = config();
+    config.graph = GraphConfig {
+        tenant_id: "tenant-1".into(),
+        client_id: "client-1".into(),
+        certificate: Secret::new(
+            pdms_core::graph::cert::generate("PDMS test", 30)
+                .unwrap()
+                .pem,
+        ),
+        authority_url: "http://127.0.0.1:9".into(),
+        api_url: "http://127.0.0.1:9/v1.0".into(),
+        timeout_seconds: 5,
+        max_retries: 0,
+    };
+    config.sharepoint.site_url = "https://contoso.sharepoint.com/sites/PDMSTest".into();
+    let local = config.clone();
+    config.storage.backend = StorageBackend::SharePoint;
+    let app = app_with(config).await;
+    // The document is created through a core that stores files here; its
+    // file is then recorded as a SharePoint file the check paused.
+    let creator = Core::new(app.core.db.clone(), local).unwrap();
+    let dept = directory::create_department(&app.core.db, &system(), "RB", "Road and Bridge")
+        .await
+        .unwrap();
+    let (clerk, clerk_totp) = user(&app.core, "clerk@x.org", Some(dept), None).await;
+    let (doc, _) = flagged_document(
+        &creator,
+        clerk,
+        dept,
+        Visibility::Department,
+        "Fuel Supply Agreement",
+    )
+    .await;
+    let mut c = Browser::new(&app);
+    c.login("clerk@x.org", &clerk_totp).await;
+    let before = actions(&app.core).await.len();
+    for path in [
+        format!("/documents/{doc}/download"),
+        format!("/documents/{doc}/versions/1/view"),
+    ] {
+        let r = c.get(&path).await;
+        assert_eq!(r.status, StatusCode::CONFLICT, "{path}: {}", r.body);
+        assert!(r.body.contains("are paused"), "{path}: {}", r.body);
+        let csp = r
+            .headers
+            .get("content-security-policy")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(csp.starts_with("default-src 'self';"), "{path}: {csp}");
+        assert!(!csp.contains("sandbox"), "{path}: {csp}");
+    }
+    assert_eq!(actions(&app.core).await.len(), before, "no audit row");
 }

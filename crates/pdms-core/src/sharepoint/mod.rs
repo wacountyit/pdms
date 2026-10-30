@@ -33,7 +33,7 @@ use crate::graph::GraphClient;
 pub use access::RECONCILE_JOB;
 pub use changes::DELTA_JOB;
 pub use files::{UploadTarget, UploadedFile};
-pub(crate) use files::{open, record_upload, spool_copy, upload_staged};
+pub(crate) use files::{open, record_upload, spool_checked, spool_copy, upload_staged};
 pub use folders::{DocumentFolder, department_folder_id};
 pub use layout::{Area, Spot};
 pub(crate) use mirror::mirror_later;
