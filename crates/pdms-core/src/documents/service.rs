@@ -22,6 +22,7 @@ use super::filestore;
 use super::retention::{self, Eligibility};
 use super::status::{self, DocumentStatus};
 use super::tags::{self, TagRef};
+use super::viewing::{Disposition, viewable};
 use crate::context::Ctx;
 use crate::error::{CoreError, CoreResult};
 use crate::model::UserStatus;
@@ -1820,14 +1821,37 @@ pub struct FileDownload {
     pub media_type: String,
     pub size: i64,
     pub version_no: i32,
+    pub disposition: Disposition,
 }
 
-/// Open a version's file (latest file if `version_no` is `None`). Requires `view`; audited.
+/// Open a version's file (latest file if `version_no` is `None`) to download.
+/// Requires `view`; audited. Always an attachment.
 pub async fn open_file(
     core: &Core,
     ctx: &Ctx,
     id: Uuid,
     version_no: Option<i32>,
+) -> CoreResult<FileDownload> {
+    open_file_as(core, ctx, id, version_no, false).await
+}
+
+/// Open a version's file to show in the browser: inline only for a viewable
+/// type (D-118). Requires `view`; audited as a download.
+pub async fn view_file(
+    core: &Core,
+    ctx: &Ctx,
+    id: Uuid,
+    version_no: i32,
+) -> CoreResult<FileDownload> {
+    open_file_as(core, ctx, id, Some(version_no), true).await
+}
+
+async fn open_file_as(
+    core: &Core,
+    ctx: &Ctx,
+    id: Uuid,
+    version_no: Option<i32>,
+    inline_if_viewable: bool,
 ) -> CoreResult<FileDownload> {
     let doc_ref = access::authorize(core, ctx, id, Permission::View).await?;
     let v = sqlx::query!(
@@ -1842,6 +1866,11 @@ pub async fn open_file(
     .fetch_optional(&core.db)
     .await?
     .ok_or(CoreError::NotFound)?;
+    let disposition = if inline_if_viewable && viewable(&v.media_type) {
+        Disposition::Inline
+    } else {
+        Disposition::Attachment
+    };
     let hash =
         BlobHash::from_slice(&v.blob_sha256).ok_or_else(|| CoreError::internal("bad blob hash"))?;
     let stream = filestore::open(
@@ -1859,7 +1888,8 @@ pub async fn open_file(
                 .event(ctx, Category::Access, "document.downloaded")
                 .context("version", v.version_no)
                 .context("sha256", hash.hex())
-                .context("file_name", v.file_name.clone()),
+                .context("file_name", v.file_name.clone())
+                .context("disposition", disposition.as_str()),
         ],
     )
     .await?;
@@ -1869,6 +1899,7 @@ pub async fn open_file(
         media_type: v.media_type,
         size: v.size_bytes,
         version_no: v.version_no,
+        disposition,
     })
 }
 

@@ -519,6 +519,11 @@ async fn changed_files_stop_the_download_and_are_flagged() {
         read_all(dl.stream).await.is_err(),
         "the download must not complete"
     );
+    let view = documents::view_file(&core, &ctx, id, 1).await.unwrap();
+    assert!(
+        read_all(view.stream).await.is_err(),
+        "the view must not complete"
+    );
     let state: String =
         sqlx::query_scalar("SELECT state FROM sharepoint_files WHERE document_id = $1")
             .bind(id)

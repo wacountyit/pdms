@@ -19,7 +19,7 @@ use pdms_authz::{Permission, Scope, Subject, Visibility};
 use pdms_core::documents::fields::{self, FieldSpec, FieldType, SelectOption};
 use pdms_core::documents::search::{self, CustomFilter, DocumentFilter};
 use pdms_core::documents::{
-    self, DocumentStatus, MetadataInput, NewDocument, RestorePart, VersionKind, types,
+    self, Disposition, DocumentStatus, MetadataInput, NewDocument, RestorePart, VersionKind, types,
 };
 use pdms_core::{Core, CoreError, Ctx, acl, directory};
 use uuid::Uuid;
@@ -142,6 +142,95 @@ async fn create_with_file_stores_versions_and_audits() {
         assert!(acts.contains(&a.to_owned()), "missing {a}");
     }
     assert!(pdms_audit::verify(&core.db).await.unwrap().is_intact());
+}
+
+/// The newest `document.downloaded` row's context field.
+async fn last_download_field(core: &Core, key: &str) -> String {
+    sqlx::query_scalar(
+        "SELECT context->>$1 FROM audit_log WHERE action = 'document.downloaded' \
+         ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(key)
+    .fetch_one(&core.db)
+    .await
+    .unwrap()
+}
+
+async fn download_count(core: &Core) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE action = 'document.downloaded'")
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn viewing_is_audited_as_a_download_with_its_disposition() {
+    let (core, _db) = core().await;
+    let (dept, alice) = editing_department(&core, "OPS", "alice@x.org").await;
+    let (bob, _hr) = user_in_new_department(&core, "HR", "bob@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    let other = type_id(&core, "other").await;
+    let content = pdf("viewable");
+    let id = new_doc(
+        &core,
+        &ctx,
+        meta(other, dept, "Viewable"),
+        alice,
+        Some(&content),
+    )
+    .await;
+
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert_eq!(dl.disposition, Disposition::Attachment);
+    assert_eq!(
+        last_download_field(&core, "disposition").await,
+        "attachment"
+    );
+    let sha = last_download_field(&core, "sha256").await;
+    let name = last_download_field(&core, "file_name").await;
+
+    let v = documents::view_file(&core, &ctx, id, 1).await.unwrap();
+    assert_eq!(v.disposition, Disposition::Inline);
+    assert_eq!(v.media_type, "application/pdf");
+    assert_eq!(read_all(v.stream).await, content);
+    assert_eq!(last_download_field(&core, "disposition").await, "inline");
+    assert_eq!(last_download_field(&core, "version").await, "1");
+    assert_eq!(last_download_field(&core, "sha256").await, sha);
+    assert_eq!(last_download_field(&core, "file_name").await, name);
+
+    // A type the browser must not show stays an attachment, even through view.
+    // (HTML itself is refused at upload; plain text is the stored type that remains.)
+    let file = upload(&core, "notes.txt", b"alert(1); plain notes, not a page").await;
+    let text_id = documents::create(
+        &core,
+        &ctx,
+        NewDocument {
+            visibility: Default::default(),
+            metadata: meta(other, dept, "Notes"),
+            owner_id: alice,
+            status: DocumentStatus::Active,
+            tags: vec![],
+            file: Some(file),
+            note: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    let t = documents::view_file(&core, &ctx, text_id, 1).await.unwrap();
+    assert_eq!(t.disposition, Disposition::Attachment);
+    assert_eq!(
+        last_download_field(&core, "disposition").await,
+        "attachment"
+    );
+
+    // Without `view`, nothing is sent and nothing is audited.
+    let before = download_count(&core).await;
+    let ctx_bob = as_user(&core, bob).await;
+    assert!(matches!(
+        documents::view_file(&core, &ctx_bob, id, 1).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    assert_eq!(download_count(&core).await, before);
 }
 
 #[tokio::test]

@@ -12,6 +12,8 @@ mod service;
 pub mod status;
 pub mod tags;
 pub mod types;
+pub mod viewing;
 
 pub use service::*;
 pub use status::DocumentStatus;
+pub use viewing::{Disposition, viewable};
