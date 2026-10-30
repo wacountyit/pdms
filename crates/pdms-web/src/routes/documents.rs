@@ -859,6 +859,8 @@ pub struct VersionRow {
     /// This version's file is the document's current file.
     pub is_current: bool,
     pub has_file: bool,
+    /// The file can be shown in the browser (see `documents::viewable`).
+    pub viewable: bool,
     pub file_name: String,
     pub size: String,
     pub sha: String,
@@ -982,6 +984,7 @@ fn version_row(state: &AppState, v: documents::VersionInfo) -> VersionRow {
         file_changed: v.file_changed,
         is_current: false,
         has_file: v.blob_sha256.is_some(),
+        viewable: v.media_type.as_deref().is_some_and(documents::viewable),
         file_name: v.file_name.unwrap_or_default(),
         size: human_size(v.size_bytes),
         sha: v

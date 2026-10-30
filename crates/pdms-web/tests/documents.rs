@@ -1255,11 +1255,11 @@ async fn view_shows_pdfs_and_images_in_the_browser() {
             cd.starts_with("inline;") && cd.contains(name),
             "{name}: {cd}"
         );
-        assert_eq!(header(&r, "x-content-type-options"), "nosniff");
-        assert_eq!(header(&r, "cache-control"), "private, no-store");
+        assert_eq!(header(&r, "x-content-type-options"), "nosniff", "{name}");
+        assert_eq!(header(&r, "cache-control"), "private, no-store", "{name}");
         assert!(!r.headers.contains_key("accept-ranges"), "{name}");
         assert_eq!(header(&r, "content-security-policy"), VIEW_CSP, "{name}");
-        assert_eq!(header(&r, "x-frame-options"), "DENY");
+        assert_eq!(header(&r, "x-frame-options"), "DENY", "{name}");
         assert_eq!(
             header(&r, "content-length"),
             bytes.len().to_string(),
@@ -1269,6 +1269,91 @@ async fn view_shows_pdfs_and_images_in_the_browser() {
             assert_eq!(r.body.as_bytes(), bytes.as_slice());
         }
     }
+}
+
+#[tokio::test]
+async fn document_page_offers_view_for_viewable_files() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let bytes = pdf("page");
+    let doc = create_via_form(
+        &mut b,
+        &app,
+        dept,
+        uid,
+        "Report",
+        Some(("report.pdf", &bytes)),
+    )
+    .await
+    .location()
+    .to_owned();
+    let page = b.get(&doc).await;
+    let view = format!("href=\"{doc}/versions/1/view\" target=\"_blank\" rel=\"noopener\"");
+    assert_eq!(page.body.matches(&view).count(), 2, "{}", page.body);
+    assert!(page.body.contains("(opens in a new tab)"));
+    assert!(page.body.contains("Download report.pdf"));
+    assert!(
+        page.body
+            .contains(&format!("<a class=\"button primary\" {view}"))
+    );
+    assert!(
+        page.body
+            .contains(&format!("<a class=\"button\" href=\"{doc}/download\""))
+    );
+
+    let r = create_via_form(
+        &mut b,
+        &app,
+        dept,
+        uid,
+        "Minutes",
+        Some(("minutes.doc", &doc_bytes())),
+    )
+    .await;
+    let other = b.get(r.location()).await;
+    assert!(!other.body.contains("/view\""));
+    assert!(other.body.contains(&format!(
+        "<a class=\"button primary\" href=\"{}/download\"",
+        r.location()
+    )));
+
+    // Edit details makes version 2 with the file unchanged: the header points
+    // at it, the Files table keeps View on version 1 only.
+    let csrf = page.csrf();
+    let edit = b.get(&format!("{doc}/edit")).await;
+    let row_version = regex::Regex::new(r#"name="row_version" value="(\d+)""#)
+        .unwrap()
+        .captures(&edit.body)
+        .unwrap()[1]
+        .to_owned();
+    let t = type_id(&app, "interlocal_agreement").await;
+    let dept_s = dept.to_string();
+    let form = [
+        ("_csrf", csrf.as_str()),
+        ("row_version", row_version.as_str()),
+        ("title", "Report (edited)"),
+        ("document_type_id", t.as_str()),
+        ("department_id", dept_s.as_str()),
+    ];
+    assert_eq!(
+        b.post(&format!("{doc}/edit"), &form).await.status,
+        StatusCode::SEE_OTHER
+    );
+    let page = b.get(&doc).await;
+    let v2 = format!("href=\"{doc}/versions/2/view\"");
+    assert_eq!(page.body.matches(&v2).count(), 1, "{}", page.body);
+    assert_eq!(
+        page.body
+            .matches(&format!("href=\"{doc}/versions/1/view\""))
+            .count(),
+        1
+    );
+    let served = b.get(&format!("{doc}/versions/2/view")).await;
+    assert_eq!(served.status, StatusCode::OK);
+    assert!(header(&served, "content-disposition").starts_with("inline;"));
+    assert_eq!(served.body.as_bytes(), bytes.as_slice());
 }
 
 #[tokio::test]
@@ -1291,6 +1376,7 @@ async fn view_sends_other_types_as_downloads() {
         );
         assert_eq!(header(&v, "content-security-policy"), PAGE_CSP, "{name}");
         assert_eq!(v.body, d.body, "{name}");
+        assert!(v.headers.contains_key("content-length"), "{name}");
         assert_eq!(header(&v, "content-length"), header(&d, "content-length"));
     }
 }

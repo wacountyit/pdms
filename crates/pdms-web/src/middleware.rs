@@ -89,7 +89,7 @@ pub async fn branding_refresh(State(state): State<AppState>, req: Request, next:
     next.run(req).await
 }
 
-/// The policy for every page and file.
+/// The policy for every response except a file shown in the browser.
 const PAGE_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
     img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; \
     form-action 'self'";

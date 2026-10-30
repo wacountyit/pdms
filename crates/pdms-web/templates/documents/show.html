@@ -18,7 +18,7 @@
     </div>
     <div class="doc-actions">
       {% if start_review %}<a class="button primary" href="#reviews">Start review</a>{% endif %}
-      {% if let Some(f) = current_file %}<a class="button{% if !start_review %} primary{% endif %}" href="/documents/{{ d.id }}/download">{% include "icons/download.html" %}Download {{ f.file_name }}</a>{% endif %}
+      {% if let Some(f) = current_file %}{% if f.viewable %}<a class="button{% if !start_review %} primary{% endif %}" href="/documents/{{ d.id }}/versions/{{ f.version_no }}/view" target="_blank" rel="noopener">{% include "icons/eye.html" %}View<span class="visually-hidden"> {{ f.file_name }} (opens in a new tab)</span></a>{% endif %}<a class="button{% if !start_review && !f.viewable %} primary{% endif %}" href="/documents/{{ d.id }}/download">{% include "icons/download.html" %}Download {{ f.file_name }}</a>{% endif %}
       {% if can_edit %}<a class="button" href="/documents/{{ d.id }}/edit">{% include "icons/pencil.html" %}Edit details</a>{% endif %}
       {% if can_timeline %}<a class="button" href="/documents/{{ d.id }}/history">{% include "icons/history.html" %}History</a>{% endif %}
     </div>
@@ -132,7 +132,7 @@
         <td class="nowrap">{% if v.file_changed %}{{ v.size }}{% endif %}</td>
         <td class="nowrap">{{ v.when }}</td>
         <td>{{ v.by }}</td>
-        <td class="file-actions">{% if v.has_file && v.file_changed %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/download">{% include "icons/download.html" %}Download<span class="visually-hidden"> version {{ v.version_no }}, {{ v.file_name }}</span></a>{% endif %}
+        <td class="file-actions">{% if v.has_file && v.file_changed && v.viewable %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/view" target="_blank" rel="noopener">{% include "icons/eye.html" %}View<span class="visually-hidden"> version {{ v.version_no }}, {{ v.file_name }} (opens in a new tab)</span></a> {% endif %}{% if v.has_file && v.file_changed %}<a href="/documents/{{ d.id }}/versions/{{ v.version_no }}/download">{% include "icons/download.html" %}Download<span class="visually-hidden"> version {{ v.version_no }}, {{ v.file_name }}</span></a>{% endif %}
           {% if can_edit && v.version_no != d.current_version %}
           <form method="post" action="/documents/{{ d.id }}/versions/{{ v.version_no }}/restore" class="inline-form">
             <input type="hidden" name="_csrf" value="{{ l.csrf }}">
