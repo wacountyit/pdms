@@ -958,8 +958,9 @@ rereads everything; unchanged files are not flagged. The owner's answers:
   the next change check then records who made it, without a second notice.
 - **The document page** shows everyone who can see the document a status
   message, not an alert: "A file of this document was changed outside PDMS.
-  Downloads of it are paused until an administrator checks it."
-  Administrators also get a link to Administration → SharePoint.
+  Downloading and viewing it are paused until an administrator checks it."
+  (views included since D-118). Administrators also get a link to
+  Administration → SharePoint.
 
 ### D-106 Files PDMS does not track: listed after ten minutes, never deleted — Accepted (2026-10-23)
 An upload in progress has no database row until it commits, so untracked
@@ -1185,8 +1186,9 @@ Amends D-027. Design: the DV
   **View** button in the document header and the **View** links in the Files
   table open it in a new tab. It calls the same core function as a download,
   so the `View` permission, visibility (D-085, D-090) and the stop on a
-  SharePoint file changed outside PDMS (D-105) apply unchanged. A type not
-  on the list is sent exactly as a download is (`attachment`).
+  SharePoint file changed outside PDMS (D-105) apply unchanged. A file
+  paused by that check can't be viewed either. A type not on the list is
+  sent exactly as a download is (`attachment`).
 - **A viewable file is sent inline** with `nosniff`, `Cache-Control:
   private, no-store`, and the real file name for the viewer's own Save. No
   `Accept-Ranges` header is sent, so the viewer fetches the file once and

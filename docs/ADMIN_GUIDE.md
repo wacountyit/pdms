@@ -824,8 +824,11 @@ connection.
   recorded at upload. If someone changed the file in SharePoint, the download
   stops with an error, the file is marked as changed,
   `sharepoint.changed_outside` is written to the audit log, and
-  administrators are notified. Restoring an earlier version copies its file
-  into a new file.
+  administrators are notified. Until an administrator resolves it on
+  **Administration → SharePoint**, PDMS doesn't read that file for anyone:
+  downloading or viewing it, putting it in a records package, extracting its
+  text and restoring it are all refused. Restoring an earlier version copies
+  its file into a new file.
 - **Department folder access.** Members of a department whose account comes
   from Entra ID get read access to `Departments/<department>` in SharePoint,
   one person at a time and with no invitation email. PDMS updates it about a

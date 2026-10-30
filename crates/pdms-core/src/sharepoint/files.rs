@@ -238,11 +238,16 @@ pub(crate) async fn record_upload(
     Ok(())
 }
 
+/// Shown instead of a file that is marked `changed_outside` or `missing`,
+/// until an administrator resolves it on Administration → SharePoint.
+const PAUSED: &str = "A file of this document was changed outside PDMS. Downloading and viewing it are paused until an administrator checks it.";
+
 /// Stream a version's file from SharePoint, checked against the SHA-256 and
 /// size PDMS recorded. For a version that carried an earlier file forward,
-/// the newest file at or before `version_no` is the one read. A mismatch ends
-/// the stream with an error (the client sees a failed download), marks the
-/// file `changed_outside`, and is audited.
+/// the newest file at or before `version_no` is the one read. A file marked
+/// `changed_outside` or `missing` is refused (`Conflict`) before SharePoint
+/// is asked for it. A mismatch ends the stream with an error (the client
+/// sees a failed download), marks the file `changed_outside`, and is audited.
 pub(crate) async fn open(
     core: &Core,
     document_id: Uuid,
@@ -254,7 +259,7 @@ pub(crate) async fn open(
         .sharepoint()
         .ok_or_else(|| CoreError::internal("SharePoint storage is not configured"))?;
     let f = sqlx::query!(
-        "SELECT sf.drive_id, sf.item_id FROM sharepoint_files sf
+        "SELECT sf.drive_id, sf.item_id, sf.state FROM sharepoint_files sf
            JOIN document_versions v ON v.id = sf.document_version_id
           WHERE v.document_id = $1 AND v.version_no <= $2
           ORDER BY v.version_no DESC LIMIT 1",
@@ -268,6 +273,9 @@ pub(crate) async fn open(
             "document {document_id} v{version_no} has no file in SharePoint"
         ))
     })?;
+    if f.state != "ok" {
+        return Err(CoreError::Conflict(PAUSED.into()));
+    }
     let stream = sp
         .graph()
         .download(&format!(

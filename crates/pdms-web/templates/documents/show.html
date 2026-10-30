@@ -23,7 +23,7 @@
       {% if can_timeline %}<a class="button" href="/documents/{{ d.id }}/history">{% include "icons/history.html" %}History</a>{% endif %}
     </div>
   </div>
-  {% if sp_flagged %}<p class="flash flash-info" role="status">A file of this document was changed outside PDMS. Downloads of it are paused until an administrator checks it.{% if l.can_sharepoint %} <a href="/admin/sharepoint">Administration → SharePoint</a>{% endif %}</p>{% endif %}
+  {% if sp_flagged %}<p class="flash flash-info" role="status">A file of this document was changed outside PDMS. Downloading and viewing it are paused until an administrator checks it.{% if l.can_sharepoint %} <a href="/admin/sharepoint">Administration → SharePoint</a>{% endif %}</p>{% endif %}
   <nav class="on-this-page" aria-label="On this page">
     <span class="on-this-page-label">On this page</span>
     <ul>{% for s in section_links %}<li><a href="#{{ s.0 }}">{{ s.1 }}</a></li>{% endfor %}</ul>

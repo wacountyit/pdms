@@ -342,10 +342,12 @@ document files in one SharePoint library through Microsoft Graph (P2's
   QuickXorHash and size are checked. The transaction records it in
   `sharepoint_files`. A failure is `CoreError::Unavailable`: nothing is saved
   and the form is kept (D-102).
-- **Read:** downloads, text extraction, records packages and restores stream
-  the file from SharePoint and check it against the recorded SHA-256 and
-  size. A mismatch ends the stream with an error, marks the file
-  `changed_outside`, and is audited in the same transaction.
+- **Read:** downloads, views, text extraction, records packages and
+  restores stream the file from SharePoint and check it against the recorded
+  SHA-256 and size. A file marked `changed_outside` or `missing` is refused
+  (`CoreError::Conflict`) before SharePoint is asked for it. A mismatch ends
+  the stream with an error, marks the file `changed_outside`, and is audited
+  in the same transaction.
 - **Placement:** the mirror job (§8) applies names, columns and moves.
   Changes that narrow who can browse a document (`layout::narrows`) move the
   folder before the change is saved and are refused if SharePoint is down.

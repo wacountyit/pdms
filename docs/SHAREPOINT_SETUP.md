@@ -338,7 +338,7 @@ after uploading the new public certificate.
 | Someone cannot open their department folder in SharePoint | blank or unmapped Department, a local (non-Entra) account, or no mailbox | A7, B8; the error list on **Administration → SharePoint** |
 | "Other access on department folders" | someone shared a folder directly in SharePoint | remove it in SharePoint if it was not intended; PDMS never removes it |
 | "Files PDMS does not track" | someone added a file in SharePoint, or an upload failed half-way ("PDMS (a save that did not finish)") | delete it in SharePoint if it does not belong, then **Dismiss** |
-| A document page says "A file of this document was changed outside PDMS" | the change check (or a download) found the file changed or deleted in SharePoint | an administrator resolves it on **Administration → SharePoint**; downloads of it are paused until then |
+| A document page says "A file of this document was changed outside PDMS" | the change check (or a download) found the file changed or deleted in SharePoint | an administrator resolves it on **Administration → SharePoint**; downloading and viewing it are paused until then |
 
 ### C3. Turning SharePoint storage off
 

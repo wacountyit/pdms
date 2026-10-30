@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT sf.drive_id, sf.item_id FROM sharepoint_files sf\n           JOIN document_versions v ON v.id = sf.document_version_id\n          WHERE v.document_id = $1 AND v.version_no <= $2\n          ORDER BY v.version_no DESC LIMIT 1",
+  "query": "SELECT sf.drive_id, sf.item_id, sf.state FROM sharepoint_files sf\n           JOIN document_versions v ON v.id = sf.document_version_id\n          WHERE v.document_id = $1 AND v.version_no <= $2\n          ORDER BY v.version_no DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "item_id"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sharepoint_files",
+            "name": "state"
+          }
+        }
       }
     ],
     "parameters": {
@@ -34,8 +45,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "6b91c9aa1aa6e719a4d7753a472fbc4dddf5a9450a9d43ebd7f71e85c38d4ada"
+  "hash": "1c4e6f762c81a80b0d92686965bec095ba31378bbf5150517c8cb42f5d502ac5"
 }

@@ -519,23 +519,82 @@ async fn changed_files_stop_the_download_and_are_flagged() {
         read_all(dl.stream).await.is_err(),
         "the download must not complete"
     );
-    let view = documents::view_file(&core, &ctx, id, 1).await.unwrap();
-    assert!(
-        read_all(view.stream).await.is_err(),
-        "the view must not complete"
-    );
-    let state: String =
-        sqlx::query_scalar("SELECT state FROM sharepoint_files WHERE document_id = $1")
-            .bind(id)
-            .fetch_one(&core.db)
-            .await
-            .unwrap();
-    assert_eq!(state, "changed_outside");
+    assert_eq!(file_state(&core, id).await, "changed_outside");
     assert!(
         audit_actions(&core)
             .await
             .contains(&"sharepoint.changed_outside".to_owned())
     );
+    // From then on the file is paused: a view is refused outright.
+    let view = documents::view_file(&core, &ctx, id, 1).await.err();
+    assert!(
+        matches!(&view, Some(CoreError::Conflict(m)) if m.contains("paused")),
+        "{view:?}"
+    );
+}
+
+/// The state of a document's only SharePoint file.
+async fn file_state(core: &Core, id: Uuid) -> String {
+    sqlx::query_scalar("SELECT state FROM sharepoint_files WHERE document_id = $1")
+        .bind(id)
+        .fetch_one(&core.db)
+        .await
+        .unwrap()
+}
+
+/// How many times PDMS asked SharePoint for a file's content.
+fn content_reads(sp: &MockGraph) -> usize {
+    sp.requests()
+        .iter()
+        .filter(|r| r.starts_with("GET /v1.0/drives/drive-1/items/") && r.ends_with("/content"))
+        .count()
+}
+
+async fn downloads(core: &Core) -> usize {
+    audit_actions(core)
+        .await
+        .iter()
+        .filter(|a| *a == "document.downloaded")
+        .count()
+}
+
+#[tokio::test]
+async fn a_paused_file_is_refused_before_anything_is_sent() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    for (state, title) in [("changed_outside", "Fuel"), ("missing", "Lease")] {
+        let id = new_doc(
+            &core,
+            &ctx,
+            dept,
+            alice,
+            title,
+            Visibility::Department,
+            Some(("a.pdf", &pdf(title))),
+        )
+        .await;
+        // As the change check leaves a file it found changed or deleted.
+        sqlx::query("UPDATE sharepoint_files SET state = $2 WHERE document_id = $1")
+            .bind(id)
+            .bind(state)
+            .execute(&core.db)
+            .await
+            .unwrap();
+        let reads = content_reads(&sp);
+        let sent = downloads(&core).await;
+        let download = documents::open_file(&core, &ctx, id, None).await.err();
+        let view = documents::view_file(&core, &ctx, id, 1).await.err();
+        for e in [download, view] {
+            assert!(
+                matches!(&e, Some(CoreError::Conflict(m)) if m.contains("paused")),
+                "{state}: {e:?}"
+            );
+        }
+        assert_eq!(content_reads(&sp), reads, "{state}: nothing was read");
+        assert_eq!(downloads(&core).await, sent, "{state}: nothing was sent");
+    }
 }
 
 #[tokio::test]

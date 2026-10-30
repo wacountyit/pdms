@@ -118,8 +118,9 @@ async fn sharepoint_panel_is_for_administrators() {
     // People who can open the document see that its file was changed.
     let page = c.get(&format!("/documents/{doc}")).await;
     assert!(
-        page.body
-            .contains("A file of this document was changed outside PDMS."),
+        page.body.contains(
+            "A file of this document was changed outside PDMS. Downloading and viewing it are paused"
+        ),
         "{}",
         page.body
     );

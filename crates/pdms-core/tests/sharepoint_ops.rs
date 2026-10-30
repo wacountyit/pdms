@@ -601,14 +601,17 @@ async fn a_change_found_by_a_download_reaches_admins_once() {
     sp.human_edit(&fuel_item, &pdf("fuel, edited by hand"), "Pat Clerk");
 
     // A download finds it first: stopped, flagged, administrators told once.
+    // From then on the file is paused, so a second download is refused.
     let ctx = as_user(&core, alice).await;
-    for _ in 0..2 {
-        let dl = documents::open_file(&core, &ctx, fuel, None).await.unwrap();
-        assert!(
-            read_all(dl.stream).await.is_err(),
-            "the download must not complete"
-        );
-    }
+    let dl = documents::open_file(&core, &ctx, fuel, None).await.unwrap();
+    assert!(
+        read_all(dl.stream).await.is_err(),
+        "the download must not complete"
+    );
+    assert!(matches!(
+        documents::open_file(&core, &ctx, fuel, None).await.err(),
+        Some(CoreError::Conflict(_))
+    ));
     assert_eq!(
         file_state(&core, fuel_v1).await,
         ("changed_outside".to_owned(), None)
