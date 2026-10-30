@@ -219,6 +219,7 @@ only place that shows work in flight.
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
 | §0.5 item 1: SharePoint live test, continued | WACountyIT | In progress (2026-10-27): upgrade and Test with the full-control check; then B6 to B9 and §1.2 | | 2026-10-27 |
+| §0.5 item 5: DV, viewing documents in the browser | wc-sstevens (the owner, with Claude) | Spec: **In progress** (2026-10-30): drafted, waiting for the owner's approval and the phase 2 answer (§0.7). Plan and build: **Not started** | | 2026-10-30 |
 
 §0.5 lists what can start next.
 
