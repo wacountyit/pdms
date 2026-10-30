@@ -331,6 +331,9 @@ async fn large_files_are_sent_in_chunks() {
     let name = sp.names(&folder).pop().unwrap();
     assert!(name.ends_with(".txt"));
     assert_eq!(sp.item(&format!("{folder}/{name}")).unwrap().content, bytes);
+    // It reads back whole, in several pieces.
+    let dl = documents::open_file(&core, &ctx, id, None).await.unwrap();
+    assert_eq!(read_all(dl.stream).await.unwrap(), bytes);
 }
 
 #[tokio::test]
@@ -556,6 +559,60 @@ async fn downloads(core: &Core) -> usize {
         .iter()
         .filter(|a| *a == "document.downloaded")
         .count()
+}
+
+/// A PDF of exactly `len` bytes.
+fn pdf_of_len(text: &str, len: usize) -> Vec<u8> {
+    let mut b = pdf(text);
+    b.resize(len, b' ');
+    b
+}
+
+#[tokio::test]
+async fn a_changed_file_never_arrives_complete() {
+    let sp = MockGraph::start().await;
+    let (core, _db) = sp_core(&sp).await;
+    let (dept, alice) = editing_department(&core, "RB", "Road and Bridge", "alice@x.org").await;
+    let ctx = as_user(&core, alice).await;
+    // Large enough to arrive in several pieces.
+    let len = 300_000;
+    for (title, edited_len) in [("Fuel", len), ("Lease", len + 1), ("Permit", len - 1)] {
+        let id = new_doc(
+            &core,
+            &ctx,
+            dept,
+            alice,
+            title,
+            Visibility::Department,
+            Some(("a.pdf", &pdf_of_len("original terms", len))),
+        )
+        .await;
+        let ext = external_id(&core, id).await;
+        let folder = format!("Departments/Road and Bridge/{ext} – {title}");
+        let name = sp.names(&folder).pop().unwrap();
+        sp.tamper(
+            &format!("{folder}/{name}"),
+            &pdf_of_len("edited in SharePoint", edited_len),
+        );
+        let mut stream = documents::open_file(&core, &ctx, id, None)
+            .await
+            .unwrap()
+            .stream;
+        let mut delivered = 0;
+        let mut failed = false;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(c) => delivered += c.len(),
+                Err(_) => {
+                    failed = true;
+                    break;
+                }
+            }
+        }
+        assert!(failed, "{title}: the stream ends with an error");
+        assert!(delivered < len, "{title}: {delivered} of {len} bytes sent");
+        assert_eq!(file_state(&core, id).await, "changed_outside", "{title}");
+    }
 }
 
 #[tokio::test]

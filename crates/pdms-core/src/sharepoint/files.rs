@@ -246,8 +246,10 @@ const PAUSED: &str = "A file of this document was changed outside PDMS. Download
 /// size PDMS recorded. For a version that carried an earlier file forward,
 /// the newest file at or before `version_no` is the one read. A file marked
 /// `changed_outside` or `missing` is refused (`Conflict`) before SharePoint
-/// is asked for it. A mismatch ends the stream with an error (the client
-/// sees a failed download), marks the file `changed_outside`, and is audited.
+/// is asked for it. Otherwise the stream completes only if the whole file
+/// matches: a mismatch ends it with an error before `size` bytes have been
+/// sent (the client sees a failed download), marks the file
+/// `changed_outside`, and is audited.
 pub(crate) async fn open(
     core: &Core,
     document_id: Uuid,
@@ -294,18 +296,52 @@ pub(crate) async fn open(
     ))
 }
 
+/// The error a checked read ends with when the file doesn't match PDMS's
+/// record. The file has been flagged by then.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "the file in SharePoint was changed outside PDMS; the download was stopped and an administrator was alerted"
+)]
+struct ChangedOutside;
+
 struct Check {
     inner: ByteStream,
     hasher: Sha256,
+    /// Bytes read from SharePoint so far, `held` included.
     seen: u64,
     expected: BlobHash,
     size: u64,
     core: Core,
     document_id: Uuid,
     item_id: String,
+    /// The piece that brought `seen` to `size`. It is sent only once
+    /// SharePoint has ended the file and the whole file matched.
+    held: Option<Bytes>,
     done: bool,
 }
 
+impl Check {
+    /// Flag the file and end the stream with [`ChangedOutside`].
+    async fn refuse(&mut self, detail: &str) -> std::io::Error {
+        self.done = true;
+        self.held = None;
+        flag_changed(
+            &self.core,
+            self.document_id,
+            &self.item_id,
+            "download_check",
+            detail,
+        )
+        .await;
+        std::io::Error::other(ChangedOutside)
+    }
+}
+
+/// Pass `inner` on while checking it. Every piece but the last is sent as it
+/// arrives; the piece that completes the recorded size is held back until
+/// SharePoint ends the file and its SHA-256 matches. So a file that doesn't
+/// match never delivers `size` bytes: with `Content-Length` set to `size`,
+/// the client always sees an incomplete transfer.
 fn verified(
     inner: ByteStream,
     core: Core,
@@ -323,49 +359,56 @@ fn verified(
         core,
         document_id,
         item_id,
+        held: None,
         done: false,
     };
     Box::pin(futures_util::stream::unfold(state, |mut s| async move {
         if s.done {
             return None;
         }
-        match s.inner.next().await {
-            Some(Ok(chunk)) => {
-                s.hasher.update(&chunk);
-                s.seen += chunk.len() as u64;
-                Some((Ok(chunk), s))
-            }
-            Some(Err(e)) => {
-                s.done = true;
-                Some((Err(e), s))
-            }
-            None => {
-                s.done = true;
-                let got: [u8; 32] = s.hasher.clone().finalize().into();
-                if s.seen == s.size && got == s.expected.0 {
-                    return None;
+        loop {
+            match s.inner.next().await {
+                Some(Ok(chunk)) if chunk.is_empty() => {}
+                Some(Ok(chunk)) => {
+                    s.hasher.update(&chunk);
+                    s.seen = s.seen.saturating_add(chunk.len() as u64);
+                    if s.seen > s.size {
+                        let detail = format!(
+                            "read {} bytes so far; PDMS recorded {} bytes with {}",
+                            s.seen,
+                            s.size,
+                            s.expected.hex()
+                        );
+                        let e = s.refuse(&detail).await;
+                        return Some((Err(e), s));
+                    }
+                    if s.seen < s.size {
+                        return Some((Ok(chunk), s));
+                    }
+                    s.held = Some(chunk);
                 }
-                let detail = format!(
-                    "read {} bytes with SHA-256 {}; PDMS recorded {} bytes with {}",
-                    s.seen,
-                    hex::encode(got),
-                    s.size,
-                    s.expected.hex()
-                );
-                flag_changed(
-                    &s.core,
-                    s.document_id,
-                    &s.item_id,
-                    "download_check",
-                    &detail,
-                )
-                .await;
-                Some((
-                    Err(std::io::Error::other(
-                        "the file in SharePoint was changed outside PDMS; the download was stopped and an administrator was alerted",
-                    )),
-                    s,
-                ))
+                Some(Err(e)) => {
+                    s.done = true;
+                    s.held = None;
+                    return Some((Err(e), s));
+                }
+                None => {
+                    s.done = true;
+                    let got: [u8; 32] = s.hasher.clone().finalize().into();
+                    if s.seen == s.size && got == s.expected.0 {
+                        let last = s.held.take();
+                        return last.map(|c| (Ok(c), s));
+                    }
+                    let detail = format!(
+                        "read {} bytes with SHA-256 {}; PDMS recorded {} bytes with {}",
+                        s.seen,
+                        hex::encode(got),
+                        s.size,
+                        s.expected.hex()
+                    );
+                    let e = s.refuse(&detail).await;
+                    return Some((Err(e), s));
+                }
             }
         }
     }))
