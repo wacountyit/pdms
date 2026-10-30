@@ -1,8 +1,9 @@
 # Viewing documents in the browser: design
 
 - **Date:** 2026-10-30
-- **Status:** draft, waiting for the owner's approval. The one open question
-  is in §10.
+- **Status:** phase 1 (PDFs and images) approved by the owner on
+  2026-10-30. Phase 2 (§5) waits for the owner's answer to §10. Plan:
+  [2026-10-30-document-viewing.md](../plans/2026-10-30-document-viewing.md).
 - **Item:** "Viewing documents in the browser" (DV) in ROADMAP §0.3. Commit
   messages start with `DV:`.
 - **Why:** today every file in PDMS is downloaded
@@ -138,7 +139,8 @@ and Edge, in its full headless mode) and in Firefox.
   blocked under every policy without `'unsafe-inline'`, hence that allowance
   (§3).
 
-**Left for the plan's first task, on a county PC with the real browsers.**
+**Left for the plan's last task (Task 5), once the view address is built,
+on a county PC with the real browsers.**
 Headless browsers can't show these, and Edge now has its own PDF viewer.
 Check in Edge, Chrome and Firefox, with the built view policy:
 
