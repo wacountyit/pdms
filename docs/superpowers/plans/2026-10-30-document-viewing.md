@@ -402,6 +402,12 @@ Check each of these:
     (The view answer carries both `Cross-Origin-Opener-Policy: same-origin`
     and a CSP `sandbox`; the HTML Standard says a top-level page with both
     should not load. Current Chromium and Firefox load it anyway.)
+
+  Also open one PDF and one JPEG on an iPhone or iPad. Every iOS browser
+  uses Safari's engine, and spec §4 says Safari on iPhone shows them. With
+  SharePoint storage, also view a large PDF (tens of MB). PDMS checks a
+  SharePoint file in full before it shows it, so the new tab waits a
+  moment; the file must still open rather than time out at the proxy.
 - [ ] **Step 2:** If something is blocked, add only the allowance it needs
 to `VIEW_CSP`: `allow-downloads` (Save), `allow-modals` (Print), or
 `allow-popups` and `allow-popups-to-escape-sandbox` (links). Never add
