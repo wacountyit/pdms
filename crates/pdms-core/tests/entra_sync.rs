@@ -2757,10 +2757,10 @@ async fn depart_these_people_changes_nothing_when_the_group_cannot_be_read_or_is
     // The group lists no members now: nobody is departed.
     m.remove_from_group(GROUP_P, &oid(1));
     m.remove_from_group(GROUP_P, &oid(2));
-    assert!(matches!(
-        entra_sync::depart_held_back(&grouped, &system()).await,
-        Err(CoreError::Validation(_))
-    ));
+    match entra_sync::depart_held_back(&grouped, &system()).await {
+        Err(CoreError::Validation(_)) => {}
+        other => panic!("{other:?}"),
+    }
 
     // Without a group set, there is nothing to confirm.
     assert!(matches!(
@@ -2772,6 +2772,51 @@ async fn depart_these_people_changes_nothing_when_the_group_cannot_be_read_or_is
     }
     let st = entra_sync::status(&core.db).await.unwrap();
     assert_eq!(st.last_summary.unwrap().held_back, held, "still waiting");
+}
+
+/// Advisory locks granted in this test's database, read on a connection taken
+/// beforehand, so the query goes out without waiting for the pool first.
+async fn advisory_locks_held(spy: &mut sqlx::PgConnection) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
+    )
+    .fetch_one(spy)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn depart_these_people_releases_the_sync_lock_on_every_path() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, _) = seven_held_back(&m, &core).await;
+    let mut spy = core.db.acquire().await.unwrap();
+
+    // Refused: the lock is gone as soon as the call returns, so a press or
+    // run straight after isn't told a sync is already running.
+    m.forbid_groups(true);
+    assert!(
+        entra_sync::depart_held_back(&grouped, &system())
+            .await
+            .is_err()
+    );
+    assert_eq!(advisory_locks_held(&mut spy).await, 0, "after a refusal");
+    m.forbid_groups(false);
+
+    // Confirmed, then pressed again with nobody waiting.
+    entra_sync::depart_held_back(&grouped, &system())
+        .await
+        .unwrap();
+    assert_eq!(advisory_locks_held(&mut spy).await, 0, "after departing");
+    entra_sync::depart_held_back(&grouped, &system())
+        .await
+        .unwrap();
+    assert_eq!(
+        advisory_locks_held(&mut spy).await,
+        0,
+        "with nobody waiting"
+    );
 }
 
 #[tokio::test]

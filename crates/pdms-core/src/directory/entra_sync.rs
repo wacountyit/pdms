@@ -1442,6 +1442,30 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<Confirmed> {
             "a directory sync is already running".into(),
         ));
     }
+    let result = depart_held_back_locked(core, ctx, &graph, &group, &issuer, &mut lock).await;
+    // End the transaction here on every path: a dropped one only queues its
+    // rollback, so the lock could outlive this call and refuse the next run
+    // or press as "already running".
+    match result {
+        Ok(confirmed) => {
+            lock.commit().await?;
+            Ok(confirmed)
+        }
+        Err(e) => {
+            lock.rollback().await?;
+            Err(e)
+        }
+    }
+}
+
+async fn depart_held_back_locked(
+    core: &Core,
+    ctx: &Ctx,
+    graph: &GraphClient,
+    group: &str,
+    issuer: &str,
+    lock: &mut PgConnection,
+) -> CoreResult<Confirmed> {
     let held_back = status(&core.db)
         .await?
         .last_summary
@@ -1450,7 +1474,7 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<Confirmed> {
     if held_back.is_empty() {
         return Ok(Confirmed::default());
     }
-    let in_group = group_members(&graph, &group).await.map_err(|e| match e {
+    let in_group = group_members(graph, group).await.map_err(|e| match e {
         // An outage or throttling (a missing permission or a wrong group
         // ID is already a plain message): shown on the page, not as an
         // error page. Nothing has changed yet.
@@ -1496,7 +1520,6 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<Confirmed> {
     )
     .execute(&mut *lock)
     .await?;
-    lock.commit().await?;
     Ok(Confirmed {
         departed: report.departed,
         kept,
