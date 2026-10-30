@@ -53,9 +53,9 @@ response go by that stored type, from one list in the code.
 
 **Why there is a list at all.** A file shown in the browser is opened as a
 page on PDMS's own address. An HTML or SVG file shown that way could act as
-PDMS for whoever opens it. PDMS stores nothing as HTML or SVG today (PDMS refuses files that start as
-HTML; other text with markup in it, an SVG for example, is stored as plain
-text), but the list keeps viewing safe even if
+PDMS for whoever opens it. PDMS stores nothing as HTML or SVG today (PDMS
+refuses files that start as HTML; other text with markup in it, an SVG for
+example, is stored as plain text), but the list keeps viewing safe even if
 the accepted types change: a type is shown only if it is on the list.
 
 ## 3. How a file is sent for viewing
@@ -63,10 +63,10 @@ the accepted types change: a type is shown only if it is on the list.
 **Address:** `GET /documents/{id}/versions/{n}/view`. The **View** button in
 the page header points at the current file's version.
 
-- **Same check as a download:** the handler calls the same core function as
-  the download (`documents::open_file`), so the `View` permission, the
-  visibility rules (D-085), and the pause on a SharePoint file changed
-  outside PDMS (D-105) apply unchanged.
+- **Same check as a download:** the handler calls `documents::view_file`,
+  which shares one body with the download's `documents::open_file`, so the
+  `View` permission, the visibility rules (D-085), and the pause on a
+  SharePoint file changed outside PDMS (D-105) apply unchanged.
 - **A type not on the list** is sent exactly as a download is
   (`attachment`). Nothing reaches this address that way from PDMS's own
   pages, only from a typed or old link.

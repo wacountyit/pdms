@@ -661,12 +661,14 @@ and email files show only **Download**.
   folder.
 - **Why only some types.** A file shown in the browser opens as a page on
   PDMS's own address, so PDMS shows only types a browser displays safely, and
-  it adds a stricter security policy to the answer.
+  it tells the browser to apply extra restrictions to that page.
 - **Audit.** A view is recorded as `document.downloaded`, like a download,
   because PDMS can't see what the browser's own Save or Print does with the
-  file afterwards. To tell them apart, open the entry: its details have
+  file afterwards. To tell them apart, open the entry's **Context**: it has
   `disposition`, `inline` for a view and `attachment` for a download.
-  `document.viewed` only means someone opened the document page.
+  Older entries, from before viewing was added on 2026-10-30, have no
+  `disposition`; they are all downloads. `document.viewed` only means
+  someone opened the document page.
 
 Every change keeps the earlier versions: files are stored by content hash and
 never overwritten. Deleted documents are hidden but kept. Administrators can
@@ -1210,8 +1212,10 @@ a shared mailbox:
   IP, and a field-by-field before/after table. **Older entries** pages back
   through the log.
 - **Views and downloads** of a file are both `document.downloaded`. The
-  entry's `disposition` says which: `inline` is a view in the browser,
-  `attachment` is a download (see chapter 4, "Working with documents").
+  `disposition` under the entry's **Context** says which: `inline` is a view
+  in the browser, `attachment` is a download (see chapter 4, "Working with
+  documents"). Older entries, from before viewing was added on 2026-10-30,
+  have no `disposition`; they are all downloads.
 - **Export → CSV or JSON** (Auditors only). The export itself is logged. CSV cells
   that begin with formula characters are neutralized for spreadsheet safety.
 - **Verify integrity** recomputes the hash chain. The worker also verifies it
