@@ -105,7 +105,12 @@ Tower layers, outermost first:
 3. Prometheus request metrics (by matched route, not raw path)
 4. Security headers: strict CSP (`default-src 'self'`; no inline script; HTMX
    vendored, no CDN), HSTS when secure, `nosniff`, `frame-ancestors 'none'`,
-   `Cache-Control: no-store` on pages
+   `Cache-Control: no-store` on pages. One answer gets a different policy:
+   a file shown in the browser, `GET /documents/{id}/versions/{n}/view`
+   (PDF and images only), carries the view policy (`default-src 'none'`,
+   inline styles, `sandbox`) instead of the page policy. Its handler marks
+   the response (`ViewPolicy`), and `middleware.rs` holds both policies
+   (D-118)
 5. Client IP: `X-Forwarded-For` honored only from trusted proxy CIDRs, taking the
    right-most untrusted hop
 6. CSRF: unsafe methods must have a matching `Origin` (or no cross-site

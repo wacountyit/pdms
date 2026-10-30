@@ -640,7 +640,7 @@ On a document's page:
 
 | Action | Needs |
 |---|---|
-| View, download any version | `view` (department members have it by default) |
+| View, download any version | `view` (department members have it by default). **View** opens PDFs and images in a new tab; every other file type is **Download** only |
 | Edit details, tags; upload a new version (revision, amendment, signed copy); restore an earlier file or earlier details | `edit` |
 | Move between statuses | `edit`; approving out of In Review needs `approve` |
 | Share with a person, group, department, or role; transfer ownership | `manage_permissions` |
@@ -648,6 +648,23 @@ On a document's page:
 | Legal hold, retention override | Administrator or Records Officer |
 | Delete | `delete`; blocked while on legal hold or within the retention period |
 | Audit history | The owner, `manage_permissions`, or Administrator/Auditor |
+
+**Viewing files in the browser.** The **View** button in the page header,
+and a **View** link beside a file in the Files table, open the file in a new
+tab instead of saving it. Only five types can be viewed: PDF, PNG, JPEG, GIF
+and WebP. PDMS goes by the type it found in the file's content at upload, not
+by the file name. Word, Excel, PowerPoint, OpenDocument, RTF, TIFF, text, CSV
+and email files show only **Download**.
+- **Same rules as a download.** Whoever may download a file may view it, and
+  a SharePoint file changed outside PDMS is stopped the same way.
+- **Why only some types.** A file shown in the browser opens as a page on
+  PDMS's own address, so PDMS shows only types a browser displays safely, and
+  it adds a stricter security policy to the answer.
+- **Audit.** A view is recorded as `document.downloaded`, like a download,
+  because PDMS can't see what the browser's own Save or Print does with the
+  file afterwards. To tell them apart, open the entry: its details have
+  `disposition`, `inline` for a view and `attachment` for a download.
+  `document.viewed` only means someone opened the document page.
 
 Every change keeps the earlier versions: files are stored by content hash and
 never overwritten. Deleted documents are hidden but kept. Administrators can
@@ -1187,6 +1204,9 @@ a shared mailbox:
   Each row shows who, when (in your time zone), how they signed in, from which
   IP, and a field-by-field before/after table. **Older entries** pages back
   through the log.
+- **Views and downloads** of a file are both `document.downloaded`. The
+  entry's `disposition` says which: `inline` is a view in the browser,
+  `attachment` is a download (see chapter 4, "Working with documents").
 - **Export → CSV or JSON** (Auditors only). The export itself is logged. CSV cells
   that begin with formula characters are neutralized for spreadsheet safety.
 - **Verify integrity** recomputes the hash chain. The worker also verifies it

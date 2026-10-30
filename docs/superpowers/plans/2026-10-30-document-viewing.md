@@ -396,13 +396,20 @@ Check each of these:
   - the viewer's **Save** works;
   - its **Print** works;
   - the link in the PDF opens;
-  - the JPEG fits the window and zooms on click.
+  - the JPEG fits the window and zooms on click;
+  - the file opens in its new tab rather than an error page, both from the
+    View button and when the view address is pasted into the address bar.
+    (The view answer carries both `Cross-Origin-Opener-Policy: same-origin`
+    and a CSP `sandbox`; the HTML Standard says a top-level page with both
+    should not load. Current Chromium and Firefox load it anyway.)
 - [ ] **Step 2:** If something is blocked, add only the allowance it needs
 to `VIEW_CSP`: `allow-downloads` (Save), `allow-modals` (Print), or
 `allow-popups` and `allow-popups-to-escape-sandbox` (links). Never add
 `allow-scripts`, `allow-same-origin`, `allow-forms` or
 `allow-top-navigation`. Update the test literal and D-118 in the same
-commit, `DV: allow <what> in the view policy`.
+commit, `DV: allow <what> in the view policy`. If the file does not open
+in its tab, leave `Cross-Origin-Opener-Policy` off the view answer only, in
+`security_headers`, and say so in D-118.
 - [ ] **Step 3:** Record the result in the spec's §4 and in ROADMAP §0.3.
 When it passes, DV phase 1 is done:
   - add it to §0.1;

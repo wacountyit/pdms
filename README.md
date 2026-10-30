@@ -17,7 +17,7 @@ packaged as a single Docker image.
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Foundation: auth (Entra ID OIDC + break-glass local with TOTP), users, departments, groups, roles, central authorization, hash-chained audit log, job worker, packaging | **Done** |
-| 1 | Documents: types, versioned custom fields, upload/versioning (local or S3 storage, ClamAV), tags, search/filter/export, sharing, ownership, retention and legal hold | **Done** |
+| 1 | Documents: types, versioned custom fields, upload/versioning (local or S3 storage, ClamAV), View for PDFs and images in the browser (other files download), tags, search/filter/export, sharing, ownership, retention and legal hold | **Done** |
 | 2 | Review schedules and tasks, date-driven statuses, reminder rules, email and in-app notifications, calendar, ICS feeds, dashboards | **Done** |
 | 3 | Review/approval workflow (reviewers, legal counsel step, approvers, separation of duties), signature tracking, boards and appointments with requirement checklists and term reminders | **Done** |
 | 4 | Records request packages, reports (CSV), REST API with OpenAPI and scoped tokens, webhooks and integration providers, audit forwarding, access review reports, backup/restore with `verify-integrity` | **Done** |

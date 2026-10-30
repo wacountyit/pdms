@@ -15,7 +15,8 @@ and D-103 while building it. D-104 to D-110 were decided on 2026-10-23 for plan
 P4 (SharePoint access, change detection, and operations), with the owner's
 answers to its pre-flight questions. D-111 to D-116 were decided on 2026-10-23
 for S1 (settings in Administration). D-117 was decided on 2026-10-28 for GS
-(the Entra sync limited to one group).
+(the Entra sync limited to one group). D-118 was decided on 2026-10-30 for DV
+(viewing documents in the browser).
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -178,13 +179,14 @@ SeaweedFS's S3 gateway, which also honors the conditional `PUT`. The
 `BlobStore` trait has no delete; purging under retention will be a separate
 privileged operation.
 
-### D-027 File types are decided by content, not by the client — Accepted
+### D-027 File types are decided by content, not by the client — Accepted (amended by D-118)
 Uploads are sniffed from their first 64 KB and must match an allowlist: PDF,
 Office (OOXML and legacy), OpenDocument, RTF, common images, text/CSV, and
 email. Legacy Office/Outlook (OLE) and zip-based formats also need a matching
 extension. Executables and unknown binaries are rejected, and every rejection
-is audited. Downloads are always `Content-Disposition: attachment` with
-`nosniff`, using the stored, sniffed media type.
+is audited. Downloads are `Content-Disposition: attachment` with `nosniff`,
+using the stored, sniffed media type; only a short list of types may instead
+be shown in the browser (D-118).
 
 ### D-028 CSRF for file uploads without JavaScript — Accepted
 A plain HTML file form cannot send a header. On an allowlist of upload routes
@@ -1163,6 +1165,72 @@ are in the GS [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.
   open): applying a person takes a shared advisory lock and a Department
   mapping change an exclusive one, and the mapping is read inside the apply
   transaction. A mapping edit made while the sync is off stays as it is.
+
+### D-118 Files are shown in the browser only for a short list of types — Accepted (phase 1 built 2026-10-30)
+Amends D-027. Design: the DV
+[spec](superpowers/specs/2026-10-30-document-viewing-design.md) §2, §3 and §6.
+
+- **Five types may be shown:** `application/pdf`, `image/png`,
+  `image/jpeg`, `image/gif` and `image/webp`. The choice goes by the stored,
+  sniffed type (D-027), never by the file name or what the uploader claimed.
+  Everything else stays download-only: Word, Excel, PowerPoint, OpenDocument,
+  RTF, TIFF, plain text, CSV and email.
+- **Why a list:** a file shown in the browser opens as a page on PDMS's own
+  address, so a file that could act as a page (HTML or SVG) could act as PDMS
+  for whoever opened it. PDMS refuses files that start as HTML, and other
+  text with markup in it, an SVG for example, is stored as plain text, so
+  nothing like that is stored today. The list keeps viewing safe even if the
+  accepted types change: a type is shown only if it is on the list.
+- **The view address** is `GET /documents/{id}/versions/{n}/view`. The
+  **View** button in the document header and the **View** links in the Files
+  table open it in a new tab. It calls the same core function as a download,
+  so the `View` permission, visibility (D-085, D-090) and the stop on a
+  SharePoint file changed outside PDMS (D-105) apply unchanged. A type not
+  on the list is sent exactly as a download is (`attachment`).
+- **A viewable file is sent inline** with `nosniff`, `Cache-Control:
+  private, no-store`, and the real file name for the viewer's own Save. No
+  `Accept-Ranges` header is sent, so the viewer fetches the file once and
+  one view is one audit event.
+- **The view policy** replaces the page policy on this answer only:
+  `default-src 'none'; style-src 'unsafe-inline'; base-uri 'none';
+  form-action 'none'; frame-ancestors 'none'; sandbox`.
+  - `default-src 'none'`: the response may load nothing else.
+  - `sandbox`, with no allowances: the browser treats the tab as coming from
+    nowhere, not from PDMS, so even if something in a file ran, it couldn't
+    use the person's PDMS sign-in. Both browser viewers work under it.
+  - `style-src 'unsafe-inline'`: Chrome's and Edge's own image page centres
+    the image and fits a large scan to the window with inline styles, which
+    the page policy blocks. This is safe here because the answer is an image
+    or a PDF, never HTML, and `nosniff` stops the browser reading it as HTML.
+  - If the browser check finds the viewer's Save, Print or a link in a PDF
+    blocked, only the matching allowance is added (`allow-downloads`,
+    `allow-modals`, `allow-popups` with `allow-popups-to-escape-sandbox`).
+    Never `allow-scripts`, `allow-same-origin`, `allow-forms` or
+    `allow-top-navigation`.
+- **Pages keep the page policy.** Only the view handler can ask for the view
+  policy, by marking its response; `middleware::security_headers` then sends
+  it in place of the page policy. Both policies are in `middleware.rs`, and a
+  test checks that pages keep theirs. The view answer also keeps the other
+  headers (`X-Frame-Options`, `Referrer-Policy`,
+  `Cross-Origin-Opener-Policy`, HSTS).
+- **Known risk:** the view answer carries both `Cross-Origin-Opener-Policy:
+  same-origin` and a `sandbox`, and the HTML Standard says a top-level page
+  with both should not load. Current Chromium and Firefox load it anyway
+  (checked). If a browser on a county PC doesn't, the fix is to leave
+  `Cross-Origin-Opener-Policy` off the view answer only. The browser check
+  (plan Task 5) looks for this.
+- **A new tab, not a frame** on the document page, because a frame would
+  need the page policy and `X-Frame-Options` loosened for PDMS's own pages.
+- **Audit:** every file sent writes `document.downloaded` with the existing
+  `version`, `sha256` and `file_name`, plus `disposition`: `inline` for a
+  view, `attachment` for a download. PDMS can't see what the viewer's own
+  Save or Print does afterwards, which is why a view is audited like a
+  download. `document.viewed` still means "opened the document page"
+  (D-034).
+- **Phase 2** (Word, Excel, PowerPoint, OpenDocument, RTF and TIFF shown as
+  PDF through SharePoint's conversion) waits for the owner's answer (ROADMAP
+  §0.7). Phase 1 is done once the browser check on a county PC passes (plan
+  Task 5).
 
 ## Open questions (configurable defaults; not blocking)
 

@@ -2,7 +2,8 @@
 
 - **Date:** 2026-10-30
 - **Status:** phase 1 (PDFs and images) approved by the owner on
-  2026-10-30. Phase 2 (§5) waits for the owner's answer to §10. Plan:
+  2026-10-30 and built the same day; the browser check on a county PC is
+  next (plan Task 5). Phase 2 (§5) waits for the owner's answer to §10. Plan:
   [2026-10-30-document-viewing.md](../plans/2026-10-30-document-viewing.md).
 - **Item:** "Viewing documents in the browser" (DV) in ROADMAP §0.3. Commit
   messages start with `DV:`.
@@ -52,8 +53,9 @@ response go by that stored type, from one list in the code.
 
 **Why there is a list at all.** A file shown in the browser is opened as a
 page on PDMS's own address. An HTML or SVG file shown that way could act as
-PDMS for whoever opens it. PDMS stores nothing as HTML or SVG today (an
-HTML file is stored as plain text), but the list keeps viewing safe even if
+PDMS for whoever opens it. PDMS stores nothing as HTML or SVG today (PDMS refuses files that start as
+HTML; other text with markup in it, an SVG for example, is stored as plain
+text), but the list keeps viewing safe even if
 the accepted types change: a type is shown only if it is on the list.
 
 ## 3. How a file is sent for viewing
