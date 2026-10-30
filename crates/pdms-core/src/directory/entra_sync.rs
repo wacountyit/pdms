@@ -171,7 +171,8 @@ fn cursor_key(select: &str, include_guests: bool, group: Option<&str>) -> String
 pub const MISSING_PERMISSION: &str = "PDMS can't read the group's members: add the GroupMember.Read.All permission (ADMIN_GUIDE, Entra ID sync)";
 
 /// The user IDs (lowercase) of everyone in the group, including members of
-/// groups inside it.
+/// groups inside it. A group Entra doesn't have (a GUID that isn't a group's,
+/// or a deleted group) is a plain error naming the setting to check.
 pub(crate) async fn group_members(
     graph: &GraphClient,
     group: &str,
@@ -181,7 +182,13 @@ pub(crate) async fn group_members(
             "/groups/{group}/transitiveMembers/microsoft.graph.user?$select=id&$top=999"
         ))
         .await
-        .map_err(group_error)?;
+        .map_err(|e| match e {
+            GraphError::NotFound => CoreError::validation(format!(
+                "Entra has no group with the object ID {group}: check Only members of this \
+                 group on Administration → Entra ID sync"
+            )),
+            other => group_error(other),
+        })?;
     Ok(rows
         .iter()
         .filter_map(|v| v.get("id").and_then(Value::as_str))
@@ -482,8 +489,10 @@ async fn sync_all(
         group_sweep(core, ctx, issuer, started, in_group, listed, &mut report).await?;
     }
     if complete {
-        sweep(core, ctx, issuer, started, &seen, members, &mut report).await?;
-        if members > 0 {
+        let held = sweep(core, ctx, issuer, started, &seen, members, &mut report).await?;
+        // A round that looks wrong (no member accounts, or too many missing)
+        // proves nothing about who was deleted, so the marks stay too.
+        if members > 0 && !held {
             unmark_missing_from_entra(core, ctx, issuer, &seen).await?;
         }
     }
@@ -566,7 +575,7 @@ async fn saved_link(db: &PgPool, key: &str) -> CoreResult<Option<String>> {
 /// accounts it did not list (deleted while no delta could report it, or
 /// before the sync was on) and that existed when the round started. Held
 /// back, and reported, when the round looks wrong: no member accounts, or
-/// more departures than max(5, 20%).
+/// more departures than max(5, 20%). Returns whether it held back.
 async fn sweep(
     core: &Core,
     ctx: &Ctx,
@@ -575,14 +584,14 @@ async fn sweep(
     seen: &BTreeSet<String>,
     members: usize,
     report: &mut SyncReport,
-) -> CoreResult<()> {
+) -> CoreResult<bool> {
     let linked = linked_accounts(&core.db, issuer, started).await?;
     let missing: Vec<_> = linked
         .iter()
         .filter(|r| !seen.contains(&r.oidc_subject.to_ascii_lowercase()))
         .collect();
     if missing.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let kept = kept_admin(&core.db, &missing).await?;
     let departing: Vec<_> = missing.iter().filter(|r| Some(r.id) != kept).collect();
@@ -620,7 +629,7 @@ async fn sweep(
             "{held}: {names}. Check Entra and the Graph permissions; if the departures are \
              real, depart those people by hand on their pages"
         ));
-        return Ok(());
+        return Ok(true);
     }
     for r in missing {
         depart(
@@ -632,7 +641,7 @@ async fn sweep(
         )
         .await?;
     }
-    Ok(())
+    Ok(false)
 }
 
 /// With a group set, every run: depart this issuer's active accounts outside
@@ -832,16 +841,17 @@ enum Leaving {
     Group,
 }
 
-/// Depart someone. The last administrator is reported instead; a departed
-/// account that had a local password is reported too, so an administrator
-/// knows.
+/// Depart someone. The last administrator (or, for an administrator pressing
+/// **Depart these N people**, their own account) is reported instead, and
+/// `true` is returned: the person was kept. A departed account that had a
+/// local password is reported too, so an administrator knows.
 async fn depart(
     core: &Core,
     ctx: &Ctx,
     who: &Linked<'_>,
     why: Leaving,
     report: &mut SyncReport,
-) -> CoreResult<()> {
+) -> CoreResult<bool> {
     let (name, email) = (who.name, who.email);
     let (result, why) = match why {
         Leaving::Entra(why) => (
@@ -857,7 +867,7 @@ async fn depart(
     };
     match result {
         // No longer active by the time it was departed: nothing changed.
-        Ok(false) => {}
+        Ok(false) => Ok(false),
         Ok(true) => {
             report.departed += 1;
             if who.local_login {
@@ -865,13 +875,16 @@ async fn depart(
                     "{name} <{email}> {why} and was departed; the account also had a local password"
                 ));
             }
+            Ok(false)
         }
-        Err(CoreError::Conflict(reason)) => report.errors.push(format!(
-            "{name} <{email}> {why} but was not deactivated: {reason}"
-        )),
-        Err(err) => return Err(err),
+        Err(CoreError::Conflict(reason)) => {
+            report.errors.push(format!(
+                "{name} <{email}> {why} but was not deactivated: {reason}"
+            ));
+            Ok(true)
+        }
+        Err(err) => Err(err),
     }
-    Ok(())
 }
 
 /// Keep the saved cursor (no change is lost) and remember why the run failed.
@@ -1387,15 +1400,28 @@ pub async fn people(db: &PgPool, ids: &[Uuid]) -> CoreResult<Vec<Person>> {
     .await?)
 }
 
+/// What **Depart these N people** did ([`depart_held_back`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Confirmed {
+    pub departed: u32,
+    /// How many were not departed because the change was refused: the last
+    /// administrator, or the administrator's own account.
+    pub kept: u32,
+    /// One line for each person kept, saying why, and for each departed
+    /// account that also had a local password.
+    pub lines: Vec<String>,
+}
+
 /// **Depart these N people**: depart the people the last run held back, now
 /// that an administrator confirms it (requires `ManageDirectory`). The member
 /// list is read again, and only those still active and still outside the
 /// group are departed, each audited in its own transaction. Someone who can't
-/// be departed (the last administrator) is returned as a problem, as is a
-/// departed account that also had a local password. Afterwards nobody is
-/// waiting any more. Refused while a run is in progress, and when the group
-/// lists no members.
-pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<(u32, Vec<String>)> {
+/// be departed (the last administrator, or the administrator's own account)
+/// is kept and reported, as is a departed account that also had a local
+/// password. Afterwards nobody is waiting any more. Refused while a run is in
+/// progress, when the group lists no members, and when Graph can't be read
+/// (then nothing has changed).
+pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<Confirmed> {
     ctx.require(Capability::ManageDirectory)?;
     require_enabled(core)?;
     let config = core.config();
@@ -1422,9 +1448,18 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<(u32, Vec<St
         .map(|s| s.held_back)
         .unwrap_or_default();
     if held_back.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(Confirmed::default());
     }
-    let in_group = group_members(&graph, &group).await?;
+    let in_group = group_members(&graph, &group).await.map_err(|e| match e {
+        // An outage or throttling (a missing permission or a wrong group
+        // ID is already a plain message): shown on the page, not as an
+        // error page. Nothing has changed yet.
+        CoreError::Internal(why) => CoreError::Unavailable(format!(
+            "PDMS couldn't read the PDMS group's members from Microsoft Graph ({why}), so \
+             nobody was departed; try again in a few minutes."
+        )),
+        other => other,
+    })?;
     if in_group.is_empty() {
         return Err(CoreError::validation(
             "The PDMS group lists no members now, so nobody was departed. Check the group's \
@@ -1445,11 +1480,14 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<(u32, Vec<St
     .fetch_all(&core.db)
     .await?;
     let mut report = SyncReport::default();
+    let mut kept = 0;
     for r in waiting
         .iter()
         .filter(|r| !in_group.contains(&r.oidc_subject.to_ascii_lowercase()))
     {
-        depart(core, ctx, &r.who(), Leaving::Group, &mut report).await?;
+        if depart(core, ctx, &r.who(), Leaving::Group, &mut report).await? {
+            kept += 1;
+        }
     }
     sqlx::query!(
         r#"UPDATE sync_cursors SET last_summary = jsonb_set(last_summary, '{held_back}', '[]')
@@ -1459,7 +1497,11 @@ pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<(u32, Vec<St
     .execute(&mut *lock)
     .await?;
     lock.commit().await?;
-    Ok((report.departed, report.errors))
+    Ok(Confirmed {
+        departed: report.departed,
+        kept,
+        lines: report.errors,
+    })
 }
 
 /// "Sync now" / "Full resync" from the admin page: queue a run for the worker.

@@ -25,18 +25,18 @@
   <h3>Needs attention</h3>
   <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
   {% endif %}
-  {% if !held_back.is_empty() %}
+  {% if !held_back.is_empty() && group.is_some() && enabled %}
   <h3 id="held-back-h">Waiting for your confirmation</h3>
-  <p>These {{ held_back.len() }} people are outside the PDMS group. That is more than the sync departs at once, so none of them was departed.</p>
+  <p>{% if held_back.len() == 1 %}This person is{% else %}These {{ held_back.len() }} people are{% endif %} outside the PDMS group. The last run would have departed more people than the sync departs at once, so it departed none of them.</p>
   <ul aria-labelledby="held-back-h">{% for p in held_back %}<li>{{ p.name }} &lt;{{ p.email }}&gt;</li>{% endfor %}</ul>
   <p class="help">If this is what you meant, for example because you have just set the group, depart them now. PDMS reads the group again first and departs only those still outside it. Otherwise correct the group in Entra or under <strong>Settings</strong>, and the next run checks again.</p>
   <form method="post" action="/admin/entra/depart-held-back">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
-    <button type="submit" class="button danger">Depart these {{ held_back.len() }} people</button>
+    <button type="submit" class="button danger">{% if held_back.len() == 1 %}Depart this person{% else %}Depart these {{ held_back.len() }} people{% endif %}</button>
   </form>
   {% endif %}
   {% if !reactivated.is_empty() %}
-  <h3 id="reactivated-h">Reactivated in the last run</h3>
+  <h3 id="reactivated-h">Reactivated since the last run started</h3>
   <p class="help">The sync had departed these people for leaving the PDMS group, and they are back in it. Their roles and access came back with them, so check the ones that hold roles.</p>
   <ul aria-labelledby="reactivated-h">{% for p in reactivated %}<li>{{ p.name }} &lt;{{ p.email }}&gt;{% if !p.roles.is_empty() %} <span class="status status-warning">Has roles: {{ p.roles.join(", ") }}</span>{% endif %}</li>{% endfor %}</ul>
   {% endif %}
@@ -60,13 +60,13 @@
   <form method="post" action="/admin/entra/settings" class="grid-form">
     <input type="hidden" name="_csrf" value="{{ l.csrf }}">
     <span></span>
-    <div><label class="check"><input type="checkbox" name="enabled" value="true"{% if enabled %} checked{% endif %}{% if st.enabled_locked %} disabled{% endif %}> Sync people from Entra ID every night</label>
+    <div><label class="check"><input type="checkbox" name="enabled" value="true"{% if st.enabled %} checked{% endif %}{% if st.enabled_locked %} disabled{% endif %}> Sync people from Entra ID every night</label>
     {% if st.enabled_locked %}<p class="help">Set in the configuration file, so it can't be changed here.</p>{% endif %}</div>
     <label for="es-run">Run at</label>
     <div><input id="es-run" name="run_at" type="time" value="{{ st.run_at }}" aria-describedby="es-run-help"{% if st.run_at_locked %} disabled{% endif %}>
     <p class="help" id="es-run-help">Daily, in the organization's time zone.{% if st.run_at_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
     <label for="es-attr">Department field</label>
-    <div><input id="es-attr" name="attribute" value="{{ attribute }}" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="es-attr-help"{% if st.attribute_locked %} disabled{% endif %}>
+    <div><input id="es-attr" name="attribute" value="{{ st.attribute }}" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="es-attr-help"{% if st.attribute_locked %} disabled{% endif %}>
     <p class="help" id="es-attr-help">The Entra account property that names the department, for example <code>department</code> or <code>officeLocation</code>.{% if st.attribute_locked %} Set in the configuration file, so it can't be changed here.{% endif %}</p></div>
     <label for="es-group">Only members of this group</label>
     <div><input id="es-group" name="group_id" value="{{ st.group_id }}" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="es-group-help"{% if st.group_locked %} disabled{% endif %}>

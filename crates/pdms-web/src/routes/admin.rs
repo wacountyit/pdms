@@ -838,14 +838,19 @@ struct EntraPage {
     reactivated: Vec<entra_sync::Person>,
 }
 
+/// The Settings form's values: as saved, or as typed when **Test group**
+/// re-shows the page. A locked field always shows the configuration file's
+/// value.
 pub struct EntraSettings {
+    pub enabled: bool,
     pub run_at: String,
+    pub attribute: String,
     pub include_guests: bool,
     pub enabled_locked: bool,
     pub run_at_locked: bool,
     pub attribute_locked: bool,
     pub guests_locked: bool,
-    /// The group's object ID as saved (empty: everyone).
+    /// The group's object ID (empty: everyone).
     pub group_id: String,
     pub group_locked: bool,
 }
@@ -878,26 +883,39 @@ pub async fn entra_preview(
     }
 }
 
+/// `typed`: what **Test group** posted, with its result; the form shows what
+/// was typed, so **Save** after it saves that.
 async fn entra_page(
     state: &AppState,
     user: &CurrentUser,
     flash: FlashMsg,
     preview: Option<Vec<entra_sync::PreviewUser>>,
-    group_check: Option<settings::Check>,
+    typed: Option<(EntraSettingsForm, settings::Check)>,
 ) -> AppResult<Html<String>> {
     let core = &state.core;
+    let (typed, group_check) = typed.map_or((None, None), |(f, c)| (Some(f), Some(c)));
     let settings = user.can(Capability::ManageSettings).then(|| {
         let file = core.file_config();
         let config = core.config();
+        let saved = &config.entra_sync;
+        let locked = |key: &str| file.locked.contains(key);
+        // The browser doesn't send a disabled (locked) field back with a Test.
+        let form = |key: &str| typed.as_ref().filter(|_| !locked(key));
         EntraSettings {
-            run_at: config.entra_sync.run_at.clone(),
-            include_guests: config.entra_sync.include_guests,
-            enabled_locked: file.locked.contains("entra_sync.enabled"),
-            run_at_locked: file.locked.contains("entra_sync.run_at"),
-            attribute_locked: file.locked.contains("entra_sync.attribute"),
-            guests_locked: file.locked.contains("entra_sync.include_guests"),
-            group_id: config.entra_sync.group_id.clone(),
-            group_locked: file.locked.contains("entra_sync.group_id"),
+            enabled: form("entra_sync.enabled").map_or(saved.enabled, |f| checkbox(&f.enabled)),
+            run_at: form("entra_sync.run_at")
+                .map_or_else(|| saved.run_at.clone(), |f| f.run_at.clone()),
+            attribute: form("entra_sync.attribute")
+                .map_or_else(|| saved.attribute.clone(), |f| f.attribute.clone()),
+            include_guests: form("entra_sync.include_guests")
+                .map_or(saved.include_guests, |f| checkbox(&f.include_guests)),
+            enabled_locked: locked("entra_sync.enabled"),
+            run_at_locked: locked("entra_sync.run_at"),
+            attribute_locked: locked("entra_sync.attribute"),
+            guests_locked: locked("entra_sync.include_guests"),
+            group_id: form("entra_sync.group_id")
+                .map_or_else(|| saved.group_id.clone(), |f| f.group_id.clone()),
+            group_locked: locked("entra_sync.group_id"),
         }
     });
     let status = entra_sync::status(&core.db).await?;
@@ -968,7 +986,8 @@ pub struct EntraSettingsForm {
     group_id: String,
 }
 
-/// Check the group ID in the form, without saving it.
+/// Check the group ID in the form, without saving it. The page comes back
+/// with the form as typed.
 pub async fn entra_test_group(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -986,12 +1005,14 @@ pub async fn entra_test_group(
     {
         state.core.config().entra_sync.group_id.clone()
     } else {
-        f.group_id
+        f.group_id.clone()
     };
     let check = entra_sync::test_group(&state.core, &user.ctx, &group_id).await?;
-    Ok(entra_page(&state, &user, FlashMsg(None), None, Some(check))
-        .await?
-        .into_response())
+    Ok(
+        entra_page(&state, &user, FlashMsg(None), None, Some((f, check)))
+            .await?
+            .into_response(),
+    )
 }
 
 pub async fn save_entra_settings(
@@ -1077,30 +1098,35 @@ pub async fn entra_depart_held_back(
     user: CurrentUser,
 ) -> AppResult<Response> {
     match entra_sync::depart_held_back(&state.core, &user.ctx).await {
-        Ok((n, problems)) => {
-            // A flash is a cookie: name a few problems, the audit log has all.
-            const SHOWN: usize = 5;
-            let mut message = format!("Departed {n} people.");
-            for p in problems.iter().take(SHOWN) {
-                message.push(' ');
-                message.push_str(p);
-                message.push('.');
-            }
-            if problems.len() > SHOWN {
-                message.push_str(&format!(
-                    " And {} more: see the audit log.",
-                    problems.len() - SHOWN
-                ));
-            }
-            Ok(redirect_with(
-                &state,
-                "/admin/entra",
-                problems.is_empty(),
-                &message,
-            ))
+        Ok(c) => {
+            let (ok, message) = confirmed_flash(&c);
+            Ok(redirect_with(&state, "/admin/entra", ok, &message))
         }
         Err(e) => done(&state, "/admin/entra", Err::<(), _>(e), ""),
     }
+}
+
+/// The flash after **Depart these N people**: green unless someone was kept
+/// (a line about a local password reports a departure that happened).
+fn confirmed_flash(c: &entra_sync::Confirmed) -> (bool, String) {
+    // A flash is a cookie: name a few lines, the audit log has all.
+    const SHOWN: usize = 5;
+    let mut message = match c.departed {
+        1 => "Departed 1 person.".to_owned(),
+        n => format!("Departed {n} people."),
+    };
+    for p in c.lines.iter().take(SHOWN) {
+        message.push(' ');
+        message.push_str(p);
+        message.push('.');
+    }
+    if c.lines.len() > SHOWN {
+        message.push_str(&format!(
+            " And {} more: see the audit log.",
+            c.lines.len() - SHOWN
+        ));
+    }
+    (c.kept == 0, message)
 }
 
 pub async fn entra_sync_now(
@@ -1115,4 +1141,47 @@ pub async fn entra_sync_now(
         r,
         "Sync queued. Refresh this page in a minute to see the result.",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn confirmed(departed: u32, kept: u32, lines: &[&str]) -> entra_sync::Confirmed {
+        entra_sync::Confirmed {
+            departed,
+            kept,
+            lines: lines.iter().map(|l| (*l).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn the_departure_flash_counts_people_and_is_red_only_when_someone_was_kept() {
+        assert_eq!(
+            confirmed_flash(&confirmed(1, 0, &[])),
+            (true, "Departed 1 person.".to_owned())
+        );
+        assert_eq!(
+            confirmed_flash(&confirmed(0, 0, &[])),
+            (true, "Departed 0 people.".to_owned())
+        );
+        // A local password is reported, but the departure happened.
+        let password = "P5 <p5@x.org> is no longer in the PDMS group and was departed; the \
+                        account also had a local password";
+        assert_eq!(
+            confirmed_flash(&confirmed(3, 0, &[password])),
+            (true, format!("Departed 3 people. {password}."))
+        );
+        let kept = "P3 <p3@x.org> is no longer in the PDMS group but was not deactivated: you \
+                    cannot deactivate your own account";
+        let (ok, message) = confirmed_flash(&confirmed(2, 1, &[kept]));
+        assert!(!ok);
+        assert_eq!(message, format!("Departed 2 people. {kept}."));
+        // At most five lines; the audit log has the rest.
+        let (_, message) = confirmed_flash(&confirmed(7, 0, &["a", "b", "c", "d", "e", "f", "g"]));
+        assert_eq!(
+            message,
+            "Departed 7 people. a. b. c. d. e. And 2 more: see the audit log."
+        );
+    }
 }

@@ -383,8 +383,18 @@ pub async fn set_user_status(
 /// The Entra sync departs someone who is no longer in the PDMS group (GS).
 /// The person is marked, so the sync reactivates only these people.
 /// Returns `false` when the person was not active and nothing changed.
+/// Like [`set_user_status`], it refuses the acting user's own account (an
+/// administrator pressing **Depart these N people**); the sync itself acts
+/// as the system, which has no account.
 pub async fn depart_from_group(db: &PgPool, ctx: &Ctx, id: Uuid) -> CoreResult<bool> {
     ctx.require(Capability::ManageDirectory)?;
+    if ctx.user_id() == Some(id) {
+        return Err(CoreError::Conflict(
+            "you cannot deactivate your own account; add yourself to the PDMS group, or the \
+             next sync run departs you"
+                .into(),
+        ));
+    }
     let mut tx = db.begin().await?;
     let changed = change_status(
         &mut tx,

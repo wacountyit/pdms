@@ -1765,6 +1765,53 @@ async fn the_last_administrator_is_not_departed_for_the_group() {
     assert!(!group_mark(&core, a).await);
 }
 
+/// What an administrator reads when they would depart themselves.
+const OWN_ACCOUNT: &str = "you cannot deactivate your own account; add yourself to the PDMS group, or the next sync run departs you";
+
+#[tokio::test]
+async fn depart_from_group_needs_directory_rights_and_never_departs_yourself() {
+    let (core, _db) = core().await;
+    let u = directory::create_user(&core.db, &system(), "Una", "una@county.example", None)
+        .await
+        .unwrap();
+    let (clerk, _) = user_in_new_department(&core, "HR", "hr@county.example").await;
+    assert!(matches!(
+        directory::depart_from_group(&core.db, &as_user(&core, clerk).await, u).await,
+        Err(CoreError::Forbidden(_))
+    ));
+    assert_eq!(status_of(&core, u).await, "active");
+
+    // Two administrators, so the last-administrator rule is not what refuses.
+    let admin = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    let mut admins = Vec::new();
+    for (name, mail) in [("Ada", "ada@county.example"), ("Bea", "bea@county.example")] {
+        let id = directory::create_user(&core.db, &system(), name, mail, None)
+            .await
+            .unwrap();
+        directory::assign_role(&core.db, &system(), id, admin, None)
+            .await
+            .unwrap();
+        admins.push(id);
+    }
+    let ada = admins[0];
+    let as_ada = as_user(&core, ada).await;
+    match directory::depart_from_group(&core.db, &as_ada, ada).await {
+        Err(CoreError::Conflict(m)) => assert_eq!(m, OWN_ACCOUNT),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(status_of(&core, ada).await, "active");
+    assert!(!group_mark(&core, ada).await);
+    assert_eq!(status_audits(&core, ada).await, 0);
+
+    // Anyone else, she may.
+    assert!(
+        directory::depart_from_group(&core.db, &as_ada, u)
+            .await
+            .unwrap()
+    );
+    assert_eq!(status_of(&core, u).await, "departed");
+}
+
 const OID_H: &str = "80000000-0000-4000-8000-000000000008";
 
 /// The context of the newest `directory.synced` audit row.
@@ -1981,6 +2028,35 @@ async fn a_missing_permission_fails_the_run_and_changes_nothing() {
     let r = entra_sync::run(&grouped, &system()).await.unwrap();
     assert_eq!((r.created, r.departed), (1, 1), "{r:?}");
     assert_eq!(status_of(&core, a).await, "departed");
+}
+
+#[tokio::test]
+async fn a_group_entra_does_not_have_fails_the_run_and_changes_nothing() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    entra_sync::run(&core, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    let before = saved_link(&core).await;
+    m.add_user(member(OID_H, "Hal", "hal@county.example", None));
+    // A GUID, but not a group's (or the group was deleted): Graph answers 404.
+    let unknown = "11111111-0000-4000-8000-000000000001";
+    let grouped = with_group(&core, unknown).await;
+
+    let err = entra_sync::run(&grouped, &system()).await.unwrap_err();
+    let want = format!(
+        "Entra has no group with the object ID {unknown}: check Only members of this group on \
+         Administration → Entra ID sync"
+    );
+    assert!(
+        matches!(&err, CoreError::Validation(msg) if *msg == want),
+        "{err:?}"
+    );
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_error.as_deref(), Some(want.as_str()), "{st:?}");
+    assert!(id_of(&core, OID_H).await.is_none());
+    assert_eq!(status_of(&core, a).await, "active");
+    assert_eq!(saved_link(&core).await, before);
 }
 
 #[tokio::test]
@@ -2256,6 +2332,46 @@ async fn a_group_departure_later_deleted_from_entra_loses_its_mark() {
     let r = entra_sync::run(&grouped, &system()).await.unwrap();
     assert!(r.reactivated.is_empty(), "{r:?}");
     assert_eq!(status_of(&core, a).await, "departed");
+}
+
+#[tokio::test]
+async fn a_round_that_looks_wrong_leaves_the_group_marks_in_place() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_group(GROUP_P, "PDMS");
+    for i in 1..=9 {
+        let (name, mail) = (format!("P{i}"), format!("p{i}@county.example"));
+        m.add_user(member(&oid(i), &name, &mail, None));
+        m.add_to_group(GROUP_P, &oid(i));
+    }
+    m.add_user(member(OID_A, "Alice", "alice@county.example", None));
+    m.add_to_group(GROUP_P, OID_A);
+    let grouped = with_group(&core, GROUP_P).await;
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let a = id_of(&core, OID_A).await.unwrap();
+    m.remove_from_group(GROUP_P, OID_A);
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 1, "{r:?}");
+    assert!(group_mark(&core, a).await);
+
+    // A complete round that misses Alice and 7 of the 9 others looks wrong:
+    // the sweep holds its departures back, and proves nothing about Alice.
+    m.remove_user(OID_A, "deleted");
+    for i in 3..=9 {
+        m.remove_user(&oid(i), "deleted");
+    }
+    let r = entra_sync::run_full(&grouped, &system()).await.unwrap();
+    assert_eq!(r.departed, 0, "{r:?}");
+    assert!(
+        r.errors.iter().any(|e| e.contains("so none was departed")),
+        "{:?}",
+        r.errors
+    );
+    assert!(
+        group_mark(&core, a).await,
+        "kept while the round looks wrong"
+    );
+    assert_eq!(unmarked_audits(&core, a, "is not in Entra").await, 0);
 }
 
 /// `POST /users/{oid}/checkMemberGroups` requests so far.
@@ -2552,10 +2668,27 @@ async fn depart_these_people_departs_only_those_still_outside() {
         .await
         .unwrap();
 
-    let (n, problems) = entra_sync::depart_held_back(&grouped, &system())
+    // P5 also has a local password: departed, and reported, but not kept.
+    let p5 = id_of(&core, &oid(5)).await.unwrap();
+    directory::set_local_credentials(&core.db, &core.keys, &system(), p5, PW, None)
         .await
         .unwrap();
-    assert_eq!((n, problems), (5, Vec::<String>::new()));
+
+    let done = entra_sync::depart_held_back(&grouped, &system())
+        .await
+        .unwrap();
+    assert_eq!(
+        done,
+        entra_sync::Confirmed {
+            departed: 5,
+            kept: 0,
+            lines: vec![
+                "P5 <p5@county.example> is no longer in the PDMS group and was departed; the \
+                 account also had a local password"
+                    .to_owned()
+            ],
+        }
+    );
     assert_eq!(status_of(&core, p3).await, "active");
     assert!(!group_mark(&core, p4).await, "departed by hand, not marked");
     for i in 5..=9 {
@@ -2580,7 +2713,7 @@ async fn depart_these_people_departs_only_those_still_outside() {
         entra_sync::depart_held_back(&grouped, &system())
             .await
             .unwrap(),
-        (0, vec![])
+        entra_sync::Confirmed::default()
     );
 }
 
@@ -2639,6 +2772,73 @@ async fn depart_these_people_changes_nothing_when_the_group_cannot_be_read_or_is
     }
     let st = entra_sync::status(&core.db).await.unwrap();
     assert_eq!(st.last_summary.unwrap().held_back, held, "still waiting");
+}
+
+#[tokio::test]
+async fn depart_these_people_reports_a_graph_failure_plainly() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, held) = seven_held_back(&m, &core).await;
+
+    // An outage, then throttling that outlasts the retries.
+    m.fail_next(500, 0);
+    let outage = entra_sync::depart_held_back(&grouped, &system()).await;
+    for _ in 0..4 {
+        m.fail_next(429, 0);
+    }
+    let throttled = entra_sync::depart_held_back(&grouped, &system()).await;
+    for r in [outage, throttled] {
+        match r {
+            Err(CoreError::Unavailable(msg)) => assert!(
+                msg.contains("Microsoft Graph") && msg.contains("nobody was departed; try again"),
+                "{msg}"
+            ),
+            other => panic!("{other:?}"),
+        }
+    }
+    for id in &held {
+        assert_eq!(status_of(&core, *id).await, "active");
+    }
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().held_back, held, "still waiting");
+}
+
+#[tokio::test]
+async fn depart_these_people_never_departs_the_administrator_pressing_it() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, _) = seven_held_back(&m, &core).await;
+    // P3 presses the button; P1, in the group, is another administrator, so
+    // the last-administrator rule is not what keeps P3.
+    let admin = directory::role_id_by_key(&core.db, "admin").await.unwrap();
+    let (p1, p3) = (
+        id_of(&core, &oid(1)).await.unwrap(),
+        id_of(&core, &oid(3)).await.unwrap(),
+    );
+    for id in [p1, p3] {
+        directory::assign_role(&core.db, &system(), id, admin, None)
+            .await
+            .unwrap();
+    }
+    open_session(&core, p3).await;
+
+    let done = entra_sync::depart_held_back(&grouped, &as_user(&core, p3).await)
+        .await
+        .unwrap();
+    assert_eq!((done.departed, done.kept), (6, 1), "{done:?}");
+    assert_eq!(
+        done.lines,
+        vec![format!(
+            "P3 <p3@county.example> is no longer in the PDMS group but was not deactivated: \
+             {OWN_ACCOUNT}"
+        )]
+    );
+    assert_eq!(status_of(&core, p3).await, "active");
+    assert_eq!(live_sessions(&core, p3).await, 1, "still signed in");
+    for i in 4..=9 {
+        let id = id_of(&core, &oid(i)).await.unwrap();
+        assert_eq!(status_of(&core, id).await, "departed");
+    }
 }
 
 #[tokio::test]

@@ -1139,8 +1139,8 @@ are in the GS [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.
 - **The first narrowing** holds back its departures; the page lists them
   with **Depart these N people** (`manage_directory`). It reads the group
   again and departs only the listed people still active and still outside
-  it, each audited in its own transaction, and is refused while a run is in
-  progress.
+  it, each audited in its own transaction, never the administrator pressing
+  it, and is refused while a run is in progress.
 - **Back in the group** (amends D-096, under which the sync never reactivates
   anyone): the sync reactivates someone it departed for leaving the group
   once they are back in it with an enabled member account, at the next run

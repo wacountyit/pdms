@@ -460,24 +460,46 @@ read-only.
      (`Start-ADSyncSyncCycle -PolicyType Delta`), and check that the group
      shows under **Groups** in the Entra admin center. Its members must be
      synced users too.
-3. **Check it.** Enter the object ID and choose **Test group**. It shows the
-   group's name and how many people are in it, counting members of groups
-   inside it, without saving or changing anything. Then choose **Save**.
+3. **Put the PDMS administrators in the group** before you save it, directly
+   or through a group inside it. Otherwise the next run departs them like
+   anyone else outside the group (only the last administrator is always
+   kept). An administrator departed this way gets back in by being added to
+   the group and then signing in with Microsoft.
+4. **Check it, then save.** Enter the object ID and choose **Test group**. It
+   shows the group's name and how many people are in it, counting members of
+   groups inside it, without saving or changing anything. The form keeps what
+   you typed, so choose **Save** next.
 
 **The first run after you set or change the group** reads every account
 again. It departs the people outside the group, unless more than 20% of
 linked accounts (at least 5) would leave at once. Narrowing a 400-person
 tenant to an 80-person group would depart 320 accounts, so that run departs
 none of them and lists them on the page under **Waiting for your
-confirmation**. Check the list. If it is what you meant, choose **Depart
-these N people**. PDMS reads the group again first, and departs only the
-people on the list who are still active and still outside the group. Each
-departure is in the audit log (`user.status_changed`, reason "is no longer
-in the PDMS group"). If the list is wrong, correct the group instead; the
-next run checks again. The button is refused while a sync is running; try
-again a minute later. If the group lists no members at all (a wrong ID, or a
-dynamic group still filling), nobody is departed and **Needs attention**
-says to check the group.
+confirmation**. Until you confirm, they keep their access: they can still
+sign in, and their sessions stay open. Check the list. If it is what you
+meant, choose **Depart these N people**. PDMS reads the group again first,
+and departs only the people on the list who are still active and still
+outside the group. It never departs you: if you are on the list, add
+yourself to the group, or the next run departs you. Each departure is in the
+audit log (`user.status_changed`, reason "is no longer in the PDMS group").
+If the list is wrong, correct the group instead; the next run checks again.
+The button is refused while a sync is running; try again a minute later. If
+PDMS can't reach Microsoft Graph when you press it, the page says so and
+nobody is departed; try again a few minutes later.
+
+**If the group is wrong or empty:**
+
+- A group that lists no members (for example a dynamic group still filling)
+  departs nobody. The run says so under **Needs attention** and asks you to
+  check the group. **Depart these N people** is refused too, with an error
+  message on the page.
+- A wrong or deleted group ID (a GUID that isn't a group's) fails the run.
+  **Last error** says "Entra has no group with the object ID …: check Only
+  members of this group on Administration → Entra ID sync".
+- A group PDMS can't read (a wrong ID, or the missing `GroupMember.Read.All`
+  permission) stops the whole sync, not only the group's part. Nobody is
+  created, updated or departed until you fix it, not even people disabled or
+  deleted in Entra, so fix it promptly.
 
 **When someone leaves the group**, the next run departs them and signs them
 out, with the reason "is no longer in the PDMS group". This happens every
@@ -491,8 +513,9 @@ touched.
 next run, or when they sign in with Microsoft, whichever comes first. They
 need an enabled member account in Entra. Their roles, grants and memberships
 come back as they were; their department is read from Entra as usual. The
-page lists them under **Reactivated in the last run** until the next run,
-and marks the ones who hold roles ("Has roles: …") so you can review them.
+page lists them under **Reactivated since the last run started** until the
+next run, and marks the ones who hold roles ("Has roles: …") so you can
+review them.
 The audit log records it with the reason "is back in the PDMS group". This
 applies only to people the sync departed for leaving the group: someone you
 departed by hand, or whom Entra disabled or deleted, stays departed until you
@@ -520,9 +543,11 @@ account is listed under **Needs attention** after every run until you fix it.
 
 **Assignment required is still worth turning on** (section 2, Sign-in,
 step 5, with the PDMS group assigned). Removing someone from the group ends
-their PDMS access at the next run; until then they can still sign in, and
-their open sessions stay. With **Assignment required**, Microsoft refuses
-their next sign-in at once (sessions already open end at the next run).
+their PDMS access at the next run (or, when that run holds the departures
+back, once you confirm them with **Depart these N people**); until then they
+can still sign in, and their open sessions stay. With **Assignment
+required**, Microsoft refuses their next sign-in at once (sessions already
+open end at the next run).
 Entra's app assignment (which needs Entra ID P1) counts only the direct
 members of an assigned group, not members of groups inside it, so also
 assign the groups inside the PDMS group there.

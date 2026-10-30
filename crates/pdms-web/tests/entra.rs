@@ -295,11 +295,99 @@ async fn test_group_uses_the_value_from_the_configuration_file() {
         r.body
             .contains("Set up the Microsoft 365 connection first.")
     );
+    // The field still shows the file's value, read-only.
+    let group = field(&r.body, "group_id");
+    assert!(group.contains(&format!(r#"value="{GROUP}""#)), "{group}");
+    assert!(group.contains("disabled"), "{group}");
+}
+
+/// The rest of the first tag with this `name`, from the name on.
+fn field<'a>(body: &'a str, name: &str) -> &'a str {
+    let at = body
+        .find(&format!(r#"name="{name}""#))
+        .unwrap_or_else(|| panic!("no field {name}: {body}"));
+    &body[at..at + body[at..].find('>').unwrap()]
 }
 
 #[tokio::test]
-async fn the_page_lists_held_back_and_reactivated_people() {
+async fn test_group_keeps_what_was_typed() {
     let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let saved = app.core.config().entra_sync.clone();
+    assert!(saved.group_id.is_empty() && !saved.enabled && !saved.include_guests);
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    let r = b
+        .post(
+            "/admin/entra/test-group",
+            &[
+                ("_csrf", &page.csrf()),
+                ("enabled", "true"),
+                ("run_at", "04:45"),
+                ("attribute", "officeLocation"),
+                ("group_id", GROUP),
+                ("include_guests", "true"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(r.body.contains("Test result"), "{}", r.body);
+    // The form shows what was typed, so Save after it saves that.
+    let group = field(&r.body, "group_id");
+    assert!(group.contains(&format!(r#"value="{GROUP}""#)), "{group}");
+    let run_at = field(&r.body, "run_at");
+    assert!(run_at.contains(r#"value="04:45""#), "{run_at}");
+    let attribute = field(&r.body, "attribute");
+    assert!(
+        attribute.contains(r#"value="officeLocation""#),
+        "{attribute}"
+    );
+    assert!(field(&r.body, "enabled").contains("checked"));
+    assert!(field(&r.body, "include_guests").contains("checked"));
+    assert_eq!(r.body.matches("<h1").count(), 1);
+
+    // Nothing was saved: a plain visit shows the saved values.
+    let e = app.core.config().entra_sync.clone();
+    assert_eq!(
+        (
+            e.group_id,
+            e.run_at,
+            e.attribute,
+            e.enabled,
+            e.include_guests
+        ),
+        (
+            saved.group_id,
+            saved.run_at.clone(),
+            saved.attribute.clone(),
+            false,
+            false
+        )
+    );
+    let page = b.get("/admin/entra").await;
+    let group = field(&page.body, "group_id");
+    assert!(group.contains(r#"value="""#), "{group}");
+    let run_at = field(&page.body, "run_at");
+    assert!(
+        run_at.contains(&format!(r#"value="{}""#, saved.run_at)),
+        "{run_at}"
+    );
+    assert!(!field(&page.body, "include_guests").contains("checked"));
+}
+
+/// The sync on and limited to [`GROUP`] (the Microsoft 365 connection is
+/// not set up, so nothing reaches Graph).
+fn grouped() -> pdms_core::config::Config {
+    let mut c = config();
+    c.entra_sync.enabled = true;
+    c.entra_sync.group_id = GROUP.into();
+    c
+}
+
+/// An administrator signed in, and a last run that held back six people and
+/// reactivated one administrator. Returns the held-back IDs.
+async fn held_back_page(app: &App) -> (Browser, Vec<uuid::Uuid>) {
     let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
     let mut held_back = Vec::new();
     for i in 1..=6 {
@@ -326,14 +414,21 @@ async fn the_page_lists_held_back_and_reactivated_people() {
     .execute(&app.core.db)
     .await
     .unwrap();
-    let mut b = Browser::new(&app);
+    let mut b = Browser::new(app);
     b.login("admin@x.org", &secret).await;
+    (b, held_back)
+}
+
+#[tokio::test]
+async fn the_page_lists_held_back_and_reactivated_people() {
+    let app = app_with(grouped()).await;
+    let (mut b, held_back) = held_back_page(&app).await;
 
     let page = b.get("/admin/entra").await;
     assert_eq!(page.status, 200);
     let body = &page.body;
     assert!(body.contains("Who is synced"), "{body}");
-    assert!(body.contains("Everyone in the tenant"), "{body}");
+    assert!(body.contains("Members of the group"), "{body}");
     assert!(body.contains("0 departed, 1 reactivated"), "{body}");
     assert!(body.contains("Waiting for your confirmation"), "{body}");
     assert!(body.contains("These 6 people are outside the PDMS group"));
@@ -343,12 +438,15 @@ async fn the_page_lists_held_back_and_reactivated_people() {
         assert!(body.contains(&format!("Held Person {i}")), "{body}");
         assert!(body.contains(&format!("held{i}@x.org")), "{body}");
     }
-    assert!(body.contains("Reactivated in the last run"), "{body}");
+    assert!(
+        body.contains("Reactivated since the last run started"),
+        "{body}"
+    );
     assert!(body.contains("back@x.org"), "{body}");
     assert!(body.contains("Has roles: Administrator"), "{body}");
     assert_eq!(body.matches("<h1").count(), 1);
 
-    // Without the Microsoft 365 connection (and so the sync), nobody is departed.
+    // Without the Microsoft 365 connection, nobody is departed.
     let r = b
         .post("/admin/entra/depart-held-back", &[("_csrf", &page.csrf())])
         .await;
@@ -368,10 +466,32 @@ async fn the_page_lists_held_back_and_reactivated_people() {
 }
 
 #[tokio::test]
+async fn held_back_people_show_only_with_a_group_and_the_sync_on() {
+    let mut no_group = grouped();
+    no_group.entra_sync.group_id.clear();
+    let mut sync_off = grouped();
+    sync_off.entra_sync.enabled = false;
+    for (what, cfg) in [("no group", no_group), ("sync off", sync_off)] {
+        let app = app_with(cfg).await;
+        let (mut b, _) = held_back_page(&app).await;
+        let body = b.get("/admin/entra").await.body;
+        assert!(
+            !body.contains("Waiting for your confirmation"),
+            "{what}: {body}"
+        );
+        assert!(!body.contains("/admin/entra/depart-held-back"), "{what}");
+        assert!(!body.contains("held1@x.org"), "{what}");
+        // The reactivated list still shows: those people are active again.
+        assert!(body.contains("back@x.org"), "{what}");
+    }
+}
+
+#[tokio::test]
 async fn departed_people_are_not_offered_for_departure() {
-    let app = app().await;
+    let app = app_with(grouped()).await;
     let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
     let (gone, _) = user(&app.core, "gone@x.org", None, None).await;
+    let (left, _) = user(&app.core, "left@x.org", None, None).await;
     directory::set_user_status(
         &app.core.db,
         &system(),
@@ -380,7 +500,7 @@ async fn departed_people_are_not_offered_for_departure() {
     )
     .await
     .unwrap();
-    let summary = serde_json::json!({ "held_back": [gone] });
+    let summary = serde_json::json!({ "held_back": [gone, left] });
     sqlx::query(
         "INSERT INTO sync_cursors (name, last_run, last_summary) VALUES ('entra.users', now(), $1)",
     )
@@ -390,8 +510,31 @@ async fn departed_people_are_not_offered_for_departure() {
     .unwrap();
     let mut b = Browser::new(&app);
     b.login("admin@x.org", &secret).await;
+
+    // One person still waits.
+    let page = b.get("/admin/entra").await;
+    assert!(page.body.contains("Waiting for your confirmation"));
+    assert!(
+        page.body.contains("This person is outside the PDMS group"),
+        "{}",
+        page.body
+    );
+    assert!(page.body.contains("Depart this person"), "{}", page.body);
+    assert!(!page.body.contains("Depart these"), "{}", page.body);
+    assert!(page.body.contains("left@x.org"));
+    assert!(!page.body.contains("gone@x.org"), "{}", page.body);
+
+    // Nobody does.
+    directory::set_user_status(
+        &app.core.db,
+        &system(),
+        left,
+        pdms_core::model::UserStatus::Departed,
+    )
+    .await
+    .unwrap();
     let page = b.get("/admin/entra").await;
     assert!(!page.body.contains("Waiting for your confirmation"));
     assert!(!page.body.contains("/admin/entra/depart-held-back"));
-    assert!(!page.body.contains("Reactivated in the last run"));
+    assert!(!page.body.contains("Reactivated since the last run started"));
 }
