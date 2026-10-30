@@ -264,7 +264,7 @@ taken up.
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
 | S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Done** (2026-10-23; migration `0015`, D-111 to D-116) | [spec](superpowers/specs/2026-10-23-admin-settings-design.md), [plan](superpowers/plans/2026-10-23-admin-settings.md) |
 | GS | **Entra sync limited to one group** | When a group is set, only its members (nested groups count) get PDMS accounts; people removed from it are departed; sign-in refused for non-members. Lets IT control who uses PDMS with one Entra group (cloud, or an AD group synced to Entra). Amends D-086 and D-096 | **Done** (2026-10-29; migration `0016`, D-117). The owner's answers are in the spec's §9: people back in the group are reactivated automatically, at the next run or at sign-in; a refused sign-in says why; **Depart these N people** finishes a held-back first narrowing; the P2 mapping race is fixed | [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md), [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md) |
-| DV | **Viewing documents in the browser** | A **View** button that opens a document's file in a new browser tab instead of downloading it. Start with PDFs and images (PNG, JPEG), shown by the browser's own viewer, with the same permission check and the same audit as a download (`document.downloaded`). Only those safe types: PDMS accepts any file type, and a file such as HTML or SVG shown in the browser would run as a page on PDMS's own address. Word and Excel need either conversion to PDF (a sidecar like OCR) or SharePoint's Office viewer; the spec decides whether they are in scope | Not started; needs a spec. Raised by the owner 2026-10-29: today every file is downloaded (`Content-Disposition: attachment`) | — |
+| DV | **Viewing documents in the browser** | A **View** button that opens a document's file in a new browser tab instead of downloading it, with the same permission check and audit as a download (`document.downloaded`, with `disposition: inline`). Phase 1: PDF and images (PNG, JPEG, GIF, WebP), shown by the browser's own viewer under a stricter policy with a sandbox. Only listed types, because a file shown in the browser opens as a page on PDMS's own address. Phase 2, if the owner approves: Word, Excel, PowerPoint, OpenDocument, RTF and TIFF shown as PDF through SharePoint's conversion | Spec drafted 2026-10-30, waiting for the owner's approval and the phase 2 answer (§0.7). The browser check is done in Chromium and Firefox; Edge, Chrome and Firefox on a county PC remain (spec §4). Raised by the owner 2026-10-29: today every file is downloaded (`Content-Disposition: attachment`) | [spec](superpowers/specs/2026-10-30-document-viewing-design.md) |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
 | — | **First administrator account** | Change how the installer creates the first administrator | Decided 2026-10-28: email becomes optional for the break-glass administrator the installer creates. Not started; needs a short spec, because every account needs an email today (`users.email` is required and unique) | — |
@@ -322,9 +322,10 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
    imports into, is merged.
 4. **First administrator account.** Email becomes optional for the
    break-glass administrator (§0.3). It needs a short spec first.
-5. **Viewing documents in the browser** (DV in §0.3). It needs a spec
-   first. Check in Chrome, Edge and Firefox that the built-in PDF viewer
-   works with PDMS's Content Security Policy before settling the design.
+5. **Viewing documents in the browser** (DV in §0.3). The
+   [spec](superpowers/specs/2026-10-30-document-viewing-design.md) is
+   drafted and waits for the owner's approval (§0.7). Its §4 records the
+   browser check and what is left of it for a county PC.
 
 ### 0.6 Which work touches which files
 
@@ -366,7 +367,7 @@ turns" in `CLAUDE.md`); this table is for the ones that can wait.
 
 | Question | Raised by | What it holds up |
 |---|---|---|
-| (none: the owner answered every waiting question on 2026-10-28) | | |
+| DV spec: approve it, and say whether phase 2 (Word, Excel and other files shown as PDF through SharePoint, spec §5 and §10) is part of DV or left for later | wc-sstevens (with Claude), 2026-10-30 | Building DV |
 
 ---
 
