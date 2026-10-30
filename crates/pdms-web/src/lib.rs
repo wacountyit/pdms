@@ -317,6 +317,7 @@ pub fn router(state: AppState) -> Router {
             "/{id}/versions/{n}/download",
             get(documents::download_version),
         )
+        .route("/{id}/versions/{n}/view", get(documents::view_version))
         .route(
             "/{id}/versions/{n}/restore",
             post(documents::restore_version),

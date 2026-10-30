@@ -344,6 +344,7 @@ async fn read_only_and_outside_users_are_denied_on_every_path() {
         format!("{doc}/edit"),
         format!("{doc}/download"),
         format!("{doc}/versions/1/download"),
+        format!("{doc}/versions/1/view"),
         format!("{doc}/history"),
     ] {
         assert_eq!(
@@ -1179,4 +1180,211 @@ async fn a_sharepoint_outage_keeps_the_new_document_form() {
         .await
         .unwrap();
     assert_eq!(count, 0);
+}
+
+const VIEW_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox";
+const PAGE_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+
+fn png_bytes() -> Vec<u8> {
+    let mut v = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    v.extend_from_slice(&13u32.to_be_bytes());
+    v.extend_from_slice(b"IHDR");
+    v.extend_from_slice(&[0, 0, 0, 4, 0, 0, 0, 4, 8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    v
+}
+
+fn jpeg_bytes() -> Vec<u8> {
+    let mut v = vec![
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00,
+    ];
+    v.extend_from_slice(&[1, 1, 0, 0, 1, 0, 1, 0, 0]);
+    v
+}
+
+fn gif_bytes() -> Vec<u8> {
+    let mut v = b"GIF89a".to_vec();
+    v.extend_from_slice(&[1, 0, 1, 0, 0, 0, 0, 0x3B]);
+    v
+}
+
+fn webp_bytes() -> Vec<u8> {
+    let mut v = b"RIFF".to_vec();
+    v.extend_from_slice(&[26, 0, 0, 0]);
+    v.extend_from_slice(b"WEBPVP8 ");
+    v.extend_from_slice(&[0; 16]);
+    v
+}
+
+/// Legacy Word: the OLE signature, then zeros.
+fn doc_bytes() -> Vec<u8> {
+    let mut v = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    v.extend_from_slice(&[0; 504]);
+    v
+}
+
+fn header<'a>(r: &'a Resp, name: &str) -> &'a str {
+    r.headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+}
+
+#[tokio::test]
+async fn view_shows_pdfs_and_images_in_the_browser() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let cases: Vec<(&str, Vec<u8>, &str)> = vec![
+        ("report.pdf", pdf("view"), "application/pdf"),
+        ("photo.png", png_bytes(), "image/png"),
+        ("scan.jpg", jpeg_bytes(), "image/jpeg"),
+        ("map.gif", gif_bytes(), "image/gif"),
+        ("chart.webp", webp_bytes(), "image/webp"),
+    ];
+    for (name, bytes, media) in cases {
+        let doc = create_via_form(&mut b, &app, dept, uid, name, Some((name, &bytes)))
+            .await
+            .location()
+            .to_owned();
+        let r = b.get(&format!("{doc}/versions/1/view")).await;
+        assert_eq!(r.status, StatusCode::OK, "{name}: {}", r.body);
+        assert_eq!(header(&r, "content-type"), media, "{name}");
+        let cd = header(&r, "content-disposition");
+        assert!(
+            cd.starts_with("inline;") && cd.contains(name),
+            "{name}: {cd}"
+        );
+        assert_eq!(header(&r, "x-content-type-options"), "nosniff");
+        assert_eq!(header(&r, "cache-control"), "private, no-store");
+        assert!(!r.headers.contains_key("accept-ranges"), "{name}");
+        assert_eq!(header(&r, "content-security-policy"), VIEW_CSP, "{name}");
+        assert_eq!(header(&r, "x-frame-options"), "DENY");
+        assert_eq!(
+            header(&r, "content-length"),
+            bytes.len().to_string(),
+            "{name}"
+        );
+        if media == "application/pdf" {
+            assert_eq!(r.body.as_bytes(), bytes.as_slice());
+        }
+    }
+}
+
+#[tokio::test]
+async fn view_sends_other_types_as_downloads() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let txt = b"Meeting notes\n<script>alert(1)</script>\n".to_vec();
+    for (name, bytes) in [("minutes.doc", doc_bytes()), ("notes.txt", txt)] {
+        let r = create_via_form(&mut b, &app, dept, uid, name, Some((name, &bytes))).await;
+        assert_eq!(r.status, StatusCode::SEE_OTHER, "{name}: {}", r.body);
+        let doc = r.location().to_owned();
+        let v = b.get(&format!("{doc}/versions/1/view")).await;
+        let d = b.get(&format!("{doc}/versions/1/download")).await;
+        assert_eq!(v.status, StatusCode::OK, "{name}");
+        assert!(
+            header(&v, "content-disposition").starts_with("attachment;"),
+            "{name}"
+        );
+        assert_eq!(header(&v, "content-security-policy"), PAGE_CSP, "{name}");
+        assert_eq!(v.body, d.body, "{name}");
+        assert_eq!(header(&v, "content-length"), header(&d, "content-length"));
+    }
+}
+
+#[tokio::test]
+async fn only_the_view_answer_gets_the_view_policy() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut a = Browser::new(&app);
+    a.login("alice@x.org", &secret).await;
+    let doc = create_via_form(&mut a, &app, dept, uid, "Ops", Some(("a.pdf", &pdf("a"))))
+        .await
+        .location()
+        .to_owned();
+    let hr = directory::create_department(&app.core.db, &system(), "HR", "HR")
+        .await
+        .unwrap();
+    let (_, bob_secret) = user(&app.core, "bob@x.org", Some(hr), None).await;
+    let mut b = Browser::new(&app);
+    b.login("bob@x.org", &bob_secret).await;
+
+    let page = a.get(&doc).await;
+    let download = a.get(&format!("{doc}/download")).await;
+    let css = a.get("/static/app.css").await;
+    let before = actions(&app.core).await.len();
+    let missing = a.get(&format!("{doc}/versions/99/view")).await;
+    let missing_dl = a.get(&format!("{doc}/versions/99/download")).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    assert_eq!(missing.status, missing_dl.status);
+    assert_eq!(actions(&app.core).await.len(), before, "no audit row");
+    let denied = b.get(&format!("{doc}/versions/1/view")).await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN);
+    for (name, r) in [
+        ("page", &page),
+        ("download", &download),
+        ("css", &css),
+        ("missing", &missing),
+        ("denied", &denied),
+    ] {
+        let csp = header(r, "content-security-policy");
+        assert_eq!(csp, PAGE_CSP, "{name}");
+        assert!(!csp.contains("sandbox"), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn view_keeps_odd_file_names_safe() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let name = "R\u{e9}sum\u{e9} \"final\".pdf";
+    let doc = create_via_form(&mut b, &app, dept, uid, "Odd", Some((name, &pdf("odd"))))
+        .await
+        .location()
+        .to_owned();
+    let view = b.get(&format!("{doc}/versions/1/view")).await;
+    let dl = b.get(&format!("{doc}/versions/1/download")).await;
+    let (v, d) = (
+        header(&view, "content-disposition"),
+        header(&dl, "content-disposition"),
+    );
+    assert!(d.contains("filename*=UTF-8''"), "{d}");
+    assert_eq!(v, d.replacen("attachment", "inline", 1));
+}
+
+#[tokio::test]
+async fn each_version_is_viewed_with_its_own_file() {
+    let app = app().await;
+    let (dept, uid, secret) = editor(&app, "OPS", "alice@x.org").await;
+    let mut b = Browser::new(&app);
+    b.login("alice@x.org", &secret).await;
+    let first = pdf("first");
+    let second = pdf("second one");
+    let doc = create_via_form(&mut b, &app, dept, uid, "Two", Some(("one.pdf", &first)))
+        .await
+        .location()
+        .to_owned();
+    let csrf = b.get(&doc).await.csrf();
+    let r = b
+        .multipart(
+            &format!("{doc}/versions"),
+            &[
+                ("_csrf", csrf.as_str()),
+                ("kind", "amendment"),
+                ("note", "Amendment 1"),
+                ("milestone_date", "2014-06-01"),
+            ],
+            Some(("two.pdf", &second)),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    let v1 = b.get(&format!("{doc}/versions/1/view")).await;
+    let v2 = b.get(&format!("{doc}/versions/2/view")).await;
+    assert_eq!(v1.body.as_bytes(), first.as_slice());
+    assert_eq!(v2.body.as_bytes(), second.as_slice());
 }

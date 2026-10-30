@@ -89,19 +89,33 @@ pub async fn branding_refresh(State(state): State<AppState>, req: Request, next:
     next.run(req).await
 }
 
+/// The policy for every page and file.
+const PAGE_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
+    img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; \
+    form-action 'self'";
+
+/// The policy for a file shown in the browser (the view address): nothing may
+/// load or run, and the sandbox gives the document an opaque origin.
+const VIEW_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; \
+    form-action 'none'; frame-ancestors 'none'; sandbox";
+
+/// A handler puts this in a response's extensions to get [`VIEW_CSP`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ViewPolicy;
+
 pub async fn security_headers(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let is_static = req.uri().path().starts_with("/static/");
     let mut res = next.run(req).await;
+    let csp = if res.extensions().get::<ViewPolicy>().is_some() {
+        VIEW_CSP
+    } else {
+        PAGE_CSP
+    };
     let h = res.headers_mut();
     let set = |h: &mut HeaderMap, name: &'static str, value: &'static str| {
         h.insert(name, HeaderValue::from_static(value));
     };
-    set(
-        h,
-        "content-security-policy",
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
-         object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
-    );
+    set(h, "content-security-policy", csp);
     set(h, "x-content-type-options", "nosniff");
     set(h, "x-frame-options", "DENY");
     set(h, "referrer-policy", "same-origin");

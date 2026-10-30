@@ -19,7 +19,9 @@ use pdms_core::documents::search::{self, CustomFilter, DateField, DocumentFilter
 use pdms_core::documents::status::{DocumentStatus, next_statuses};
 use pdms_core::documents::tags::{self, Tag};
 use pdms_core::documents::types::{self, DocumentType, RetentionPolicy};
-use pdms_core::documents::{self, MetadataInput, NewDocument, RestorePart, VersionKind};
+use pdms_core::documents::{
+    self, Disposition, FileDownload, MetadataInput, NewDocument, RestorePart, VersionKind,
+};
 use pdms_core::model::UserStatus;
 use pdms_core::{CoreError, CoreResult};
 use serde::Deserialize;
@@ -27,7 +29,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::middleware::DeferredCsrf;
+use crate::middleware::{DeferredCsrf, ViewPolicy};
 use crate::next_date::{NextDate, next_date};
 use crate::session::CurrentUser;
 use crate::state::AppState;
@@ -1881,6 +1883,11 @@ pub async fn restore_version(
 
 /// `filename=` needs an ASCII fallback; `filename*=` carries the real name.
 pub(crate) fn content_disposition(name: &str) -> String {
+    content_disposition_as(Disposition::Attachment, name)
+}
+
+/// The same header for either way of opening a file; only the first word differs.
+pub(crate) fn content_disposition_as(d: Disposition, name: &str) -> String {
     let ascii: String = name
         .chars()
         .map(|c| {
@@ -1894,16 +1901,14 @@ pub(crate) fn content_disposition(name: &str) -> String {
     let encoded: String = url::form_urlencoded::byte_serialize(name.as_bytes())
         .collect::<String>()
         .replace('+', "%20");
-    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+    let kind = d.as_str();
+    format!("{kind}; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
 }
 
-async fn download_inner(
-    state: &AppState,
-    user: &CurrentUser,
-    id: Uuid,
-    version: Option<i32>,
-) -> AppResult<Response> {
-    let f = documents::open_file(&state.core, &user.ctx, id, version).await?;
+/// Streams a file. Only an inline answer carries [`ViewPolicy`], which makes
+/// the security-headers middleware send the stricter policy for it.
+fn file_response(f: FileDownload) -> Response {
+    let inline = f.disposition == Disposition::Inline;
     let mut res = Response::new(Body::from_stream(f.stream));
     let h = res.headers_mut();
     let set = |h: &mut axum::http::HeaderMap, k: header::HeaderName, v: String| {
@@ -1916,10 +1921,23 @@ async fn download_inner(
     set(
         h,
         header::CONTENT_DISPOSITION,
-        content_disposition(&f.file_name),
+        content_disposition_as(f.disposition, &f.file_name),
     );
     set(h, header::CACHE_CONTROL, "private, no-store".into());
-    Ok(res)
+    if inline {
+        res.extensions_mut().insert(ViewPolicy);
+    }
+    res
+}
+
+async fn download_inner(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+    version: Option<i32>,
+) -> AppResult<Response> {
+    let f = documents::open_file(&state.core, &user.ctx, id, version).await?;
+    Ok(file_response(f))
 }
 
 pub async fn download_current(
@@ -1936,6 +1954,16 @@ pub async fn download_version(
     Path((id, n)): Path<(Uuid, i32)>,
 ) -> AppResult<Response> {
     download_inner(&state, &user, id, Some(n)).await
+}
+
+/// Opens a PDF or image in the browser tab; any other type is sent as a download.
+pub async fn view_version(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((id, n)): Path<(Uuid, i32)>,
+) -> AppResult<Response> {
+    let f = documents::view_file(&state.core, &user.ctx, id, n).await?;
+    Ok(file_response(f))
 }
 
 // ---------------------------------------------------------------------------
@@ -2028,6 +2056,8 @@ mod tests {
             h.contains("filename*=UTF-8''R%C3%A9sum%C3%A9%20%22final%22.pdf"),
             "{h}"
         );
+        let inline = content_disposition_as(Disposition::Inline, "Résumé \"final\".pdf");
+        assert_eq!(inline, h.replacen("attachment", "inline", 1));
     }
 
     #[test]
