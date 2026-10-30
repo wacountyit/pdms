@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sync_cursors\n              SET last_summary = jsonb_set(last_summary, '{reactivated}',\n                    coalesce(last_summary->'reactivated', '[]'::jsonb)\n                    || (SELECT coalesce(jsonb_agg(to_jsonb(id)), '[]'::jsonb) FROM unnest($2::uuid[]) id\n                         WHERE NOT coalesce(last_summary->'reactivated', '[]'::jsonb) ? id::text))\n            WHERE name = $1 AND last_summary IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cbed9e27f0dbdbb2486f2399a40f20e8206757cdc47828b1a97da1bbc34ccbc"
+}

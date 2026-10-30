@@ -123,6 +123,9 @@ permissions**, add:
 
 - `Sites.Selected`
 - `User.Read.All`
+- `GroupMember.Read.All`, only when the Entra sync is limited to a group
+  (ADMIN_GUIDE, "Entra ID user sync", "Only the members of one group"). It
+  lets PDMS read who is in the group, not change it.
 
 Then choose **Grant admin consent**. Do not add `Sites.ReadWrite.All` or
 `Files.ReadWrite.All`: `Sites.Selected` limits PDMS to the one site you grant

@@ -105,7 +105,7 @@ async fn the_status_panel_shows_the_certificate_thumbprint_and_last_run() {
     assert!(page.body.contains(&thumbprint), "{}", page.body);
     assert!(
         page.body.contains(
-            "3 created, 1 updated, 0 departed; of the people it read, 2 had no mapped department"
+            "3 created, 1 updated, 0 departed, 0 reactivated; of the people it read, 2 had no mapped department"
         ),
         "{}",
         page.body
@@ -295,4 +295,103 @@ async fn test_group_uses_the_value_from_the_configuration_file() {
         r.body
             .contains("Set up the Microsoft 365 connection first.")
     );
+}
+
+#[tokio::test]
+async fn the_page_lists_held_back_and_reactivated_people() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let mut held_back = Vec::new();
+    for i in 1..=6 {
+        let id = directory::create_user(
+            &app.core.db,
+            &system(),
+            &format!("Held Person {i}"),
+            &format!("held{i}@x.org"),
+            None,
+        )
+        .await
+        .unwrap();
+        held_back.push(id);
+    }
+    let (back, _) = user(&app.core, "back@x.org", None, Some("admin")).await;
+    let summary = serde_json::json!({
+        "created": 0, "updated": 0, "departed": 0, "unmapped": 0,
+        "held_back": held_back, "reactivated": [back],
+    });
+    sqlx::query(
+        "INSERT INTO sync_cursors (name, last_run, last_summary) VALUES ('entra.users', now(), $1)",
+    )
+    .bind(summary)
+    .execute(&app.core.db)
+    .await
+    .unwrap();
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+
+    let page = b.get("/admin/entra").await;
+    assert_eq!(page.status, 200);
+    let body = &page.body;
+    assert!(body.contains("Who is synced"), "{body}");
+    assert!(body.contains("Everyone in the tenant"), "{body}");
+    assert!(body.contains("0 departed, 1 reactivated"), "{body}");
+    assert!(body.contains("Waiting for your confirmation"), "{body}");
+    assert!(body.contains("These 6 people are outside the PDMS group"));
+    assert!(body.contains("Depart these 6 people"), "{body}");
+    assert!(body.contains(r#"action="/admin/entra/depart-held-back""#));
+    for i in 1..=6 {
+        assert!(body.contains(&format!("Held Person {i}")), "{body}");
+        assert!(body.contains(&format!("held{i}@x.org")), "{body}");
+    }
+    assert!(body.contains("Reactivated in the last run"), "{body}");
+    assert!(body.contains("back@x.org"), "{body}");
+    assert!(body.contains("Has roles: Administrator"), "{body}");
+    assert_eq!(body.matches("<h1").count(), 1);
+
+    // Without the Microsoft 365 connection (and so the sync), nobody is departed.
+    let r = b
+        .post("/admin/entra/depart-held-back", &[("_csrf", &page.csrf())])
+        .await;
+    assert!(r.status.is_redirection(), "{}", r.status);
+    assert_eq!(r.location(), "/admin/entra");
+    let page = b.get("/admin/entra").await;
+    assert!(page.body.contains("flash-error"), "{}", page.body);
+    assert!(page.body.contains("Depart these 6 people"), "still waiting");
+    for id in held_back {
+        let status: String = sqlx::query_scalar("SELECT status::text FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_one(&app.core.db)
+            .await
+            .unwrap();
+        assert_eq!(status, "active");
+    }
+}
+
+#[tokio::test]
+async fn departed_people_are_not_offered_for_departure() {
+    let app = app().await;
+    let (_, secret) = user(&app.core, "admin@x.org", None, Some("admin")).await;
+    let (gone, _) = user(&app.core, "gone@x.org", None, None).await;
+    directory::set_user_status(
+        &app.core.db,
+        &system(),
+        gone,
+        pdms_core::model::UserStatus::Departed,
+    )
+    .await
+    .unwrap();
+    let summary = serde_json::json!({ "held_back": [gone] });
+    sqlx::query(
+        "INSERT INTO sync_cursors (name, last_run, last_summary) VALUES ('entra.users', now(), $1)",
+    )
+    .bind(summary)
+    .execute(&app.core.db)
+    .await
+    .unwrap();
+    let mut b = Browser::new(&app);
+    b.login("admin@x.org", &secret).await;
+    let page = b.get("/admin/entra").await;
+    assert!(!page.body.contains("Waiting for your confirmation"));
+    assert!(!page.body.contains("/admin/entra/depart-held-back"));
+    assert!(!page.body.contains("Reactivated in the last run"));
 }

@@ -52,7 +52,8 @@ The installer asks everything first, then builds and starts unattended:
 Then sign in and finish setup under **Administration**: Microsoft sign-in,
 email, the Microsoft 365 connection, SharePoint document storage (see
 [docs/SHAREPOINT_SETUP.md](docs/SHAREPOINT_SETUP.md)), the Entra ID user
-sync, OCR and virus scanning each have a page with a test.
+sync (for everyone in the tenant, or only the members of one Entra group),
+OCR and virus scanning each have a page with a test.
 
 Database passwords and the master key are strong random values in `secrets/`.
 Deployment settings go in `.env` and application settings in

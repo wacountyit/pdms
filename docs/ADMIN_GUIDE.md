@@ -138,7 +138,8 @@ On first sign-in, a person is created with no access
 (`auth.oidc.auto_provision = false` turns that off). If the Entra ID user sync
 is on, people are created by the sync before they ever sign in, and a first
 sign-in for an Entra account whose email belongs to an existing, unlinked
-account is refused (see "Entra ID user sync" in section 3).
+account is refused (see "Entra ID user sync" in section 3). When the sync is
+limited to a group, someone outside it is refused too.
 
 With single sign-on on, `auto_provision = false`, and the sync off, only people
 who are already linked to their Entra account can sign in. PDMS logs a warning
@@ -372,14 +373,17 @@ last run (the first run reads every account):
 - new people are created, so they have access before their first sign-in;
 - names, emails, and departments are updated;
 - people whose account is disabled or deleted in Entra are marked
-  **departed** and signed out. The sync never reactivates anyone: if someone
-  returns, an administrator reactivates the account;
+  **departed** and signed out. The sync never reactivates them: if someone
+  returns, an administrator reactivates the account. The one exception is
+  someone the sync departed for leaving the PDMS group (see "Only the
+  members of one group" below);
 - guest (B2B) accounts are skipped (unless `include_guests = true`). An
   account with no user type counts as a member.
 
 **Settings.** On **Administration → Entra ID sync**, under **Settings**:
-turn the sync on, the time it runs, the department field, and whether to
-include guest accounts. The same values can be set in `[entra_sync]` in
+turn the sync on, the time it runs, the department field, the group whose
+members use PDMS (below), and whether to include guest accounts. The same
+values can be set in `[entra_sync]` in
 `config/pdms.toml`; there they win and show read-only. Turning the sync on
 needs the Microsoft 365 connection and Microsoft sign-in with `oid` as the
 subject claim; PDMS refuses with the reason otherwise. **Preview** reads the
@@ -407,7 +411,8 @@ never sets a person's name or groups.
 **Departures and safeguards.**
 
 - A full round reads every account: the first run, an expired delta token,
-  **Full resync**, or a changed `[entra_sync] attribute` or `include_guests`.
+  **Full resync**, or a changed `[entra_sync] attribute`, `include_guests` or
+  group.
   It also departs people from this identity provider whom Entra no longer
   lists (not people whose account was created while the round was running).
   Turning `include_guests` off departs the guest accounts synced earlier.
@@ -423,6 +428,105 @@ never sets a person's name or groups.
 - The last administrator is never departed automatically; it is listed under
   **Needs attention** instead.
 
+**Only the members of one group.** Without a group, every enabled member
+account in the tenant gets a PDMS account. To decide in one place who uses
+PDMS, put those people in an Entra group (for example `PDMS`) and enter the
+group's object ID in **Only members of this group** (Entra admin center →
+**Groups** → the group → **Object ID**). From the next run on, only the
+group's members have active PDMS accounts. Members of groups inside the
+group count too, so you can add whole department groups to it. Leave the
+field empty to sync everyone in the tenant, as before. It can also be set as
+`[entra_sync] group_id` in `config/pdms.toml`; there it wins and shows
+read-only.
+
+1. **Give PDMS the right to read the group.** On the **PDMS Service** app
+   registration, add the Microsoft Graph **application** permission
+   `GroupMember.Read.All` and grant admin consent. It lets PDMS read group
+   memberships, not change them, and it is needed only when a group is set.
+   Without it, **Test group** and every run stop with "PDMS can't read the
+   group's members: add the GroupMember.Read.All permission (ADMIN_GUIDE,
+   Entra ID sync)", and nothing is changed.
+2. **Make the group, or bring it from Active Directory.** The group must be
+   in Entra. Any of these works:
+   - A group made in Entra: **Groups → New group**, type **Security** (or
+     **Microsoft 365**), membership **Assigned**, then add the people.
+   - A dynamic group, for example everyone whose Department is set
+     (membership **Dynamic User**; this needs Entra ID P1).
+   - An on-premises AD group, once Entra Connect (or Cloud Sync) syncs it
+     to Entra. The county's AD groups are not synced today (D-086), so
+     either make the group in Entra, or add the OU that holds this group to
+     the sync's scope (Entra Connect: the configuration wizard → **Customize
+     synchronization options** → **Domain and OU filtering**), run a sync
+     (`Start-ADSyncSyncCycle -PolicyType Delta`), and check that the group
+     shows under **Groups** in the Entra admin center. Its members must be
+     synced users too.
+3. **Check it.** Enter the object ID and choose **Test group**. It shows the
+   group's name and how many people are in it, counting members of groups
+   inside it, without saving or changing anything. Then choose **Save**.
+
+**The first run after you set or change the group** reads every account
+again. It departs the people outside the group, unless more than 20% of
+linked accounts (at least 5) would leave at once. Narrowing a 400-person
+tenant to an 80-person group would depart 320 accounts, so that run departs
+none of them and lists them on the page under **Waiting for your
+confirmation**. Check the list. If it is what you meant, choose **Depart
+these N people**. PDMS reads the group again first, and departs only the
+people on the list who are still active and still outside the group. Each
+departure is in the audit log (`user.status_changed`, reason "is no longer
+in the PDMS group"). If the list is wrong, correct the group instead; the
+next run checks again. The button is refused while a sync is running; try
+again a minute later. If the group lists no members at all (a wrong ID, or a
+dynamic group still filling), nobody is departed and **Needs attention**
+says to check the group.
+
+**When someone leaves the group**, the next run departs them and signs them
+out, with the reason "is no longer in the PDMS group". This happens every
+run, not only on full rounds. Their roles, access grants and memberships
+stay on the account, and the same safeguards apply as above: the last
+administrator stays, an account with a local password is departed and
+listed under **Needs attention**, and the break-glass administrator is never
+touched.
+
+**When they are added back**, PDMS reactivates them automatically at the
+next run, or when they sign in with Microsoft, whichever comes first. They
+need an enabled member account in Entra. Their roles, grants and memberships
+come back as they were; their department is read from Entra as usual. The
+page lists them under **Reactivated in the last run** until the next run,
+and marks the ones who hold roles ("Has roles: …") so you can review them.
+The audit log records it with the reason "is back in the PDMS group". This
+applies only to people the sync departed for leaving the group: someone you
+departed by hand, or whom Entra disabled or deleted, stays departed until you
+reactivate them.
+
+**Someone outside the group who signs in with Microsoft** for the first time,
+or after the sync departed them for leaving the group, is refused, and no
+account is made or reactivated. The page tells them they are not in the
+PDMS group and to ask IT for access, and the audit log records the attempt
+with the reason `not_in_group`.
+
+**Clearing the group** (back to everyone in the tenant) reactivates nobody.
+People departed for leaving the group stay departed until you reactivate
+them, or until a group is set again and they are in it.
+
+The group applies only while the sync is on. With the sync off, Microsoft
+sign-in creates accounts as `auth.oidc.auto_provision` says, as before, and
+the group is not checked.
+
+Group members who never get an account (disabled in Entra, a guest while
+guests are off, or no usable email address) are read again with one Graph
+request on every run, because PDMS has no account to remember them by. For
+the same reason, an email address that already belongs to another PDMS
+account is listed under **Needs attention** after every run until you fix it.
+
+**Assignment required is still worth turning on** (section 2, Sign-in,
+step 5, with the PDMS group assigned). Removing someone from the group ends
+their PDMS access at the next run; until then they can still sign in, and
+their open sessions stay. With **Assignment required**, Microsoft refuses
+their next sign-in at once (sessions already open end at the next run).
+Entra's app assignment (which needs Entra ID P1) counts only the direct
+members of an assigned group, not members of groups inside it, so also
+assign the groups inside the PDMS group there.
+
 **Sign-in.** People are matched by Entra object ID, never by email. An Entra
 account whose email equals an existing unlinked PDMS account (for example the
 break-glass administrator) is not linked: the sync reports it, and sign-in is
@@ -430,9 +534,12 @@ refused (`email_in_use`) until you rename or remove the other account. With
 the sync on, a first sign-in asks Entra about the person; if Entra cannot be
 reached, sign-in is refused rather than trusting the token alone.
 
-**The status page.** **Administration → Entra ID sync** shows the last run, a
+**The status page.** **Administration → Entra ID sync** shows the last run,
+who is synced (everyone in the tenant, or the members of a group), a
 summary, the last error (shown only when the last run failed), and the
-certificate thumbprint. The summary counts people without a mapped department
+certificate thumbprint. With a group set, it also lists the people waiting
+for your confirmation and the people reactivated since the last run
+started. The summary counts people without a mapped department
 only among those the run read; the **Values with no department** table covers
 everyone. Problems with individual accounts are listed under **Needs
 attention**. **Sync now** queues a run; if a sync is already running, the
@@ -441,8 +548,10 @@ queued run is skipped. **Full resync** reads every account again.
 **Setup.**
 
 1. In Entra ID, register an app **PDMS Service**, add the Microsoft Graph
-   **application** permission `User.Read.All`, and grant admin consent. There
-   is no client secret: PDMS signs in with a certificate.
+   **application** permission `User.Read.All`, and grant admin consent. To
+   limit the sync to a group, also add `GroupMember.Read.All` (see "Only the
+   members of one group" above). There is no client secret: PDMS signs in
+   with a certificate.
 2. On **Administration → Microsoft 365 → Connection**, choose **Make a new
    certificate**, then **Download** it and upload the `.crt` to the app
    registration under **Certificates & secrets → Certificates**. The private
@@ -471,8 +580,9 @@ queued run is skipped. **Full resync** reads every account again.
    The sync needs `[graph]`, `auth.oidc.issuer_url`, and
    `auth.oidc.subject_claim = "oid"`; PDMS refuses to start otherwise. Restart,
    then press **Sync now**. `pdms sync-directory` runs a sync from the command
-   line; `pdms sync-directory --full` reads every account again. Both refuse
-   to run while `enabled = false`.
+   line and prints what it did, including people reactivated and people
+   waiting for your confirmation; `pdms sync-directory --full` reads every
+   account again. Both refuse to run while `enabled = false`.
 4. Renew the certificate before it expires (administrators get a reminder
    30 days before): on the Connection page choose **Make a new certificate**,
    upload its `.crt` to the app registration, then choose **Use this

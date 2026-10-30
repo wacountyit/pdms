@@ -156,6 +156,31 @@ Last updated 2026-10-29.
   2026-10-23 it gives 540 passed, 0 failed, and 5 ignored. The
   [spec](superpowers/specs/2026-10-23-admin-settings-design.md) and
   [plan](superpowers/plans/2026-10-23-admin-settings.md) describe it.
+- **GS, Entra sync limited to one group** (2026-10-29, by wc-sstevens with
+  Claude, built directly on `main` in seven tasks):
+  - **Only members of this group** on Administration → Entra ID sync (or
+    `[entra_sync] group_id`), with **Test group**; members of groups inside
+    the group count;
+  - each run reads the member list first; people outside the group are
+    departed under the D-096 safeguards, and a member PDMS has no account for
+    is created at the next run;
+  - a first narrowing that would depart too many at once is held back and
+    finished with **Depart these N people**;
+  - people the sync departed for leaving the group are reactivated, with
+    their roles, once they are back in it (at the next run or at sign-in),
+    and the page lists them;
+  - a first sign-in from outside the group is refused with a page that says
+    why (audit reason `not_in_group`);
+  - a Department mapping change no longer races a run applying the same
+    person.
+
+  It adds migration `0016` and decision D-117, and needs the Graph
+  permission `GroupMember.Read.All` only when a group is set. On `main` on
+  2026-10-29 it gives 582 passed, 0 failed, and 5 ignored. Upgrading is
+  `git pull && ./install.sh` as usual; nothing changes until a group is set
+  (ADMIN_GUIDE, "Entra ID user sync"). The
+  [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) and
+  [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md) describe it.
 - **Upgrading after S1:** `git pull && ./install.sh` as usual. It offers to
   move the sign-in, email, SharePoint, OCR and virus-scanning settings into
   Administration (back up first: they then live in the database, encrypted
@@ -234,7 +259,7 @@ taken up.
 | 5a | **UI redesign R1** | New app shell and visual style on every page; redesigned sign-in, dashboard, documents list, document page, county overview; branding admin page; username sign-in for local accounts | **Done** (2026-10-21). The owner moved R1 ahead of 1–3 so there is a shell to show leadership (D-092 to D-095) | [spec](superpowers/specs/2026-10-15-ui-redesign-r1-design.md), [plan](superpowers/plans/2026-10-15-ui-redesign-r1.md) |
 | 5b | **UI redesign R2** | Page-by-page redesign of the remaining screens (admin, calendar, appointments, records requests, notifications, audit log, account, report detail), plus the document forms and sections, dark mode (the default, with a per-person switch), an activity feed and a browser-tab icon | **Done** (2026-10-22; [PR #4](https://github.com/wacountyit/pdms/pull/4); D-097 to D-101; migrations `0011` and `0012`) | [R2 brief](superpowers/specs/2026-10-21-ui-redesign-r2-brief.md), [R2 spec](superpowers/specs/2026-10-22-ui-redesign-r2-design.md), [R2 plan](superpowers/plans/2026-10-22-ui-redesign-r2.md) |
 | S1 | **Settings in Administration** | Set up, change, test and check Microsoft sign-in, email, the Microsoft 365 connection (with the Graph certificate made in PDMS), SharePoint storage, the Entra ID user sync, OCR and virus scanning on admin pages instead of `./install.sh --configure`; the installer is for the first installation | **Done** (2026-10-23; migration `0015`, D-111 to D-116) | [spec](superpowers/specs/2026-10-23-admin-settings-design.md), [plan](superpowers/plans/2026-10-23-admin-settings.md) |
-| GS | **Entra sync limited to one group** | When a group is set, only its members (nested groups count) get PDMS accounts; people removed from it are departed; sign-in refused for non-members. Lets IT control who uses PDMS with one Entra group (cloud, or an AD group synced to Entra). Amends D-086 and D-096 | **Designed:** spec approved 2026-10-28. The owner's answers are in its §9: people back in the group are reactivated automatically; a refused sign-in says why; the P2 mapping race is fixed here. Next: the plan (§0.5) | [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md), [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md) |
+| GS | **Entra sync limited to one group** | When a group is set, only its members (nested groups count) get PDMS accounts; people removed from it are departed; sign-in refused for non-members. Lets IT control who uses PDMS with one Entra group (cloud, or an AD group synced to Entra). Amends D-086 and D-096 | **Done** (2026-10-29; migration `0016`, D-117). The owner's answers are in the spec's §9: people back in the group are reactivated automatically, at the next run or at sign-in; a refused sign-in says why; **Depart these N people** finishes a held-back first narrowing; the P2 mapping race is fixed | [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md), [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md) |
 | DV | **Viewing documents in the browser** | A **View** button that opens a document's file in a new browser tab instead of downloading it. Start with PDFs and images (PNG, JPEG), shown by the browser's own viewer, with the same permission check and the same audit as a download (`document.downloaded`). Only those safe types: PDMS accepts any file type, and a file such as HTML or SVG shown in the browser would run as a page on PDMS's own address. Word and Excel need either conversion to PDF (a sidecar like OCR) or SharePoint's Office viewer; the spec decides whether they are in scope | Not started; needs a spec. Raised by the owner 2026-10-29: today every file is downloaded (`Content-Disposition: attachment`) | — |
 | — | **Security fixes** | Findings from the private 2026-10-14 review | Not started. Can run alongside 1–5. High and Medium items must be fixed before go-live. The owner holds the findings and hands them out | private |
 | later | Public records (FOIA/PIA) requests | Build on the existing records-request packages | Idea | — |
@@ -287,21 +312,13 @@ met, unless the owner says otherwise. Claim it (§0.1a) before you start.
    Then work through [SHAREPOINT_SETUP.md](SHAREPOINT_SETUP.md) B6 to B9
    and §1.2. Set
    sub-projects 1 and 2 to **Done** when they pass.
-2. **GS, Entra sync limited to one group.** The owner put it ahead of bulk
-   import on 2026-10-29. The
-   [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md)
-   was approved on 2026-10-28; write the plan, then build. It changes the
-   Entra sync (`directory/entra_sync.rs`, `entra_values.rs`),
-   `auth/oidc.rs`, `settings.rs`, and the Entra ID sync admin page. If the
-   live test (item 1) needs fixes in the same code, agree the order with the
-   owner.
-3. **Security fixes.** The owner holds the findings and hands them out one
+2. **Security fixes.** The owner holds the findings and hands them out one
    area at a time. High and Medium items must be fixed before go-live (§3).
-4. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
+3. **Sub-project 4, bulk import.** It needs a spec first. P3, which it
    imports into, is merged.
-5. **First administrator account.** Email becomes optional for the
+4. **First administrator account.** Email becomes optional for the
    break-glass administrator (§0.3). It needs a short spec first.
-6. **Viewing documents in the browser** (DV in §0.3). It needs a spec
+5. **Viewing documents in the browser** (DV in §0.3). It needs a spec
    first. Check in Chrome, Edge and Firefox that the built-in PDF viewer
    works with PDMS's Content Security Policy before settling the design.
 
@@ -311,23 +328,24 @@ Two pieces of work that share a row can conflict. When you claim something,
 add a column for it with what it changes in each row, and check the other
 columns first. If your work and claimed work share a row, agree the order
 with the owner first. (P3, P4 and S1 are done, so their columns were removed
-on 2026-10-23. The SharePoint live test changes no files unless it finds a
-fix.) Paths are under `crates/pdms-web/`
-unless they start with `crates/` or name a top-level folder.
+on 2026-10-23, and GS's on 2026-10-29. Nothing else is claimed: the
+SharePoint live test changes no files unless it finds a fix.) Paths are
+under `crates/pdms-web/` unless they start with `crates/` or name a
+top-level folder.
 
-| Files | GS (Entra sync limited to one group) |
+| Files | (no claimed work) |
 | --- | --- |
-| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | `admin/entra.html` and its handler in `admin.rs`: the group field, **Test group**, **Depart these N people**, the reactivated list |
-| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | No |
-| Route table: `src/lib.rs`, `src/routes/mod.rs` | Two routes under `/admin/entra` (Test group, Depart these N people) |
-| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | No |
-| Web errors and API: `src/error.rs`, `src/routes/api.rs` | No. The "not in the PDMS group" sign-in message is in `routes/auth.rs` and `login.html` |
-| Web tests: `crates/pdms-web/tests/` | `entra.rs`, `oidc.rs` |
-| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | None of these. GS changes `directory/entra_sync.rs`, `directory/entra_values.rs`, `auth/oidc.rs`, and the mock Graph used by tests |
-| `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | `settings.rs` and `config.rs`: `entra_sync.group_id` |
-| `migrations/` | Probably one (why the sync departed someone); the next free number |
-| `.sqlx/` | Yes |
-| `config/`, `install.sh`, `docker-compose.yml` | `config/pdms.example.toml`: `[entra_sync] group_id` |
+| Admin pages: `templates/admin/*` and their handlers in `src/routes/` (`admin.rs`, `doc_admin.rs`, `schedule.rs`, `integrations.rs`, `collab.rs`, `branding.rs`, `sharepoint_admin.rs`, `microsoft365.rs`, `sign_in.rs`, `system_settings.rs`) | |
+| Shell: `templates/base.html`, `templates/partials/nav.html`, `static/app.css`, and `Layout` and `admin_home` in `src/views.rs` | |
+| Route table: `src/lib.rs`, `src/routes/mod.rs` | |
+| Document page and forms: `templates/documents/*`, `src/routes/documents.rs` | |
+| Web errors and API: `src/error.rs`, `src/routes/api.rs` | |
+| Web tests: `crates/pdms-web/tests/` | |
+| `crates/pdms-core`: documents, storage, OCR, exports, integrity, `sharepoint/` | |
+| `crates/pdms-core/src/config.rs`, `settings.rs`, `settings_import.rs` and `maintenance.rs` (the worker's jobs) | |
+| `migrations/` | |
+| `.sqlx/` | |
+| `config/`, `install.sh`, `docker-compose.yml` | |
 
 - **Everyone edits** ROADMAP §0, [DECISIONS.md](DECISIONS.md), the README
   and ADMIN_GUIDE. In this table, change only your own column. Take

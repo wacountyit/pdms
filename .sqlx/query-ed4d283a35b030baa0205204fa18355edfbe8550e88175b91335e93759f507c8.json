@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.id, u.display_name, u.email, u.oidc_subject AS \"oidc_subject!\",\n                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS \"local_login!\"\n             FROM users u\n            WHERE u.id = ANY($1) AND u.oidc_issuer = $2 AND u.status = 'active'\n              AND u.oidc_subject IS NOT NULL\n            ORDER BY u.display_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "oidc_subject!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "oidc_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "local_login!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "ed4d283a35b030baa0205204fa18355edfbe8550e88175b91335e93759f507c8"
+}

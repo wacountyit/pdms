@@ -454,6 +454,7 @@ run).
 | 8 (`0013_sharepoint_files`, P3) | sharepoint_department_folders (one folder per department and area), sharepoint_document_folders (one per document), sharepoint_files (one per version that introduced a file: drive and item IDs, list item ID, name, QuickXorHash, size, last known path, hash of the column values last written, state `ok` / `changed_outside` / `missing`) |
 | 9 (`0014_sharepoint_access`, P4) | sharepoint_folder_access (read access PDMS granted, per department and person, with the Graph permission ID), sharepoint_foreign_grants (other access found on department folders), sharepoint_unexpected_items (files PDMS does not track, with dismissals), `sharepoint_files.changed_by`, `changed_at` |
 | 10 (`0015_settings`, S1) | app_secrets (encrypted secret settings), graph_certificates (the "PDMS Service" certificates made in PDMS: thumbprints, expiry, `pending` / `active` / `retired`), settings_version (bumped by every settings change) |
+| 11 (`0016_entra_group_scope`, GS) | `users.departed_from_group`: set when the Entra sync departs someone for leaving the PDMS group, so it reactivates only those people once they are back in it (D-117); any other status change clears it |
 
 ## 13. Phase 0 deliverables and tests (done)
 

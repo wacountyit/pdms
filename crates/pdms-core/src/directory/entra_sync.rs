@@ -33,7 +33,8 @@
 //!   `departed_from_group`. The same guards apply: the last administrator
 //!   stays, nobody is departed when the group lists no members, and when
 //!   more than max(5, 20%) would leave at once they are held back and listed
-//!   in the report for an administrator to confirm. An account a complete
+//!   in the report for an administrator to confirm ([`depart_held_back`],
+//!   **Depart these N people**). An account a complete
 //!   round did not list is gone from Entra, not just from the group, and is
 //!   left to the sweep above;
 //! - someone the sync departed for leaving the group is reactivated once
@@ -958,7 +959,32 @@ pub async fn sync_one(core: &Core, oid: &str) -> CoreResult<SignInLookup> {
     for e in &report.errors {
         tracing::warn!(oid = %oid, problem = %e, "Entra sign-in lookup");
     }
+    // The reactivation is done and audited; the page's list is not worth
+    // refusing the sign-in over.
+    if !report.reactivated.is_empty()
+        && let Err(e) = list_reactivated(&core.db, &report.reactivated).await
+    {
+        tracing::warn!(oid = %oid, error = %e, "could not add a sign-in reactivation to the sync report");
+    }
     Ok(id.map_or(SignInLookup::NoAccount, SignInLookup::Account))
+}
+
+/// A reactivation at sign-in joins the last run's report, so the page lists
+/// it until the next run. Nothing is written before the first run.
+async fn list_reactivated(db: &PgPool, ids: &[Uuid]) -> CoreResult<()> {
+    sqlx::query!(
+        r#"UPDATE sync_cursors
+              SET last_summary = jsonb_set(last_summary, '{reactivated}',
+                    coalesce(last_summary->'reactivated', '[]'::jsonb)
+                    || (SELECT coalesce(jsonb_agg(to_jsonb(id)), '[]'::jsonb) FROM unnest($2::uuid[]) id
+                         WHERE NOT coalesce(last_summary->'reactivated', '[]'::jsonb) ? id::text))
+            WHERE name = $1 AND last_summary IS NOT NULL"#,
+        CURSOR,
+        ids
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 /// Apply one account. Returns the PDMS user ID when the person is an active member.
@@ -1330,6 +1356,110 @@ pub async fn status(db: &PgPool) -> CoreResult<SyncStatus> {
             last_summary: r.last_summary.and_then(|v| serde_json::from_value(v).ok()),
         },
     })
+}
+
+/// Someone named in the last run's report.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Person {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub active: bool,
+    /// The names of the roles they hold, each once, sorted.
+    pub roles: Vec<String>,
+}
+
+/// The people with these IDs, in name order (for the page's lists).
+pub async fn people(db: &PgPool, ids: &[Uuid]) -> CoreResult<Vec<Person>> {
+    Ok(sqlx::query_as!(
+        Person,
+        r#"SELECT u.id, u.display_name AS name, u.email,
+                  u.status = 'active'::user_status AS "active!",
+                  ARRAY(SELECT DISTINCT r.name FROM role_assignments ra
+                          JOIN roles r ON r.id = ra.role_id
+                         WHERE ra.user_id = u.id ORDER BY r.name) AS "roles!"
+             FROM users u
+            WHERE u.id = ANY($1)
+            ORDER BY u.display_name, u.email"#,
+        ids
+    )
+    .fetch_all(db)
+    .await?)
+}
+
+/// **Depart these N people**: depart the people the last run held back, now
+/// that an administrator confirms it (requires `ManageDirectory`). The member
+/// list is read again, and only those still active and still outside the
+/// group are departed, each audited in its own transaction. Someone who can't
+/// be departed (the last administrator) is returned as a problem, as is a
+/// departed account that also had a local password. Afterwards nobody is
+/// waiting any more. Refused while a run is in progress, and when the group
+/// lists no members.
+pub async fn depart_held_back(core: &Core, ctx: &Ctx) -> CoreResult<(u32, Vec<String>)> {
+    ctx.require(Capability::ManageDirectory)?;
+    require_enabled(core)?;
+    let config = core.config();
+    let group = config.entra_sync.group().ok_or_else(|| {
+        CoreError::validation("The Entra sync is not limited to a group, so nobody is waiting")
+    })?;
+    let graph = graph(core)?;
+    let issuer = entra_issuer(&config)?;
+    let mut lock = core.db.begin().await?;
+    let got = sqlx::query_scalar!(
+        r#"SELECT pg_try_advisory_xact_lock($1) AS "got!""#,
+        LOCK_KEY
+    )
+    .fetch_one(&mut *lock)
+    .await?;
+    if !got {
+        return Err(CoreError::Conflict(
+            "a directory sync is already running".into(),
+        ));
+    }
+    let held_back = status(&core.db)
+        .await?
+        .last_summary
+        .map(|s| s.held_back)
+        .unwrap_or_default();
+    if held_back.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+    let in_group = group_members(&graph, &group).await?;
+    if in_group.is_empty() {
+        return Err(CoreError::validation(
+            "The PDMS group lists no members now, so nobody was departed. Check the group's \
+             object ID and its members.",
+        ));
+    }
+    let waiting = sqlx::query_as!(
+        LinkedAccount,
+        r#"SELECT u.id, u.display_name, u.email, u.oidc_subject AS "oidc_subject!",
+                  EXISTS (SELECT 1 FROM local_credentials c WHERE c.user_id = u.id) AS "local_login!"
+             FROM users u
+            WHERE u.id = ANY($1) AND u.oidc_issuer = $2 AND u.status = 'active'
+              AND u.oidc_subject IS NOT NULL
+            ORDER BY u.display_name"#,
+        &held_back[..],
+        issuer
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let mut report = SyncReport::default();
+    for r in waiting
+        .iter()
+        .filter(|r| !in_group.contains(&r.oidc_subject.to_ascii_lowercase()))
+    {
+        depart(core, ctx, &r.who(), Leaving::Group, &mut report).await?;
+    }
+    sqlx::query!(
+        r#"UPDATE sync_cursors SET last_summary = jsonb_set(last_summary, '{held_back}', '[]')
+            WHERE name = $1 AND last_summary IS NOT NULL"#,
+        CURSOR
+    )
+    .execute(&mut *lock)
+    .await?;
+    lock.commit().await?;
+    Ok((report.departed, report.errors))
 }
 
 /// "Sync now" / "Full resync" from the admin page: queue a run for the worker.

@@ -2504,3 +2504,197 @@ async fn a_person_is_applied_with_the_mapping_committed_before_them() {
     let a = id_of(&core, OID_A).await.unwrap();
     assert_eq!(idp_departments(&core, a).await, vec![rb]);
 }
+
+/// Nine people synced, then the group narrowed to P1 and P2: P3 to P9 are
+/// held back. Returns the core with the group set and the held-back IDs.
+async fn seven_held_back(m: &MockGraph, core: &Core) -> (Core, Vec<Uuid>) {
+    for i in 1..=9 {
+        let (name, mail) = (format!("P{i}"), format!("p{i}@county.example"));
+        m.add_user(member(&oid(i), &name, &mail, None));
+    }
+    entra_sync::run(core, &system()).await.unwrap();
+    m.add_group(GROUP_P, "PDMS");
+    m.add_to_group(GROUP_P, &oid(1));
+    m.add_to_group(GROUP_P, &oid(2));
+    let grouped = with_group(core, GROUP_P).await;
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!((r.departed, r.held_back.len()), (0, 7), "{r:?}");
+    (grouped, r.held_back)
+}
+
+#[tokio::test]
+async fn depart_these_people_departs_only_those_still_outside() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, held) = seven_held_back(&m, &core).await;
+    let (p3, p4) = (
+        id_of(&core, &oid(3)).await.unwrap(),
+        id_of(&core, &oid(4)).await.unwrap(),
+    );
+
+    // The page lists them by name, all still active.
+    let listed = entra_sync::people(&core.db, &held).await.unwrap();
+    let names: Vec<&str> = listed.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["P3", "P4", "P5", "P6", "P7", "P8", "P9"]);
+    assert!(listed.iter().all(|p| p.active && p.roles.is_empty()));
+    assert_eq!(listed[0].email, "p3@county.example");
+
+    // A clerk may not confirm.
+    let (clerk, _) = user_in_new_department(&core, "HR", "hr@county.example").await;
+    assert!(matches!(
+        entra_sync::depart_held_back(&grouped, &as_user(&core, clerk).await).await,
+        Err(CoreError::Forbidden(_))
+    ));
+
+    // Since the run, P3 is back in the group and P4 was departed by hand.
+    m.add_to_group(GROUP_P, &oid(3));
+    directory::set_user_status(&core.db, &system(), p4, UserStatus::Departed)
+        .await
+        .unwrap();
+
+    let (n, problems) = entra_sync::depart_held_back(&grouped, &system())
+        .await
+        .unwrap();
+    assert_eq!((n, problems), (5, Vec::<String>::new()));
+    assert_eq!(status_of(&core, p3).await, "active");
+    assert!(!group_mark(&core, p4).await, "departed by hand, not marked");
+    for i in 5..=9 {
+        let id = id_of(&core, &oid(i)).await.unwrap();
+        assert_eq!(status_of(&core, id).await, "departed");
+        assert!(group_mark(&core, id).await);
+        assert_eq!(status_audits(&core, id).await, 1);
+        assert_eq!(
+            last_status_reason(&core, id).await.as_deref(),
+            Some("is no longer in the PDMS group")
+        );
+    }
+    for i in 1..=2 {
+        let id = id_of(&core, &oid(i)).await.unwrap();
+        assert_eq!(status_of(&core, id).await, "active");
+    }
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert!(st.last_summary.unwrap().held_back.is_empty());
+
+    // Pressed again: nobody is waiting.
+    assert_eq!(
+        entra_sync::depart_held_back(&grouped, &system())
+            .await
+            .unwrap(),
+        (0, vec![])
+    );
+}
+
+#[tokio::test]
+async fn depart_these_people_waits_for_a_running_sync() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, held) = seven_held_back(&m, &core).await;
+    let mut tx = core.db.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(entra_sync::LOCK_KEY)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        entra_sync::depart_held_back(&grouped, &system()).await,
+        Err(CoreError::Conflict(_))
+    ));
+    tx.rollback().await.unwrap();
+    for id in &held {
+        assert_eq!(status_of(&core, *id).await, "active");
+    }
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().held_back, held, "still waiting");
+}
+
+#[tokio::test]
+async fn depart_these_people_changes_nothing_when_the_group_cannot_be_read_or_is_empty() {
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    let (grouped, held) = seven_held_back(&m, &core).await;
+
+    // The member list can't be read: refused, with the plain message.
+    m.forbid_groups(true);
+    match entra_sync::depart_held_back(&grouped, &system()).await {
+        Err(CoreError::Validation(msg)) => assert_eq!(msg, entra_sync::MISSING_PERMISSION),
+        other => panic!("{other:?}"),
+    }
+    m.forbid_groups(false);
+
+    // The group lists no members now: nobody is departed.
+    m.remove_from_group(GROUP_P, &oid(1));
+    m.remove_from_group(GROUP_P, &oid(2));
+    assert!(matches!(
+        entra_sync::depart_held_back(&grouped, &system()).await,
+        Err(CoreError::Validation(_))
+    ));
+
+    // Without a group set, there is nothing to confirm.
+    assert!(matches!(
+        entra_sync::depart_held_back(&core, &system()).await,
+        Err(CoreError::Validation(_))
+    ));
+    for id in &held {
+        assert_eq!(status_of(&core, *id).await, "active");
+    }
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().held_back, held, "still waiting");
+}
+
+#[tokio::test]
+async fn a_sign_in_reactivation_is_listed_in_the_last_report() {
+    use pdms_core::auth::oidc::resolve_identity;
+    let m = MockGraph::start().await;
+    let (core, _db) = synced(&m).await;
+    m.add_group(GROUP_P, "PDMS");
+    for (oid, name, mail) in [
+        (OID_A, "Alice", "alice@county.example"),
+        (OID_B, "Bob", "bob@county.example"),
+    ] {
+        m.add_user(member(oid, name, mail, None));
+        m.add_to_group(GROUP_P, oid);
+    }
+    let grouped = with_group(&core, GROUP_P).await;
+    let sign_in = |core: Core| async move {
+        resolve_identity(&core, ISSUER, OID_A, None, None)
+            .await
+            .unwrap()
+    };
+
+    // Before any run there is no report to add to, and none is made.
+    let (a, _) = sign_in(grouped.clone()).await.unwrap();
+    assert!(
+        directory::depart_from_group(&core.db, &system(), a)
+            .await
+            .unwrap()
+    );
+    assert_eq!(sign_in(grouped.clone()).await, Ok((a, "Alice".to_owned())));
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert!(st.last_summary.is_none(), "{st:?}");
+
+    // The last run reactivated Bob.
+    entra_sync::run(&grouped, &system()).await.unwrap();
+    let b = id_of(&core, OID_B).await.unwrap();
+    assert!(
+        directory::depart_from_group(&core.db, &system(), b)
+            .await
+            .unwrap()
+    );
+    let r = entra_sync::run(&grouped, &system()).await.unwrap();
+    assert_eq!(r.reactivated, vec![b], "{r:?}");
+
+    // Alice is reactivated when she signs in: added to that run's list.
+    assert!(
+        directory::depart_from_group(&core.db, &system(), a)
+            .await
+            .unwrap()
+    );
+    assert_eq!(sign_in(grouped.clone()).await, Ok((a, "Alice".to_owned())));
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().reactivated, vec![b, a]);
+
+    // Signing in again, already active, adds nothing.
+    assert_eq!(sign_in(grouped.clone()).await, Ok((a, "Alice".to_owned())));
+    let st = entra_sync::status(&core.db).await.unwrap();
+    assert_eq!(st.last_summary.unwrap().reactivated, vec![b, a]);
+}

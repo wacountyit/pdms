@@ -829,6 +829,13 @@ struct EntraPage {
     preview: Option<Vec<entra_sync::PreviewUser>>,
     /// The result of **Test group**.
     group_check: Option<settings::Check>,
+    /// The PDMS group's object ID, when the sync is limited to one.
+    group: Option<String>,
+    /// People the last run held back who are still active, waiting for
+    /// **Depart these N people**.
+    held_back: Vec<entra_sync::Person>,
+    /// People reactivated since the last run started (by it, or at sign-in).
+    reactivated: Vec<entra_sync::Person>,
 }
 
 pub struct EntraSettings {
@@ -899,12 +906,27 @@ async fn entra_page(
             // `unmapped` counts only the people that run read (a delta reads
             // changed accounts); the table below lists everyone.
             format!(
-                "{} created, {} updated, {} departed; of the people it read, {} had no mapped department",
-                r.created, r.updated, r.departed, r.unmapped
+                "{} created, {} updated, {} departed, {} reactivated; of the people it read, {} had no mapped department",
+                r.created,
+                r.updated,
+                r.departed,
+                r.reactivated.len(),
+                r.unmapped
             ),
             r.errors.clone(),
         ),
         None => ("No sync has completed yet.".to_owned(), Vec::new()),
+    };
+    let (held_back, reactivated) = match &status.last_summary {
+        Some(r) => (
+            entra_sync::people(&core.db, &r.held_back)
+                .await?
+                .into_iter()
+                .filter(|p| p.active)
+                .collect(),
+            entra_sync::people(&core.db, &r.reactivated).await?,
+        ),
+        None => (Vec::new(), Vec::new()),
     };
     // A failed run's error is shown once, even if the report lists it too.
     let last_error = status
@@ -927,6 +949,9 @@ async fn entra_page(
         settings,
         preview,
         group_check,
+        group: core.config().entra_sync.group(),
+        held_back,
+        reactivated,
     };
     Ok(Html(page.render()?))
 }
@@ -1044,6 +1069,38 @@ pub async fn remove_entra_value(
 #[derive(Deserialize)]
 pub struct EntraSyncForm {
     full: Option<String>,
+}
+
+/// **Depart these N people**: depart the people the last run held back.
+pub async fn entra_depart_held_back(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Response> {
+    match entra_sync::depart_held_back(&state.core, &user.ctx).await {
+        Ok((n, problems)) => {
+            // A flash is a cookie: name a few problems, the audit log has all.
+            const SHOWN: usize = 5;
+            let mut message = format!("Departed {n} people.");
+            for p in problems.iter().take(SHOWN) {
+                message.push(' ');
+                message.push_str(p);
+                message.push('.');
+            }
+            if problems.len() > SHOWN {
+                message.push_str(&format!(
+                    " And {} more: see the audit log.",
+                    problems.len() - SHOWN
+                ));
+            }
+            Ok(redirect_with(
+                &state,
+                "/admin/entra",
+                problems.is_empty(),
+                &message,
+            ))
+        }
+        Err(e) => done(&state, "/admin/entra", Err::<(), _>(e), ""),
+    }
 }
 
 pub async fn entra_sync_now(

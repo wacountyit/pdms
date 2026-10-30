@@ -13,8 +13,9 @@ D-097 to D-101 were decided on 2026-10-22 for the UI redesign R2.
 D-102 was decided on 2026-10-22, before plan P3 (SharePoint storage) was built,
 and D-103 while building it. D-104 to D-110 were decided on 2026-10-23 for plan
 P4 (SharePoint access, change detection, and operations), with the owner's
-answers to its pre-flight questions. D-111 onward were decided on 2026-10-23
-for S1 (settings in Administration).
+answers to its pre-flight questions. D-111 to D-116 were decided on 2026-10-23
+for S1 (settings in Administration). D-117 was decided on 2026-10-28 for GS
+(the Entra sync limited to one group).
 New entries take the next number after the highest one on `main` and in
 open pull requests.
 Entries marked "design, not built" or "not done" are agreed but not yet
@@ -660,7 +661,7 @@ contradictory combinations. One enum therefore replaces both; this amends
 the "broken inheritance" part of D-003. The interface says "County-wide",
 not "Public", so it is never confused with publishing outside the county.
 
-### D-086 Users from Entra; department from the Department field — Accepted (built in P2, 2026-10-21)
+### D-086 Users from Entra; department from the Department field — Accepted (built in P2, 2026-10-21; amended by D-117)
 The county's AD groups are not synced to Entra, so groups cannot drive
 access. Instead, a nightly and on-demand Microsoft Graph `/users/delta` sync
 creates, updates, and deactivates member accounts.
@@ -791,7 +792,7 @@ grants. "Your access" moved to the account page.
 **Amended 2026-10-22 by D-099:** the dashboard now has an activity feed,
 built so that it cannot expose the audit log.
 
-### D-096 Graph app-only authentication with a certificate (PS256) — Accepted (2026-10-21)
+### D-096 Graph app-only authentication with a certificate (PS256) — Accepted (2026-10-21; amended by D-117)
 PDMS signs a client assertion with its own certificate (header `alg` PS256,
 `x5t#S256` SHA-256 thumbprint, ten-minute lifetime), as the Microsoft
 identity platform documents; there is no client secret to leak or rotate in
@@ -1109,6 +1110,59 @@ Only after that succeeds does the installer remove the blocks, keep a copy of
 the file, empty the moved secret files and restart. Declined, it asks no more
 (`--configure move-settings` moves them later). `pdms settings set`,
 `set-secret` and `test` are the fallback when the pages can't be reached.
+
+### D-117 Entra sync limited to one group — Accepted (built 2026-10-29)
+Amends D-086 and D-096. The owner's answers of 2026-10-28 and 2026-10-29
+are in the GS [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md)
+§9.
+
+- **One group decides who has a PDMS account** (amends D-086).
+  `[entra_sync] group_id`, set on **Administration → Entra ID sync** as
+  **Only members of this group** or in the configuration file (which wins),
+  names an Entra group by its object ID. When it is set, only the group's
+  members have active accounts. Members of groups inside it count, so whole
+  department groups can be added. Empty means the whole tenant, as before.
+  The group can be made in Entra, be dynamic, or be an on-premises AD group
+  once Entra Connect syncs it (the county's AD groups are not synced today).
+  Reading it needs the Graph application permission `GroupMember.Read.All`,
+  only while a group is set. **Test group** shows its name and size, saving
+  nothing.
+- **Each run reads the whole member list** (`transitiveMembers`) before it
+  changes anything, because a group delta doesn't follow nested groups. A
+  list that can't be read fails the run, and nothing changes. A member PDMS
+  has no account for is read and created at the next run. People outside
+  the group are departed every run, with the reason "is no longer in the
+  PDMS group", under the D-096 safeguards: held back when the group lists no
+  members or when more than max(5, 20%) of linked accounts would leave at
+  once; the last administrator kept; an account with a local password
+  departed and reported; the break-glass account never touched.
+- **The first narrowing** holds back its departures; the page lists them
+  with **Depart these N people** (`manage_directory`). It reads the group
+  again and departs only the listed people still active and still outside
+  it, each audited in its own transaction, and is refused while a run is in
+  progress.
+- **Back in the group** (amends D-096, under which the sync never reactivates
+  anyone): the sync reactivates someone it departed for leaving the group
+  once they are back in it with an enabled member account, at the next run
+  or at their next Microsoft sign-in, whichever comes first. Their roles,
+  grants and memberships come back as they were. The page lists them and
+  marks those who hold roles; the audit reason is "is back in the PDMS
+  group". A departure made by hand, or because Entra disabled or deleted the
+  account, is never undone. Clearing the group reactivates nobody. The sync
+  records why it departed someone in `users.departed_from_group` (migration
+  0016); any other status change clears it.
+- **Sign-in:** while the sync is on and a group is set, a first sign-in asks
+  Entra whether the person is in the group (`checkMemberGroups`). Someone
+  outside it is refused, without an account, on a page that says they are
+  not in the PDMS group and to ask IT; the audit reason is `not_in_group`.
+  With the sync off, the group is not checked, and sign-in follows
+  `auth.oidc.auto_provision` as before. **Assignment required** on the
+  sign-in app is still recommended, because it stops sign-in at Microsoft at
+  once, before the next run.
+- **The mapping race is closed** (one of the two timing cases D-096 left
+  open): applying a person takes a shared advisory lock and a Department
+  mapping change an exclusive one, and the mapping is read inside the apply
+  transaction. A mapping edit made while the sync is off stays as it is.
 
 ## Open questions (configurable defaults; not blocking)
 

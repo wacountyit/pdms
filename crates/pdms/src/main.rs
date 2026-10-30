@@ -368,9 +368,20 @@ async fn run(
                 entra_sync::run(&core, &ctx).await?
             };
             println!(
-                "Created {}, updated {}, departed {}; {} without a mapped department.",
-                r.created, r.updated, r.departed, r.unmapped
+                "Created {}, updated {}, departed {}, reactivated {}; {} without a mapped department.",
+                r.created,
+                r.updated,
+                r.departed,
+                r.reactivated.len(),
+                r.unmapped
             );
+            if !r.held_back.is_empty() {
+                println!(
+                    "  waiting for confirmation: {} people outside the PDMS group were not departed \
+                     (more than the sync departs at once); see Administration → Entra ID sync",
+                    r.held_back.len()
+                );
+            }
             for e in &r.errors {
                 println!("  needs attention: {e}");
             }

@@ -10,12 +10,13 @@
 {% block content %}
 {% if !configured %}<p class="flash flash-error" role="alert">The Microsoft 365 connection is not set up, so PDMS cannot read Entra ID. Set it up under Administration → Microsoft 365 → Connection.</p>
 {% else if !enabled %}<p class="flash flash-info" role="status">Entra sync is turned off.{% if settings.is_some() %} Turn it on under <strong>Settings</strong> below.{% endif %}</p>{% endif %}
-<p>Each night PDMS picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PDMS department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
+<p>Each night PDMS picks up the changes made in Entra since the last run: it adds new people, updates names and departments, and marks people whose account is disabled or deleted as departed (they are signed out). Nobody is reactivated automatically, except people the sync departed for leaving the PDMS group, once they are back in it. The department comes from the <strong>{{ attribute }}</strong> field of the Entra account; map each value used there to a PDMS department below. A mapping you add, change, or remove applies at once to the people already synced.</p>
 
 <section class="panel" aria-labelledby="sync-h">
   <div class="panel-head"><h2 id="sync-h">Sync status</h2></div>
   <dl class="facts">
     <dt>Last run</dt><dd>{{ last_run }}</dd>
+    <dt>Who is synced</dt><dd>{% if let Some(g) = group %}Members of the group <code>{{ g }}</code>{% else %}Everyone in the tenant{% endif %}</dd>
     <dt>Result</dt><dd>{{ summary }}</dd>
     {% if !last_error.is_empty() %}<dt>Last error</dt><dd><span class="status status-critical">{{ last_error }}</span></dd>{% endif %}
     {% if let Some(t) = thumbprint %}<dt>Certificate thumbprint</dt><dd><code>{{ t }}</code></dd>{% endif %}
@@ -23,6 +24,21 @@
   {% if !problems.is_empty() %}
   <h3>Needs attention</h3>
   <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if !held_back.is_empty() %}
+  <h3 id="held-back-h">Waiting for your confirmation</h3>
+  <p>These {{ held_back.len() }} people are outside the PDMS group. That is more than the sync departs at once, so none of them was departed.</p>
+  <ul aria-labelledby="held-back-h">{% for p in held_back %}<li>{{ p.name }} &lt;{{ p.email }}&gt;</li>{% endfor %}</ul>
+  <p class="help">If this is what you meant, for example because you have just set the group, depart them now. PDMS reads the group again first and departs only those still outside it. Otherwise correct the group in Entra or under <strong>Settings</strong>, and the next run checks again.</p>
+  <form method="post" action="/admin/entra/depart-held-back">
+    <input type="hidden" name="_csrf" value="{{ l.csrf }}">
+    <button type="submit" class="button danger">Depart these {{ held_back.len() }} people</button>
+  </form>
+  {% endif %}
+  {% if !reactivated.is_empty() %}
+  <h3 id="reactivated-h">Reactivated in the last run</h3>
+  <p class="help">The sync had departed these people for leaving the PDMS group, and they are back in it. Their roles and access came back with them, so check the ones that hold roles.</p>
+  <ul aria-labelledby="reactivated-h">{% for p in reactivated %}<li>{{ p.name }} &lt;{{ p.email }}&gt;{% if !p.roles.is_empty() %} <span class="status status-warning">Has roles: {{ p.roles.join(", ") }}</span>{% endif %}</li>{% endfor %}</ul>
   {% endif %}
   <div class="toolbar">
     <form method="post" action="/admin/entra/sync">
