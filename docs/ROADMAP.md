@@ -176,9 +176,13 @@ Last updated 2026-10-29.
 
   It adds migration `0016` and decision D-117, and needs the Graph
   permission `GroupMember.Read.All` only when a group is set. On `main` on
-  2026-10-29 it gives 582 passed, 0 failed, and 5 ignored. Upgrading is
+  2026-10-29 it gives 590 passed, 0 failed, and 5 ignored. Upgrading is
   `git pull && ./install.sh` as usual; nothing changes until a group is set
-  (ADMIN_GUIDE, "Entra ID user sync"). The
+  (ADMIN_GUIDE, "Entra ID user sync"). It has been tested only against the
+  mock Graph: before relying on it, choose **Test group** and run one sync
+  against the real tenant on the test server. The member-list request
+  (`transitiveMembers/microsoft.graph.user`) and `checkMemberGroups` need the
+  `GroupMember.Read.All` grant there. The
   [spec](superpowers/specs/2026-10-27-entra-sync-group-scope-design.md) and
   [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md) describe it.
 - **Upgrading after S1:** `git pull && ./install.sh` as usual. It offers to
@@ -215,7 +219,6 @@ only place that shows work in flight.
 | Work | Who | State | Where I stopped | Updated |
 |---|---|---|---|---|
 | §0.5 item 1: SharePoint live test, continued | WACountyIT | In progress (2026-10-27): upgrade and Test with the full-control check; then B6 to B9 and §1.2 | | 2026-10-27 |
-| §0.5 item 2: GS, Entra sync limited to one group | wc-sstevens (the owner, with Claude) | Spec: **Done** (approved 2026-10-28). Plan: **Done** (2026-10-29, [plan](superpowers/plans/2026-10-29-entra-sync-group-scope.md), 7 tasks; the owner added reactivation at sign-in). Build: **In progress** (2026-10-29), subagent-driven, task by task | | 2026-10-29 |
 
 §0.5 lists what can start next.
 
